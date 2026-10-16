@@ -1,0 +1,92 @@
+name: Desktop installer
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      release:
+        type: boolean
+        default: false
+      bundles:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ !inputs.release || (github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be') }}
+    environment: ${{ inputs.release && 'release-signing' || 'ci' }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.94.1'
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.18'
+          cache: npm
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: cargo test --locked -p goldbook-desktop
+      - run: npm ci
+      - name: Build signed update installers
+        if: inputs.release
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        run: npm run desktop:pack -- --ci --bundles ${{ inputs.bundles }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+      - name: Upload signed updates
+        if: inputs.release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Goldbook-updater-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            target/release/bundle/macos/*.tar.gz*
+            target/release/bundle/nsis/*.exe*
+            target/release/bundle/deb/*.deb*
+            target/release/bundle/rpm/*.rpm*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Build installers
+        if: ${{ !inputs.release }}
+        run: npm run desktop:pack -- --ci --bundles ${{ inputs.bundles }}
+      - name: Upload macOS and Windows installers
+        if: runner.os != 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Goldbook-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Upload Ubuntu installer
+        if: runner.os == 'Linux' && contains(inputs.bundles, 'deb')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Goldbook-Ubuntu-${{ runner.arch }}
+          path: target/release/bundle/deb/*.deb
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Upload Fedora installer
+        if: runner.os == 'Linux' && contains(inputs.bundles, 'rpm')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Goldbook-Fedora-${{ runner.arch }}
+          path: target/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

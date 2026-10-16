@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Goldbook",
+  "version": "0.1.13",
+  "identifier": "app.goldbook.desktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Goldbook",
+        "width": 1000,
+        "height": 760,
+        "minWidth": 480,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../../addon/Goldbook/": "addon/Goldbook/"
+    },
+    "category": "Utility",
+    "shortDescription": "Uploads World of Warcraft auction scans",
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJFMzU5RkNBQjNGMUVCRjkKUldUNTYvR3p5cDgxTHBpNHBJa0djSWZUa1NzWDFhWkVKWHVOY0s5S2tZZ0ZnbXVyczd2aEVDQ2MK",
+      "endpoints": [
+        "https://app.jkc-be.com/goldbook/updates/latest.json"
+      ]
+    }
+  }
+}

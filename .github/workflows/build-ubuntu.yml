@@ -1,0 +1,14 @@
+name: Build Ubuntu
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+    with:
+      runner: ubuntu-latest
+      bundles: deb

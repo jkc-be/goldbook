@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Goldbook</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="coin" aria-hidden="true"></div>
+      <h1>Goldbook</h1>
+      <nav class="views" aria-label="Views">
+        <button type="button" data-view="prices">Prices</button>
+        <button type="button" data-view="characters">Characters</button>
+        <button type="button" data-view="sync" aria-current="page">Sync</button>
+      </nav>
+      <button type="button" id="update-alert" class="button" hidden>Update ready</button>
+    </header>
+    <div class="content">
+    <p id="notice" class="message" role="status" hidden></p>
+    <main>
+      <section aria-labelledby="sync-title">
+        <h2 id="sync-title">Auction scans</h2>
+        <p class="muted">Uploads price scans and order books after you type /reload or log out.</p>
+        <p id="live" class="status" role="status"></p>
+        <div class="actions">
+          <button type="button" id="sync" class="button primary">Sync now</button>
+          <button type="button" id="site" class="button">Open website</button>
+        </div>
+      </section>
+      <section aria-labelledby="updates-title">
+        <div class="section-head">
+          <h2 id="updates-title">Updates</h2>
+          <button type="button" id="check-updates" class="button">Check for updates</button>
+        </div>
+        <p id="client-version" class="muted"></p>
+        <p id="client-update" class="status" role="status">Checking for client updates...</p>
+        <p id="addon-update" role="status"></p>
+        <p class="muted">Checks at startup and every six hours. Client updates download automatically. The WoW addon updates automatically.</p>
+        <button type="button" id="install-update" class="button primary" hidden>Install and restart</button>
+      </section>
+      <section aria-labelledby="settings-title">
+        <div class="section-head">
+          <h2 id="settings-title">Settings</h2>
+          <button type="button" id="settings-toggle" class="button" aria-expanded="false" aria-controls="settings">Show</button>
+        </div>
+        <form id="settings" hidden>
+          <label>
+            World of Warcraft folder
+            <span class="secret">
+              <input id="wow" spellcheck="false" />
+              <button type="button" id="choose" class="button">Choose</button>
+            </span>
+          </label>
+          <label>
+            Server
+            <input id="api" spellcheck="false" autocomplete="url" />
+          </label>
+          <label>
+            Upload token (optional)
+            <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Set up automatically when you save" />
+          </label>
+          <div class="actions">
+            <button type="button" id="battlenet-login" class="button">Sign in with Battle.net</button>
+            <button type="button" id="battlenet-cancel" class="button" hidden>Cancel sign-in</button>
+          </div>
+          <p id="battlenet-code" role="status" hidden></p>
+          <p class="muted">Save your folder and server first, then sign in in your browser.</p>
+          <label class="check">
+            <input id="auto" type="checkbox" />
+            Sync automatically
+          </label>
+          <label>
+            Check again every (minutes)
+            <input id="minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" />
+          </label>
+          <label class="check">
+            <input id="login" type="checkbox" />
+            Open Goldbook when you log in
+          </label>
+          <button type="submit" id="save" class="button primary">Save</button>
+        </form>
+      </section>
+    </main>
+    </div>
+    <dialog id="account-picker">
+      <form method="dialog">
+        <label>
+          World of Warcraft account
+          <select id="account"></select>
+        </label>
+        <div class="actions">
+          <button value="cancel" class="button">Cancel</button>
+          <button value="open" class="button primary">Open website</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="bridge.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>

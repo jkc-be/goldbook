@@ -1,0 +1,14 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    uses: ./.github/workflows/desktop.yml
+    with:
+      runner: macos-latest
+      bundles: app,dmg

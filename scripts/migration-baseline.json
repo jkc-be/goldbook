@@ -1,0 +1,3731 @@
+{
+  "account-takeover": {
+    "body": {
+      "error": "this ID belongs to another key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 409
+  },
+  "account-upload": {
+    "body": {
+      "characters": 1,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "addon-account": {
+    "body": {
+      "characters": [
+        {
+          "class": "MAGE",
+          "faction": "Horde",
+          "gold": 1260000,
+          "level": 42,
+          "name": "Mirelle",
+          "realm": "Faramon",
+          "updatedAt": 1760001336
+        },
+        {
+          "class": "WARRIOR",
+          "faction": "Horde",
+          "gold": 1260000,
+          "level": 60,
+          "name": "Sultan",
+          "realm": "Faramon",
+          "updatedAt": 1760001336
+        }
+      ],
+      "id": "K7Q2M9PX",
+      "linked": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "addon-character": {
+    "body": {
+      "bags": {
+        "at": 1760001336,
+        "rows": [
+          {
+            "action": "auction",
+            "count": 25,
+            "key": "2589",
+            "name": "Linen Cloth",
+            "post": 99,
+            "quality": 1,
+            "value": 2350,
+            "vendor": 13
+          },
+          {
+            "action": "vendor",
+            "count": 3,
+            "key": "7070",
+            "name": "Elemental Water",
+            "post": null,
+            "quality": 1,
+            "value": 1200,
+            "vendor": 400
+          },
+          {
+            "action": "vendor",
+            "count": 2,
+            "key": "4306",
+            "name": "Silk Cloth",
+            "post": null,
+            "quality": 1,
+            "value": 300,
+            "vendor": 150
+          },
+          {
+            "action": "vendor",
+            "count": 4,
+            "key": "5000",
+            "name": "Rough Stone",
+            "post": null,
+            "quality": 1,
+            "value": 8,
+            "vendor": 2
+          }
+        ],
+        "total": 3858
+      },
+      "bank": {
+        "at": 1760001326,
+        "rows": [
+          {
+            "action": "auction",
+            "count": 8,
+            "key": "2592",
+            "name": "Thrall's \"\u00dcnicode\" Wool, Fine",
+            "post": 300,
+            "quality": 1,
+            "value": 2280,
+            "vendor": 0
+          },
+          {
+            "action": "auction",
+            "count": 17,
+            "key": "2589",
+            "name": "Linen Cloth",
+            "post": 99,
+            "quality": 1,
+            "value": 1598,
+            "vendor": 13
+          },
+          {
+            "action": "vendor",
+            "count": 5,
+            "key": "3576",
+            "name": "Tin Bar",
+            "post": null,
+            "quality": 1,
+            "value": 125,
+            "vendor": 25
+          }
+        ],
+        "total": 4003
+      },
+      "class": "WARRIOR",
+      "faction": "Horde",
+      "gold": [
+        [
+          1759993200,
+          1000000
+        ],
+        [
+          1759996800,
+          1260000
+        ]
+      ],
+      "level": 60,
+      "name": "Sultan",
+      "realm": "Faramon",
+      "updatedAt": 1760001336
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "addon-login": {
+    "body": {
+      "id": "K7Q2M9PX"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=<random>; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "alias-account": {
+    "body": {
+      "characters": [
+        {
+          "class": "PALADIN",
+          "faction": null,
+          "gold": 120000,
+          "level": 24,
+          "name": "Faramon",
+          "realm": "ClassicBetaPvP2",
+          "updatedAt": 1791970261
+        }
+      ],
+      "id": "K7Q2M9PX",
+      "linked": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "alias-character": {
+    "body": {
+      "bags": {
+        "at": 1791970261,
+        "rows": [],
+        "total": 0
+      },
+      "bank": {
+        "at": 1791930000,
+        "rows": [],
+        "total": 0
+      },
+      "class": "PALADIN",
+      "faction": null,
+      "gold": [
+        [
+          1791846000,
+          10000
+        ],
+        [
+          1791932400,
+          116489
+        ],
+        [
+          1791936000,
+          120000
+        ]
+      ],
+      "level": 24,
+      "name": "Faramon",
+      "realm": "ClassicBetaPvP2",
+      "updatedAt": 1791970261
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "alias-login": {
+    "body": {
+      "id": "K7Q2M9PX"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=<random>; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "anonymous-account": {
+    "body": {
+      "error": "not logged in"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "anonymous-character": {
+    "body": {
+      "error": "not logged in"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "bad-limit": {
+    "body": {
+      "error": "limit must be an integer from 0 to 200"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "bad-sort": {
+    "body": {
+      "error": "sort must be one of name, min, market, quantity"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "borrowed-market-market-asc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        },
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-market-desc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        },
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-min-asc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        },
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-min-desc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        },
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-name-asc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        },
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-name-desc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        },
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-quantity-asc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        },
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "borrowed-market-quantity-desc": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 90,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 35
+        },
+        {
+          "itemKey": "7070",
+          "marketValue": 320,
+          "minBuyout": 290,
+          "name": "Elemental Water",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 4
+        }
+      ],
+      "marketScan": {
+        "id": 6,
+        "itemCount": 2,
+        "mode": "replicate",
+        "scannedAt": 1760086400,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760172800,
+        "scanner": "Sultan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "daily-lows": {
+    "body": {
+      "days": [
+        1759017600,
+        1759104000,
+        1759190400,
+        1759276800,
+        1759363200,
+        1759449600,
+        1759536000,
+        1759622400,
+        1759708800,
+        1759795200,
+        1759881600,
+        1759968000,
+        1760054400,
+        1760140800
+      ],
+      "items": {
+        "2589": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          110,
+          100,
+          90
+        ],
+        "7070": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          300,
+          290
+        ]
+      }
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "desktop-bad-origin": {
+    "body": {
+      "error": "desktop login must come from the Goldbook app"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 403
+  },
+  "desktop-body-too-big": {
+    "body": {
+      "error": "the body must be at most 4 KB"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 413
+  },
+  "desktop-duplicate-fields": {
+    "body": {
+      "error": "invalid desktop login"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "desktop-login": {
+    "body": {
+      "id": "K7Q2M9PX"
+    },
+    "headers": {
+      "cache-control": "no-store",
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "location": "../#characters",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=<random>; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 303
+  },
+  "desktop-origin-suffix": {
+    "body": {
+      "error": "desktop login must come from the Goldbook app"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 403
+  },
+  "desktop-port-out-of-range": {
+    "body": {
+      "error": "desktop login must come from the Goldbook app"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 403
+  },
+  "duplicate-row": {
+    "body": {
+      "error": "rows[1] repeats item key 2589"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "empty-page": {
+    "body": {
+      "items": [],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 3
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "empty-realms": {
+    "body": {
+      "realms": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "first-session-cookie-wins": {
+    "body": {
+      "characters": [
+        {
+          "class": "MAGE",
+          "faction": "Horde",
+          "gold": 1260000,
+          "level": 42,
+          "name": "Mirelle",
+          "realm": "Faramon",
+          "updatedAt": 1760001336
+        },
+        {
+          "class": "WARRIOR",
+          "faction": "Horde",
+          "gold": 1260000,
+          "level": 60,
+          "name": "Sultan",
+          "realm": "Faramon",
+          "updatedAt": 1760001336
+        }
+      ],
+      "id": "K7Q2M9PX",
+      "linked": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "first-snapshot": {
+    "body": {
+      "items": 1,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "first-snapshot-retry": {
+    "body": {
+      "items": 1,
+      "stored": false
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "fixture-history": {
+    "body": {
+      "itemKey": "2589",
+      "name": "Linen Cloth",
+      "points": [
+        {
+          "marketValue": 0,
+          "minBuyout": 110,
+          "mode": "browse",
+          "quantity": 42,
+          "scannedAt": 1760000000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 200,
+          "mode": "browse",
+          "quantity": 42,
+          "scannedAt": 1760000005
+        },
+        {
+          "marketValue": 105,
+          "minBuyout": 100,
+          "mode": "replicate",
+          "quantity": 100,
+          "scannedAt": 1760000016
+        }
+      ],
+      "quality": 1
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "fixture-prices": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "9775:584",
+          "marketValue": 30000,
+          "minBuyout": 30000,
+          "name": "Bandit Cinch of the Monkey",
+          "numAuctions": 1,
+          "quality": 2,
+          "quantity": 1
+        },
+        {
+          "itemKey": "7070",
+          "marketValue": 334,
+          "minBuyout": 334,
+          "name": "Elemental Water",
+          "numAuctions": 1,
+          "quality": 1,
+          "quantity": 3
+        },
+        {
+          "itemKey": "2589",
+          "marketValue": 105,
+          "minBuyout": 100,
+          "name": "Linen Cloth",
+          "numAuctions": 4,
+          "quality": 1,
+          "quantity": 100
+        }
+      ],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 3
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "fixture-realms": {
+    "body": {
+      "realms": [
+        {
+          "faction": "Horde",
+          "lastScan": 1760000016,
+          "realm": "Faramon",
+          "region": "EU",
+          "scans": 3
+        }
+      ]
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "fixture-trends": {
+    "body": {
+      "days": [
+        1758844800,
+        1758931200,
+        1759017600,
+        1759104000,
+        1759190400,
+        1759276800,
+        1759363200,
+        1759449600,
+        1759536000,
+        1759622400,
+        1759708800,
+        1759795200,
+        1759881600,
+        1759968000
+      ],
+      "items": {
+        "2589": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          100
+        ]
+      }
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "full-scan": {
+    "body": {
+      "items": 2,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "gold-hour-deduplication": {
+    "body": {
+      "bags": null,
+      "bank": null,
+      "class": null,
+      "faction": null,
+      "gold": [
+        [
+          1759996800,
+          200
+        ],
+        [
+          1760000400,
+          300
+        ]
+      ],
+      "level": null,
+      "name": "Owner",
+      "realm": "Parity",
+      "updatedAt": null
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "gold-latest-hour": {
+    "body": {
+      "characters": [
+        {
+          "class": null,
+          "faction": null,
+          "gold": 300,
+          "level": null,
+          "name": "Owner",
+          "realm": "Parity",
+          "updatedAt": null
+        }
+      ],
+      "id": "E2E7TEST",
+      "linked": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "https-cookie": {
+    "body": {
+      "id": "K7Q2M9PX"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=<random>; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000; Secure",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "invalid-price": {
+    "body": {
+      "error": "rows[0] min buyout must be positive"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "literal-percent": {
+    "body": {
+      "items": [],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 0
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "literal-underscore": {
+    "body": {
+      "items": [],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 0
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-history": {
+    "body": {
+      "itemKey": "104242",
+      "name": "Loadtest Item 4242",
+      "points": [
+        {
+          "marketValue": 201474,
+          "minBuyout": 186550,
+          "mode": "replicate",
+          "quantity": 95,
+          "scannedAt": 1757000000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 192044,
+          "mode": "browse",
+          "quantity": 96,
+          "scannedAt": 1757086400
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 195364,
+          "mode": "browse",
+          "quantity": 97,
+          "scannedAt": 1757172800
+        },
+        {
+          "marketValue": 212005,
+          "minBuyout": 196301,
+          "mode": "replicate",
+          "quantity": 98,
+          "scannedAt": 1757259200
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 194798,
+          "mode": "browse",
+          "quantity": 99,
+          "scannedAt": 1757345600
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 190948,
+          "mode": "browse",
+          "quantity": 100,
+          "scannedAt": 1757432000
+        },
+        {
+          "marketValue": 199790,
+          "minBuyout": 184991,
+          "mode": "replicate",
+          "quantity": 101,
+          "scannedAt": 1757518400
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 177297,
+          "mode": "browse",
+          "quantity": 102,
+          "scannedAt": 1757604800
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 168344,
+          "mode": "browse",
+          "quantity": 103,
+          "scannedAt": 1757691200
+        },
+        {
+          "marketValue": 171385,
+          "minBuyout": 158690,
+          "mode": "replicate",
+          "quantity": 104,
+          "scannedAt": 1757777600
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 148933,
+          "mode": "browse",
+          "quantity": 105,
+          "scannedAt": 1757864000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 139682,
+          "mode": "browse",
+          "quantity": 106,
+          "scannedAt": 1757950400
+        },
+        {
+          "marketValue": 142032,
+          "minBuyout": 131511,
+          "mode": "replicate",
+          "quantity": 107,
+          "scannedAt": 1758036800
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 124927,
+          "mode": "browse",
+          "quantity": 108,
+          "scannedAt": 1758123200
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 120342,
+          "mode": "browse",
+          "quantity": 109,
+          "scannedAt": 1758209600
+        },
+        {
+          "marketValue": 127482,
+          "minBuyout": 118039,
+          "mode": "replicate",
+          "quantity": 110,
+          "scannedAt": 1758296000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 118161,
+          "mode": "browse",
+          "quantity": 111,
+          "scannedAt": 1758382400
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 120702,
+          "mode": "browse",
+          "quantity": 112,
+          "scannedAt": 1758468800
+        },
+        {
+          "marketValue": 135543,
+          "minBuyout": 125503,
+          "mode": "replicate",
+          "quantity": 113,
+          "scannedAt": 1758555200
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 132266,
+          "mode": "browse",
+          "quantity": 114,
+          "scannedAt": 1758641600
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 140570,
+          "mode": "browse",
+          "quantity": 115,
+          "scannedAt": 1758728000
+        },
+        {
+          "marketValue": 161890,
+          "minBuyout": 149898,
+          "mode": "replicate",
+          "quantity": 116,
+          "scannedAt": 1758814400
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 159672,
+          "mode": "browse",
+          "quantity": 117,
+          "scannedAt": 1758900800
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 169283,
+          "mode": "browse",
+          "quantity": 118,
+          "scannedAt": 1758987200
+        },
+        {
+          "marketValue": 192385,
+          "minBuyout": 178134,
+          "mode": "replicate",
+          "quantity": 119,
+          "scannedAt": 1759073600
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 185674,
+          "mode": "browse",
+          "quantity": 120,
+          "scannedAt": 1759160000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 191434,
+          "mode": "browse",
+          "quantity": 121,
+          "scannedAt": 1759246400
+        },
+        {
+          "marketValue": 210662,
+          "minBuyout": 195057,
+          "mode": "replicate",
+          "quantity": 122,
+          "scannedAt": 1759332800
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 196317,
+          "mode": "browse",
+          "quantity": 123,
+          "scannedAt": 1759419200
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 195136,
+          "mode": "browse",
+          "quantity": 124,
+          "scannedAt": 1759505600
+        }
+      ],
+      "quality": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-market-values": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "107987",
+          "marketValue": 399044,
+          "minBuyout": 361594,
+          "name": "Loadtest Item 7987",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 339
+        },
+        {
+          "itemKey": "107962",
+          "marketValue": 397438,
+          "minBuyout": 355490,
+          "name": "Loadtest Item 7962",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 164
+        },
+        {
+          "itemKey": "107968",
+          "marketValue": 396808,
+          "minBuyout": 364970,
+          "name": "Loadtest Item 7968",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 206
+        }
+      ],
+      "marketScan": {
+        "id": 37,
+        "itemCount": 8000,
+        "mode": "replicate",
+        "scannedAt": 1759332800,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 39,
+        "itemCount": 8000,
+        "mode": "browse",
+        "scannedAt": 1759505600,
+        "scanner": "Sultan"
+      },
+      "total": 8000
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-pagination": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "100338",
+          "marketValue": 11114,
+          "minBuyout": 11599,
+          "name": "Loadtest Item 338",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "100738",
+          "marketValue": 28183,
+          "minBuyout": 23031,
+          "name": "Loadtest Item 738",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "101138",
+          "marketValue": 56245,
+          "minBuyout": 52655,
+          "name": "Loadtest Item 1138",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "101538",
+          "marketValue": 49381,
+          "minBuyout": 51278,
+          "name": "Loadtest Item 1538",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "101938",
+          "marketValue": 75535,
+          "minBuyout": 61608,
+          "name": "Loadtest Item 1938",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "102338",
+          "marketValue": 114601,
+          "minBuyout": 108229,
+          "name": "Loadtest Item 2338",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "102738",
+          "marketValue": 86450,
+          "minBuyout": 89208,
+          "name": "Loadtest Item 2738",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "103138",
+          "marketValue": 125008,
+          "minBuyout": 101878,
+          "name": "Loadtest Item 3138",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "103538",
+          "marketValue": 171873,
+          "minBuyout": 163735,
+          "name": "Loadtest Item 3538",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "103938",
+          "marketValue": 122559,
+          "minBuyout": 125515,
+          "name": "Loadtest Item 3938",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "104338",
+          "marketValue": 176602,
+          "minBuyout": 143964,
+          "name": "Loadtest Item 4338",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "104738",
+          "marketValue": 227826,
+          "minBuyout": 218912,
+          "name": "Loadtest Item 4738",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "105138",
+          "marketValue": 157963,
+          "minBuyout": 160352,
+          "name": "Loadtest Item 5138",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "105538",
+          "marketValue": 230282,
+          "minBuyout": 187964,
+          "name": "Loadtest Item 5538",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "105938",
+          "marketValue": 282239,
+          "minBuyout": 273503,
+          "name": "Loadtest Item 5938",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "106338",
+          "marketValue": 192928,
+          "minBuyout": 193896,
+          "name": "Loadtest Item 6338",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "106738",
+          "marketValue": 285981,
+          "minBuyout": 233945,
+          "name": "Loadtest Item 6738",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "107138",
+          "marketValue": 334914,
+          "minBuyout": 327259,
+          "name": "Loadtest Item 7138",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "107538",
+          "marketValue": 227733,
+          "minBuyout": 226348,
+          "name": "Loadtest Item 7538",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "107938",
+          "marketValue": 343602,
+          "minBuyout": 281946,
+          "name": "Loadtest Item 7938",
+          "numAuctions": 0,
+          "quality": 3,
+          "quantity": 396
+        },
+        {
+          "itemKey": "100281",
+          "marketValue": 8625,
+          "minBuyout": 8658,
+          "name": "Loadtest Item 281",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "100681",
+          "marketValue": 29068,
+          "minBuyout": 23786,
+          "name": "Loadtest Item 681",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "101081",
+          "marketValue": 50755,
+          "minBuyout": 49638,
+          "name": "Loadtest Item 1081",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "101481",
+          "marketValue": 44780,
+          "minBuyout": 44452,
+          "name": "Loadtest Item 1481",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "101881",
+          "marketValue": 81676,
+          "minBuyout": 67045,
+          "name": "Loadtest Item 1881",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "102281",
+          "marketValue": 105434,
+          "minBuyout": 103952,
+          "name": "Loadtest Item 2281",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "102681",
+          "marketValue": 80616,
+          "minBuyout": 79057,
+          "name": "Loadtest Item 2681",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "103081",
+          "marketValue": 136223,
+          "minBuyout": 112261,
+          "name": "Loadtest Item 3081",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "103481",
+          "marketValue": 158344,
+          "minBuyout": 157350,
+          "name": "Loadtest Item 3481",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "103881",
+          "marketValue": 116411,
+          "minBuyout": 112685,
+          "name": "Loadtest Item 3881",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "104281",
+          "marketValue": 192588,
+          "minBuyout": 159447,
+          "name": "Loadtest Item 4281",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "104681",
+          "marketValue": 209336,
+          "minBuyout": 209606,
+          "name": "Loadtest Item 4681",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "105081",
+          "marketValue": 152447,
+          "minBuyout": 145566,
+          "name": "Loadtest Item 5081",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "105481",
+          "marketValue": 250618,
+          "minBuyout": 208585,
+          "name": "Loadtest Item 5481",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "105881",
+          "marketValue": 258293,
+          "minBuyout": 260510,
+          "name": "Loadtest Item 5881",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "106281",
+          "marketValue": 189006,
+          "minBuyout": 177943,
+          "name": "Loadtest Item 6281",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "106681",
+          "marketValue": 310134,
+          "minBuyout": 259626,
+          "name": "Loadtest Item 6681",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "107081",
+          "marketValue": 305122,
+          "minBuyout": 309869,
+          "name": "Loadtest Item 7081",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "107481",
+          "marketValue": 226360,
+          "minBuyout": 210069,
+          "name": "Loadtest Item 7481",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "107881",
+          "marketValue": 370931,
+          "minBuyout": 312491,
+          "name": "Loadtest Item 7881",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 397
+        },
+        {
+          "itemKey": "100224",
+          "marketValue": 6822,
+          "minBuyout": 6413,
+          "name": "Loadtest Item 224",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "100624",
+          "marketValue": 29124,
+          "minBuyout": 24397,
+          "name": "Loadtest Item 624",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "101024",
+          "marketValue": 44133,
+          "minBuyout": 44851,
+          "name": "Loadtest Item 1024",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "101424",
+          "marketValue": 43186,
+          "minBuyout": 40016,
+          "name": "Loadtest Item 1424",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "101824",
+          "marketValue": 86067,
+          "minBuyout": 72557,
+          "name": "Loadtest Item 1824",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "102224",
+          "marketValue": 93816,
+          "minBuyout": 95957,
+          "name": "Loadtest Item 2224",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "102624",
+          "marketValue": 80171,
+          "minBuyout": 73226,
+          "name": "Loadtest Item 2624",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "103024",
+          "marketValue": 144384,
+          "minBuyout": 122552,
+          "name": "Loadtest Item 3024",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "103424",
+          "marketValue": 141397,
+          "minBuyout": 145483,
+          "name": "Loadtest Item 3424",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "103824",
+          "marketValue": 118044,
+          "minBuyout": 106298,
+          "name": "Loadtest Item 3824",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "104224",
+          "marketValue": 203855,
+          "minBuyout": 174279,
+          "name": "Loadtest Item 4224",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "104624",
+          "marketValue": 186843,
+          "minBuyout": 193281,
+          "name": "Loadtest Item 4624",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "105024",
+          "marketValue": 157056,
+          "minBuyout": 139494,
+          "name": "Loadtest Item 5024",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "105424",
+          "marketValue": 264241,
+          "minBuyout": 227609,
+          "name": "Loadtest Item 5424",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "105824",
+          "marketValue": 230160,
+          "minBuyout": 239227,
+          "name": "Loadtest Item 5824",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "106224",
+          "marketValue": 197446,
+          "minBuyout": 173073,
+          "name": "Loadtest Item 6224",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "106624",
+          "marketValue": 325285,
+          "minBuyout": 282386,
+          "name": "Loadtest Item 6624",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "107024",
+          "marketValue": 271383,
+          "minBuyout": 283228,
+          "name": "Loadtest Item 7024",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "107424",
+          "marketValue": 239428,
+          "minBuyout": 207294,
+          "name": "Loadtest Item 7424",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "107824",
+          "marketValue": 386717,
+          "minBuyout": 338430,
+          "name": "Loadtest Item 7824",
+          "numAuctions": 0,
+          "quality": 4,
+          "quantity": 398
+        },
+        {
+          "itemKey": "100167",
+          "marketValue": 5390,
+          "minBuyout": 4718,
+          "name": "Loadtest Item 167",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "100567",
+          "marketValue": 27986,
+          "minBuyout": 24316,
+          "name": "Loadtest Item 567",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "100967",
+          "marketValue": 37362,
+          "minBuyout": 39008,
+          "name": "Loadtest Item 967",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "101367",
+          "marketValue": 44239,
+          "minBuyout": 38254,
+          "name": "Loadtest Item 1367",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "101767",
+          "marketValue": 87494,
+          "minBuyout": 76635,
+          "name": "Loadtest Item 1767",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "102167",
+          "marketValue": 81715,
+          "minBuyout": 85591,
+          "name": "Loadtest Item 2167",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "102567",
+          "marketValue": 84529,
+          "minBuyout": 72269,
+          "name": "Loadtest Item 2567",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "102967",
+          "marketValue": 147538,
+          "minBuyout": 130302,
+          "name": "Loadtest Item 2967",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "103367",
+          "marketValue": 124048,
+          "minBuyout": 130244,
+          "name": "Loadtest Item 3367",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "103767",
+          "marketValue": 126456,
+          "minBuyout": 107014,
+          "name": "Loadtest Item 3767",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "104167",
+          "marketValue": 207845,
+          "minBuyout": 185120,
+          "name": "Loadtest Item 4167",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "104567",
+          "marketValue": 164454,
+          "minBuyout": 172924,
+          "name": "Loadtest Item 4567",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "104967",
+          "marketValue": 170196,
+          "minBuyout": 142728,
+          "name": "Loadtest Item 4967",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "105367",
+          "marketValue": 268134,
+          "minBuyout": 240873,
+          "name": "Loadtest Item 5367",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "105767",
+          "marketValue": 203061,
+          "minBuyout": 213623,
+          "name": "Loadtest Item 5767",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "106167",
+          "marketValue": 215893,
+          "minBuyout": 179636,
+          "name": "Loadtest Item 6167",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "106567",
+          "marketValue": 328121,
+          "minBuyout": 297332,
+          "name": "Loadtest Item 6567",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "106967",
+          "marketValue": 240021,
+          "minBuyout": 252361,
+          "name": "Loadtest Item 6967",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "107367",
+          "marketValue": 263666,
+          "minBuyout": 217950,
+          "name": "Loadtest Item 7367",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "107767",
+          "marketValue": 387529,
+          "minBuyout": 354249,
+          "name": "Loadtest Item 7767",
+          "numAuctions": 0,
+          "quality": 2,
+          "quantity": 399
+        },
+        {
+          "itemKey": "100110",
+          "marketValue": 3953,
+          "minBuyout": 3287,
+          "name": "Loadtest Item 110",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "100510",
+          "marketValue": 25605,
+          "minBuyout": 23224,
+          "name": "Loadtest Item 510",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "100910",
+          "marketValue": 31361,
+          "minBuyout": 32969,
+          "name": "Loadtest Item 910",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "101310",
+          "marketValue": 47076,
+          "minBuyout": 38890,
+          "name": "Loadtest Item 1310",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "101710",
+          "marketValue": 85404,
+          "minBuyout": 78143,
+          "name": "Loadtest Item 1710",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "102110",
+          "marketValue": 71095,
+          "minBuyout": 74605,
+          "name": "Loadtest Item 2110",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "102510",
+          "marketValue": 92172,
+          "minBuyout": 75752,
+          "name": "Loadtest Item 2510",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "102910",
+          "marketValue": 144796,
+          "minBuyout": 133654,
+          "name": "Loadtest Item 2910",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "103310",
+          "marketValue": 109294,
+          "minBuyout": 114342,
+          "name": "Loadtest Item 3310",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "103710",
+          "marketValue": 139331,
+          "minBuyout": 114064,
+          "name": "Loadtest Item 3710",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "104110",
+          "marketValue": 203507,
+          "minBuyout": 189507,
+          "name": "Loadtest Item 4110",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "104510",
+          "marketValue": 146155,
+          "minBuyout": 152256,
+          "name": "Loadtest Item 4510",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "104910",
+          "marketValue": 188613,
+          "minBuyout": 153998,
+          "name": "Loadtest Item 4910",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "105310",
+          "marketValue": 261271,
+          "minBuyout": 245445,
+          "name": "Loadtest Item 5310",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "105710",
+          "marketValue": 181903,
+          "minBuyout": 188451,
+          "name": "Loadtest Item 5710",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "106110",
+          "marketValue": 240047,
+          "minBuyout": 195701,
+          "name": "Loadtest Item 6110",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "106510",
+          "marketValue": 317838,
+          "minBuyout": 301205,
+          "name": "Loadtest Item 6510",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "106910",
+          "marketValue": 216780,
+          "minBuyout": 223058,
+          "name": "Loadtest Item 6910",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "107310",
+          "marketValue": 293625,
+          "minBuyout": 239292,
+          "name": "Loadtest Item 7310",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        },
+        {
+          "itemKey": "107710",
+          "marketValue": 372970,
+          "minBuyout": 356526,
+          "name": "Loadtest Item 7710",
+          "numAuctions": 0,
+          "quality": 0,
+          "quantity": 400
+        }
+      ],
+      "marketScan": {
+        "id": 37,
+        "itemCount": 8000,
+        "mode": "replicate",
+        "scannedAt": 1759332800,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 39,
+        "itemCount": 8000,
+        "mode": "browse",
+        "scannedAt": 1759505600,
+        "scanner": "Sultan"
+      },
+      "total": 8000
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-trends": {
+    "body": {
+      "days": [
+        1758326400,
+        1758412800,
+        1758499200,
+        1758585600,
+        1758672000,
+        1758758400,
+        1758844800,
+        1758931200,
+        1759017600,
+        1759104000,
+        1759190400,
+        1759276800,
+        1759363200,
+        1759449600
+      ],
+      "items": {
+        "104242": [
+          118161,
+          120702,
+          125503,
+          132266,
+          140570,
+          149898,
+          159672,
+          169283,
+          178134,
+          185674,
+          191434,
+          195057,
+          196317,
+          195136
+        ]
+      }
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-0": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-1": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-10": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-11": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-12": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-13": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-14": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-15": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-16": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-17": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-18": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-19": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-2": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-20": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-21": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-22": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-23": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-24": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-25": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-26": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-27": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-28": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-29": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-3": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-4": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-5": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-6": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-7": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-8": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "load-upload-9": {
+    "body": {
+      "items": 8000,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "logged-out-account": {
+    "body": {
+      "error": "not logged in"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "login-form-rejected": {
+    "body": {
+      "error": "the body must be JSON"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 415
+  },
+  "login-rate-limit-1": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "login-rate-limit-2": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "login-rate-limit-3": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "login-rate-limit-4": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "login-rate-limit-5": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "login-rate-limit-6": {
+    "body": {
+      "error": "too many attempts, try again in 15 minutes"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 429
+  },
+  "logout": {
+    "body": {},
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "logout-form-rejected": {
+    "body": {
+      "error": "the body must be JSON"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 415
+  },
+  "malformed-json": {
+    "body": {
+      "error": "the body must be JSON"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "missing-character": {
+    "body": {
+      "error": "no such character"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 404
+  },
+  "missing-character-name": {
+    "body": {
+      "error": "name is required"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "missing-faction": {
+    "body": {
+      "error": "faction is required"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "missing-history-item": {
+    "body": {
+      "error": "itemKey is required"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "missing-trend-items": {
+    "body": {
+      "error": "items is required"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 400
+  },
+  "missing-upload-token": {
+    "body": {
+      "error": "invalid upload token"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "oversize-login": {
+    "body": {
+      "error": "the body must be at most 4 KB"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 413
+  },
+  "owner-after-takeover": {
+    "body": {
+      "characters": [
+        {
+          "class": null,
+          "faction": null,
+          "gold": 300,
+          "level": null,
+          "name": "Owner",
+          "realm": "Parity",
+          "updatedAt": null
+        }
+      ],
+      "id": "E2E7TEST",
+      "linked": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "owner-login": {
+    "body": {
+      "id": "E2E7TEST"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=<random>; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "pagination": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "7070",
+          "marketValue": 334,
+          "minBuyout": 334,
+          "name": "Elemental Water",
+          "numAuctions": 1,
+          "quality": 1,
+          "quantity": 3
+        }
+      ],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 3
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "pagination-past-end": {
+    "body": {
+      "items": [],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 3
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "quick-after-full": {
+    "body": {
+      "items": 2,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "rotate-key": {
+    "body": {
+      "characters": 1,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "rotation-accepts-new-key": {
+    "body": {
+      "id": "E2E7TEST"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "set-cookie": "goldbook_session=<random>; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "rotation-rejects-old-key": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "rotation-revokes-session": {
+    "body": {
+      "error": "not logged in"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "same-second-history": {
+    "body": {
+      "itemKey": "2589",
+      "name": "Linen Cloth",
+      "points": [
+        {
+          "marketValue": 0,
+          "minBuyout": 110,
+          "mode": "browse",
+          "quantity": 42,
+          "scannedAt": 1760000000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 120,
+          "mode": "browse",
+          "quantity": 40,
+          "scannedAt": 1760000000
+        },
+        {
+          "marketValue": 105,
+          "minBuyout": 100,
+          "mode": "replicate",
+          "quantity": 100,
+          "scannedAt": 1760086400
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 90,
+          "mode": "browse",
+          "quantity": 35,
+          "scannedAt": 1760172800
+        }
+      ],
+      "quality": 1
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "same-second-snapshot": {
+    "body": {
+      "items": 1,
+      "stored": true
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "search-key": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "7070",
+          "marketValue": 334,
+          "minBuyout": 334,
+          "name": "Elemental Water",
+          "numAuctions": 1,
+          "quality": 1,
+          "quantity": 3
+        }
+      ],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 1
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "search-text": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "9775:584",
+          "marketValue": 30000,
+          "minBuyout": 30000,
+          "name": "Bandit Cinch of the Monkey",
+          "numAuctions": 1,
+          "quality": 2,
+          "quantity": 1
+        }
+      ],
+      "marketScan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "scan": {
+        "id": 3,
+        "itemCount": 3,
+        "mode": "replicate",
+        "scannedAt": 1760000016,
+        "scanner": "Sultan"
+      },
+      "total": 1
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "static-css": {
+    "body": {
+      "sha256": "6c51b8c90f9528b7baedadfdad6a3e8dc85ec892def618c976d7bb6234e7f43e"
+    },
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "text/css",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "static-head": {
+    "body": null,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "text/html",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "static-index": {
+    "body": {
+      "sha256": "21869ca46e8334e08253bea74dc9a78b13f4e83954ac3c7021439849da0eec86"
+    },
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "text/html",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "static-js": {
+    "body": {
+      "sha256": "f2f1c9109e6be9893ef91dc07c90c5286ea22756d5560cc1ee3c2c496d36d550"
+    },
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "text/javascript",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "static-missing": {
+    "body": {
+      "error": "not found"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 404
+  },
+  "static-post": {
+    "body": {
+      "error": "not found"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 404
+  },
+  "static-traversal": {
+    "body": {
+      "error": "not found"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 404
+  },
+  "sync-same-second-history": {
+    "body": {
+      "itemKey": "2589",
+      "name": "Linen Cloth",
+      "points": [
+        {
+          "marketValue": 0,
+          "minBuyout": 110,
+          "mode": "browse",
+          "quantity": 42,
+          "scannedAt": 1760000000
+        },
+        {
+          "marketValue": 0,
+          "minBuyout": 120,
+          "mode": "browse",
+          "quantity": 42,
+          "scannedAt": 1760000000
+        }
+      ],
+      "quality": 1
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "sync-same-second-prices": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "2589",
+          "marketValue": 0,
+          "minBuyout": 120,
+          "name": "Linen Cloth",
+          "numAuctions": 0,
+          "quality": 1,
+          "quantity": 42
+        }
+      ],
+      "marketScan": null,
+      "scan": {
+        "id": 9,
+        "itemCount": 1,
+        "mode": "browse",
+        "scannedAt": 1760000000,
+        "scanner": "Sultan"
+      },
+      "total": 1
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "sync-state": {
+    "accounts": {
+      "K7Q2M9PX": {
+        "keyHash": "1f2a4b22637651b9c0e4169e248acbe887d2e3d0ea98321f1bf1452f9b6ecb79",
+        "payload": "097bc685bf63058e58174f23c064d0f5c13a90d782a8ce60c30794d5d208ccb6"
+      }
+    },
+    "uploaded": [
+      "scan:1b8bea34897fc23bfcf5c699ea98b286964cb634027a086c621193d2d6b83d16",
+      "scan:6aa8f904b05d3713feb3ac55e241e0a9f6f3958e4a084afa57954de099e28dc2",
+      "scan:4427c0b568e6538610e7df8d7ea0867010bca9ebb28c9be569187a268371a962"
+    ]
+  },
+  "unknown-item-history": {
+    "body": {
+      "itemKey": "999999",
+      "points": []
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "unknown-market": {
+    "body": {
+      "error": "no scans for this realm and faction"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 404
+  },
+  "unknown-route": {
+    "body": {
+      "error": "not found"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 404
+  },
+  "upgrade-character": {
+    "body": {
+      "bags": null,
+      "bank": null,
+      "class": null,
+      "faction": null,
+      "gold": [
+        [
+          1728082800,
+          200
+        ],
+        [
+          1728172800,
+          300
+        ]
+      ],
+      "level": null,
+      "name": "Legacy",
+      "realm": "Legacy",
+      "updatedAt": null
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "upgrade-history": {
+    "body": {
+      "itemKey": "2589",
+      "points": [
+        {
+          "marketValue": 0,
+          "minBuyout": 110,
+          "mode": "browse",
+          "quantity": 42,
+          "scannedAt": 1760000000
+        }
+      ]
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "upgrade-prices": {
+    "body": {
+      "items": [
+        {
+          "itemKey": "2589",
+          "marketValue": 0,
+          "minBuyout": 110,
+          "name": null,
+          "numAuctions": 0,
+          "quality": null,
+          "quantity": 42
+        },
+        {
+          "itemKey": "7070",
+          "marketValue": 0,
+          "minBuyout": 300,
+          "name": null,
+          "numAuctions": 0,
+          "quality": null,
+          "quantity": 5
+        }
+      ],
+      "marketScan": null,
+      "scan": {
+        "id": 7,
+        "itemCount": 2,
+        "mode": "browse",
+        "scannedAt": 1760000000,
+        "scanner": "S\u00fcltan"
+      },
+      "total": 2
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "upgrade-restart": {
+    "body": {
+      "bags": null,
+      "bank": null,
+      "class": null,
+      "faction": null,
+      "gold": [
+        [
+          1728082800,
+          200
+        ],
+        [
+          1728172800,
+          300
+        ]
+      ],
+      "level": null,
+      "name": "Legacy",
+      "realm": "Legacy",
+      "updatedAt": null
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "upgrade-scan-retry": {
+    "body": {
+      "items": 2,
+      "stored": false
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 200
+  },
+  "wrong-key": {
+    "body": {
+      "error": "wrong ID or key"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  },
+  "wrong-upload-token": {
+    "body": {
+      "error": "invalid upload token"
+    },
+    "headers": {
+      "content-security-policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "content-type": "application/json",
+      "referrer-policy": "same-origin",
+      "x-content-type-options": "nosniff"
+    },
+    "status": 401
+  }
+}

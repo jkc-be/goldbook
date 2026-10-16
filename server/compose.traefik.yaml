@@ -1,0 +1,44 @@
+# Publishes Goldbook through a Traefik that already runs on the host. deploy.sh
+# adds this file when the env file sets GOLDBOOK_HOST.
+services:
+  goldbook:
+    environment:
+      # Without it every visitor looks like Traefik and they all share one
+      # login limit.
+      TRUSTED_PROXY: "${TRUSTED_PROXY:?set TRUSTED_PROXY to the address or range Traefik connects from}"
+    networks:
+      - default
+      - traefik
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "${TRAEFIK_NETWORK:-traefik}"
+      traefik.http.routers.goldbook-web.rule: "Host(`${GOLDBOOK_HOST:?set GOLDBOOK_HOST to the public host name}`)"
+      traefik.http.routers.goldbook-web.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.goldbook-web.tls: "true"
+      traefik.http.routers.goldbook-web.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.goldbook-web.service: goldbook-web
+      traefik.http.routers.goldbook-web.middlewares: goldbook-ratelimit,goldbook-headers,goldbook-buffer
+      # Keep the larger body allowance on authenticated upload routes.
+      traefik.http.routers.goldbook-upload.rule: "Host(`${GOLDBOOK_HOST}`) && (Path(`/api/scans`) || Path(`/api/account`) || Path(`/api/sellers`) || Path(`/api/sellers/batch`))"
+      traefik.http.routers.goldbook-upload.priority: "1000"
+      traefik.http.routers.goldbook-upload.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.goldbook-upload.tls: "true"
+      traefik.http.routers.goldbook-upload.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.goldbook-upload.service: goldbook-web
+      traefik.http.routers.goldbook-upload.middlewares: goldbook-ratelimit,goldbook-headers,goldbook-upload-buffer
+      traefik.http.services.goldbook-web.loadbalancer.server.port: "8787"
+      traefik.http.middlewares.goldbook-ratelimit.ratelimit.average: "20"
+      traefik.http.middlewares.goldbook-ratelimit.ratelimit.burst: "60"
+      traefik.http.middlewares.goldbook-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth: "0"
+      traefik.http.middlewares.goldbook-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet: "64"
+      traefik.http.middlewares.goldbook-headers.headers.stsseconds: "31536000"
+      traefik.http.middlewares.goldbook-buffer.buffering.maxrequestbodybytes: "65536"
+      traefik.http.middlewares.goldbook-upload-buffer.buffering.maxrequestbodybytes: "20971520"
+
+networks:
+  # Docker Compose creates it anyway. podman-compose wants it declared once a
+  # service names it.
+  default: {}
+  traefik:
+    name: "${TRAEFIK_NETWORK:-traefik}"
+    external: true

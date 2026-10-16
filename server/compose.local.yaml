@@ -1,0 +1,42 @@
+# Development uses the production service, image build, labels and health check.
+# This overlay supplies the local equivalent of OVH's shared Traefik service.
+services:
+  goldbook:
+    ports: !reset []
+    networks:
+      traefik:
+        ipv4_address: 172.30.254.3
+    environment:
+      WEB_DIR: /app/web
+    volumes:
+      - ../web:/app/web:ro
+    labels:
+      traefik.http.routers.goldbook-web.tls.certresolver: ""
+      traefik.http.routers.goldbook-upload.tls.certresolver: ""
+      traefik.http.routers.goldbook-path.tls.certresolver: ""
+      traefik.http.routers.goldbook-path-upload.tls.certresolver: ""
+  traefik:
+    image: traefik:v3.7.13
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --accesslog=true
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+    ports:
+      - 127.0.0.1:8080:80
+      - 127.0.0.1:8443:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      traefik:
+        ipv4_address: 172.30.254.2
+networks:
+  traefik:
+    external: false
+    ipam:
+      config:
+        - subnet: 172.30.254.0/24

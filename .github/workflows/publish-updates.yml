@@ -1,0 +1,32 @@
+name: Publish update feed
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish signed update files to Goldbook
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/ovh_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/ovh_deploy" "$HOME/.ssh/known_hosts"
+          printf '%s' "$GH_TOKEN" | ssh -T -i "$HOME/.ssh/ovh_deploy" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 "$DEPLOY_USER@$DEPLOY_HOST" "publish $RUN_ID $REVISION"
+      - name: Remove SSH identity
+        if: always()
+        run: rm -f "$HOME/.ssh/ovh_deploy" "$HOME/.ssh/known_hosts"

@@ -1,0 +1,27 @@
+services:
+  goldbook:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: ${GOLDBOOK_IMAGE:-goldbook}
+    restart: unless-stopped
+    # The uid that owns the data directory on the host, so the container can
+    # write the database there.
+    user: "${GOLDBOOK_USER:-10001:10001}"
+    environment:
+      UPLOAD_TOKEN: "${UPLOAD_TOKEN:?set UPLOAD_TOKEN in the env file}"
+      SELF_REGISTRATION: "${SELF_REGISTRATION:-false}"
+      BNET_CLIENT_ID: "${BNET_CLIENT_ID:-}"
+      BNET_CLIENT_SECRET: "${BNET_CLIENT_SECRET:-}"
+      GOLDBOOK_PUBLIC_URL: "${GOLDBOOK_PUBLIC_URL:-}"
+      TRUSTED_PROXY: "${TRUSTED_PROXY:-}"
+    ports:
+      - "${GOLDBOOK_BIND:-127.0.0.1}:${GOLDBOOK_PORT:-8787}:8787"
+    volumes:
+      - "${GOLDBOOK_DATA:-./data}:/data:Z"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "5", "http://127.0.0.1:8787/api/realms"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

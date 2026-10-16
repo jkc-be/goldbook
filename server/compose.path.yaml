@@ -1,0 +1,21 @@
+# Adds /goldbook on a shared host. Use with compose.traefik.yaml.
+services:
+  goldbook:
+    labels:
+      traefik.http.routers.goldbook-path.rule: "Host(`${GOLDBOOK_PATH_HOST:?set GOLDBOOK_PATH_HOST to the shared host name}`) && (Path(`/goldbook`) || PathPrefix(`/goldbook/`))"
+      traefik.http.routers.goldbook-path.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.goldbook-path.tls: "true"
+      traefik.http.routers.goldbook-path.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.goldbook-path.service: goldbook-web
+      traefik.http.routers.goldbook-path.middlewares: goldbook-ratelimit,goldbook-headers,goldbook-slash,goldbook-strip,goldbook-buffer
+      traefik.http.routers.goldbook-path-upload.rule: "Host(`${GOLDBOOK_PATH_HOST}`) && (Path(`/goldbook/api/scans`) || Path(`/goldbook/api/account`) || Path(`/goldbook/api/sellers`) || Path(`/goldbook/api/sellers/batch`))"
+      traefik.http.routers.goldbook-path-upload.priority: "1000"
+      traefik.http.routers.goldbook-path-upload.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.goldbook-path-upload.tls: "true"
+      traefik.http.routers.goldbook-path-upload.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.goldbook-path-upload.service: goldbook-web
+      traefik.http.routers.goldbook-path-upload.middlewares: goldbook-ratelimit,goldbook-headers,goldbook-strip,goldbook-upload-buffer
+      traefik.http.middlewares.goldbook-slash.redirectregex.regex: "^(https?://[^/]+/goldbook)$$"
+      traefik.http.middlewares.goldbook-slash.redirectregex.replacement: "$${1}/"
+      traefik.http.middlewares.goldbook-slash.redirectregex.permanent: "true"
+      traefik.http.middlewares.goldbook-strip.stripprefix.prefixes: /goldbook
