@@ -7,11 +7,10 @@ An auction house price tracker for World of Warcraft. It scans the auction
 house in game, shows prices in tooltips and a searchable window, and builds a
 price history in a database on your own server, with a web UI.
 
-This is the private monorepo for Goldbook: the addon, the desktop app, the sync
-CLI, the server and their deployment. Only the addon is public, in
-[jkc-be/goldbook-addon](https://github.com/jkc-be/goldbook-addon), which a
-workflow copies from `addon/`. Make addon changes here, never in the public
-repository. See [Public addon repository](#public-addon-repository).
+This public repository is the upstream for the addon, desktop app, sync CLI,
+server, and web UI. The addon-only distribution is
+[jkc-be/goldbook-addon](https://github.com/jkc-be/goldbook-addon). Its approved
+mirror workflow copies `addon/` from this repository. Make addon changes here.
 
 An addon cannot open network connections. The game only writes addon data to
 disk, in a `SavedVariables` file, on `/reload` and on logout. Goldbook
@@ -1016,8 +1015,18 @@ files, so update those before deploying the Rust image through Actions.
 ## Source, license, and contributions
 
 This repository contains the desktop, server, web UI, and `addon/` sources.
-The older `jkc-be/goldbook-addon` repository is an addon-only copy. This
-repository does not automatically overwrite it.
+[jkc-be/goldbook-addon](https://github.com/jkc-be/goldbook-addon) mirrors
+`addon/` from this public repository. The **Mirror addon** workflow runs for
+addon changes on `main` and requires approval of the `addon-mirror` environment.
+The mirror records its source commit in `upstream.json` and publishes a
+`Goldbook-<version>.zip` release asset with `Goldbook/Goldbook.toc` at its root.
+Use that asset for CurseForge uploads or manual installs. GitHub's automatic
+**Source code** archives contain an extra repository folder and cannot be
+uploaded as an addon. Build the same archive locally with:
+
+```sh
+python3 addon/package.py addon/dist
+```
 
 Goldbook is source available with [all rights reserved](LICENSE). Public
 visibility does not grant an open-source license. See [CONTRIBUTING.md](CONTRIBUTING.md)

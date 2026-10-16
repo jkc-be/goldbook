@@ -9,9 +9,11 @@ With the Goldbook app, the addon syncs with the
 every item, and your characters' gold, bags, bank and trades. Get the app from
 the website's [Download](https://app.jkc-be.com/goldbook/#download) page.
 
-This repository holds the addon only. It is a read-only copy of the addon
-folder of a private repository, and every update overwrites it. The Goldbook
-desktop app and server are not part of it.
+This addon-only repository is a generated mirror of
+[`jkc-be/goldbook/addon`](https://github.com/jkc-be/goldbook/tree/main/addon).
+The public upstream also contains the desktop app, server, and web UI. Make
+changes in the upstream repository; an approved mirror update replaces this
+copy. `upstream.json` records the exact source commit.
 
 ## Requirements
 
@@ -25,10 +27,16 @@ The easiest way is the Goldbook app from the
 [Download](https://app.jkc-be.com/goldbook/#download) page. It installs the
 addon, keeps it up to date, and syncs it with the website.
 
+Download the attached `Goldbook-<version>.zip` from
+[Releases](https://github.com/jkc-be/goldbook-addon/releases/latest). Use that
+same ZIP when uploading to CurseForge. It contains `Goldbook/Goldbook.toc`
+directly. The automatic **Source code (zip)** download wraps the files in
+`goldbook-addon-<tag>` and is not an installable addon package.
+
 To install the addon by hand:
 
 1. Quit the game. The game only looks for new addons when it starts.
-2. Copy the `Goldbook` folder into `Interface/AddOns` of your game flavor, for
+2. Extract the release ZIP and copy its `Goldbook` folder into `Interface/AddOns` of your game flavor, for
    example `World of Warcraft/_classic_/Interface/AddOns/Goldbook`. The folder
    must contain `Goldbook.toc` directly.
 3. Start the game.
@@ -88,6 +96,17 @@ These are recorded sell listings, not a live feed or standing buy orders.
 | `/gb status` | The addon's version, items priced and scans waiting for sync |
 | `/gb web` | The website's address, and the ID and key that log you in to its character pages |
 | `/gb minimap` | Hides or shows the minimap button |
+
+## Build a release ZIP
+
+```sh
+python3 package.py dist
+```
+
+The packaging command checks that the TOC's files are present and produces
+`dist/Goldbook-<version>.zip`. The release workflow tests and packages each
+mirror update. Existing release assets are immutable; change the version in
+`Goldbook.toc` upstream before publishing different addon code.
 
 ## Test
 

@@ -58,7 +58,7 @@ def configure():
         {'default_workflow_permissions': 'read', 'can_approve_pull_request_reviews': False})
     api('actions/permissions/fork-pr-contributor-approval', 'PUT',
         {'approval_policy': 'all_external_contributors'})
-    for environment in ('production', 'release-signing'):
+    for environment in ('production', 'release-signing', 'addon-mirror'):
         path = f'environments/{environment}'
         api(path, 'PUT', {'wait_timer': 0, 'prevent_self_review': False, 'can_admins_bypass': False,
                          'reviewers': [{'type': 'User', 'id': OWNER_ID}],
@@ -96,7 +96,7 @@ def verify():
         'default_workflow_permissions': 'read', 'can_approve_pull_request_reviews': False}
     assert api('actions/permissions/fork-pr-contributor-approval')['approval_policy'] == 'all_external_contributors'
     assert api('actions/secrets')['total_count'] == 0, 'Use protected environment secrets, not repository secrets'
-    for environment in ('production', 'release-signing'):
+    for environment in ('production', 'release-signing', 'addon-mirror'):
         path = f'environments/{environment}'
         value = api(path)
         assert value['can_admins_bypass'] is False
