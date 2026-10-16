@@ -37,8 +37,9 @@ python3 scripts/configure-github.py --check
 | --- | --- | --- | --- |
 | `production` | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KNOWN_HOSTS`, `DEPLOY_SSH_KEY` | `jkc-be` | `main` |
 | `release-signing` | `TAURI_SIGNING_PRIVATE_KEY` | `jkc-be` | `main` |
+| `addon-mirror` | `ADDON_MIRROR_SSH_KEY` | `jkc-be` | `main` |
 
-Administrator bypass is disabled for both environments. Self-review is allowed
+Administrator bypass is disabled for all three environments. Self-review is allowed
 so the sole maintainer can approve a workflow they started. Only the listed
 reviewer can approve. Jobs cannot receive environment secrets before approval.
 No repository-level secrets are used. The `ci` environment contains no secrets
@@ -94,3 +95,22 @@ and [environment protection](https://docs.github.com/en/actions/reference/workfl
 Public visibility still permits viewing and forking under
 [GitHub's terms](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository);
 the all-rights-reserved license does not make this open source.
+
+## Addon distribution mirror
+
+`jkc-be/goldbook-addon` is generated from this repository's `addon/` directory.
+After a push to main changes the addon, approve **Mirror addon** in the
+`addon-mirror` environment. The workflow uses a dedicated write deploy key for
+the addon repository. It cannot deploy to OVH or sign client updates.
+
+The addon repository's main branch permits updates only by the sole maintainer
+or this deploy key. Force pushes and deletion are blocked, including for the
+mirror. It has one write deploy key, titled `Mirror from public Goldbook`; do
+not add other write keys unless they should also be allowed to mirror updates.
+The former private-upstream mirror workflow is disabled and its key revoked.
+
+The target's **Package addon release** workflow uses its own GitHub token to
+publish an installable ZIP. It does not have production or signing secrets.
+The workflow verifies byte-for-byte equality on retries and rejects overwriting
+an existing version with different contents. Source ZIPs from GitHub have an
+extra directory and must not be uploaded to CurseForge.

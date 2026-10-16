@@ -1,0 +1,56 @@
+name: Package addon release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: addon-release
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.repository == 'jkc-be/goldbook-addon' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Test the addon
+        run: |
+          sudo apt-get update && sudo apt-get install -y luajit
+          for suite in run scanner sellers orderbook professions trades; do
+            luajit "tests/$suite.lua"
+          done
+      - name: Package installable ZIP
+        id: archive
+        run: |
+          archive=$(python3 package.py dist)
+          version=$(basename "$archive" .zip)
+          printf 'file=%s\ntag=v%s\n' "$archive" "${version#Goldbook-}" >> "$GITHUB_OUTPUT"
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ARCHIVE: ${{ steps.archive.outputs.file }}
+          TAG: ${{ steps.archive.outputs.tag }}
+          REVISION: ${{ github.sha }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release download "$TAG" --pattern "$(basename "$ARCHIVE")" --dir existing
+            if ! cmp --silent "$ARCHIVE" "existing/$(basename "$ARCHIVE")"; then
+              echo 'This version already has a different package. Bump the addon version before publishing.' >&2
+              exit 1
+            fi
+          else
+            cat > release-notes.md <<'NOTES'
+          Install or upload the attached Goldbook ZIP. It contains Goldbook/Goldbook.toc directly.
+
+          GitHub's automatic Source code archives contain an extra repository folder and are not install packages.
+
+          Upstream source: https://github.com/jkc-be/goldbook/tree/main/addon
+          NOTES
+            gh release create "$TAG" "$ARCHIVE" --target "$REVISION" --title "Goldbook ${TAG#v}" --notes-file release-notes.md
+          fi

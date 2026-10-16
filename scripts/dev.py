@@ -91,7 +91,10 @@ def verify():
     for host, prefix in (('goldbook.localhost', ''), ('localhost', '/goldbook')):
         assert request(host, prefix + '/api/realms')[0] == 200
         path = prefix + '/api/sellers/batch'
-        assert request(host, path, body)[0] == 401, 'upload must reach authentication'
+        for token in (None, 'wrong'):
+            for _ in range(4):
+                status, response = request(host, path, b' ' * (1024 * 1024), token)
+                assert status == 401, f'{host}{path}: upload must reach authentication, got {status}: {response[:200]}'
         assert request(host, path, body, TOKEN)[0] == 400, 'large batch must reach JSON validation'
         assert request(host, prefix + '/api/login', body)[0] == 413, 'public route must keep its small limit'
     for scheme in ('http', 'https'):
