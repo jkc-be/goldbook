@@ -159,9 +159,10 @@ def exercise(port, directory):
     assert len(body) > 65536
     for index, (host, prefix) in enumerate((('localhost', ''), ('127.0.0.1', '/goldbook'))):
         path = prefix + '/api/sellers/batch'
-        status, _, response = request(port, host, path, body)
-        assert status == 401, f'{host}{path}: upload must reach authentication, got {status}: {response[:200]}'
-        assert request(port, host, path, body, 'wrong')[0] == 401
+        for token in (None, 'wrong'):
+            for _ in range(4):
+                status, _, response = request(port, host, path, b' ' * (1024 * 1024), token)
+                assert status == 401, f'{host}{path}: upload must reach authentication, got {status}: {response[:200]}'
         status, _, raw = request(port, host, path, body, 'dev-token')
         assert status == 200, f'{host}{path}: expected 200 for {len(body)} bytes, got {status}: {raw[:200]}'
         assert json.loads(raw) == {'received': 100, 'stored': 100 if index == 0 else 0}

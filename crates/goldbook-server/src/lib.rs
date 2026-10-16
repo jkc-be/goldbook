@@ -339,10 +339,18 @@ async fn handle(State(state): State<Arc<App>>, request: Request) -> Response {
     let upload_fingerprint = if upload {
         let auth_state = Arc::clone(&state);
         let auth_headers = parts.headers.clone();
-        match tokio::task::spawn_blocking(move || authorize(&auth_headers, &auth_state)).await {
-            Ok(Ok(fingerprint)) => fingerprint,
-            Ok(Err(error)) => return Reply::error(error).response(head),
-            Err(_) => return Reply::error(Error::new(500, "internal error")).response(head),
+        let authorization =
+            tokio::task::spawn_blocking(move || authorize(&auth_headers, &auth_state))
+                .await
+                .unwrap_or_else(|_| Err(Error::new(500, "internal error")));
+        match authorization {
+            Ok(fingerprint) => fingerprint,
+            Err(error) => {
+                // Closing with an unread body can reset the proxy connection,
+                // replacing this response with a 502. Keep draining bounded.
+                let _ = to_bytes(body, MAX_BODY).await;
+                return Reply::error(error).response(head);
+            }
         }
     } else {
         None
