@@ -120,7 +120,8 @@ def proxy(directory, binary, config):
     with (directory / 'traefik.log').open('w+') as log:
         process = subprocess.Popen([str(binary), f'--entrypoints.websecure.address=127.0.0.1:{port}',
             f'--providers.file.filename={settings}', '--providers.file.watch=false',
-            '--global.checknewversion=false', '--global.sendanonymoususage=false'],
+            '--global.checknewversion=false', '--global.sendanonymoususage=false',
+            '--accesslog=true', '--accesslog.format=json'],
             cwd=directory, stdout=log, stderr=log,
             env={k: os.environ[k] for k in ('PATH', 'HOME', 'TMPDIR') if k in os.environ})
         try:
@@ -158,7 +159,8 @@ def exercise(port, directory):
     assert len(body) > 65536
     for index, (host, prefix) in enumerate((('localhost', ''), ('127.0.0.1', '/goldbook'))):
         path = prefix + '/api/sellers/batch'
-        assert request(port, host, path, body)[0] == 401, 'large upload must reach app authentication'
+        status, _, response = request(port, host, path, body)
+        assert status == 401, f'{host}{path}: upload must reach authentication, got {status}: {response[:200]}'
         assert request(port, host, path, body, 'wrong')[0] == 401
         status, _, raw = request(port, host, path, body, 'dev-token')
         assert status == 200, f'{host}{path}: expected 200 for {len(body)} bytes, got {status}: {raw[:200]}'
