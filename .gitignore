@@ -3,7 +3,7 @@ fixtures/*
 !fixtures/.gitkeep
 .venv/
 __pycache__/
-data/
+/data/
 desktop/dist/
 /target
 /desktop/src-tauri/target
