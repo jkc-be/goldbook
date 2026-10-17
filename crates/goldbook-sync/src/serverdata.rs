@@ -188,9 +188,7 @@ async fn refresh(flavor: &Path, api: &str, log: &Logger) -> Result<ServerData> {
             Err(e) => log(&format!("{}: {e}", file.display())),
         }
     }
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60))
-        .build()?;
+    let client = crate::api_client(api, Duration::from_secs(60))?;
     let url = api_url(api, "api/export")?;
     let mut realms = BTreeMap::new();
     for key in keys {

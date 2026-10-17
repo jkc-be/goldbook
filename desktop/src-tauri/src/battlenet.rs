@@ -11,13 +11,6 @@ pub struct Login {
     interval: Duration,
 }
 
-fn client() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?)
-}
-
 async fn response(mut response: reqwest::Response) -> Result<(u16, Value)> {
     let status = response.status().as_u16();
     let mut body = Vec::new();
@@ -36,7 +29,7 @@ async fn response(mut response: reqwest::Response) -> Result<(u16, Value)> {
 }
 
 pub async fn enabled(api: &str) -> Result<bool> {
-    let reply = client()?
+    let reply = goldbook_sync::api_client(api, Duration::from_secs(10))?
         .get(goldbook_sync::api_url(api, "/api/auth/battlenet/status")?)
         .send()
         .await
@@ -96,7 +89,7 @@ fn user_code(value: &Value) -> Option<String> {
 }
 
 pub async fn start(api: &str) -> Result<Login> {
-    let reply = client()?
+    let reply = goldbook_sync::api_client(api, Duration::from_secs(10))?
         .post(goldbook_sync::api_url(api, "/api/auth/battlenet/start")?)
         .header("content-type", "application/json")
         .body("{}")
@@ -142,7 +135,7 @@ pub async fn start(api: &str) -> Result<Login> {
 
 pub async fn finish(api: &str, login: Login, cancelled: impl Fn() -> bool) -> Result<String> {
     let deadline = tokio::time::Instant::now() + login.expires_in;
-    let client = client()?;
+    let client = goldbook_sync::api_client(api, Duration::from_secs(10))?;
     loop {
         if cancelled() {
             bail!("Battle.net sign-in was cancelled.");
