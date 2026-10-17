@@ -22,6 +22,7 @@ jobs:
           - os: ubuntu-latest
             bundles: deb,rpm
     uses: ./.github/workflows/desktop.yml
+    secrets: inherit
     with:
       runner: ${{ matrix.os }}
       bundles: ${{ matrix.bundles }}
@@ -47,3 +48,4 @@ jobs:
   publish:
     needs: feed
     uses: ./.github/workflows/publish-updates.yml
+    secrets: inherit
