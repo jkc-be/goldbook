@@ -389,6 +389,46 @@ input::placeholder {
   outline-offset: -2px;
 }
 
+.views .group {
+  margin: 14px 20px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+}
+
+/* The tabs of the hub on show, as the addon's window has them. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.tabs a {
+  margin-bottom: -1px;
+  padding: 6px 14px 7px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-soft);
+  font: 17px var(--serif);
+  text-decoration: none;
+}
+
+.tabs a:hover {
+  color: var(--ink);
+  background: var(--tint);
+}
+
+.tabs a[aria-current="page"] {
+  border-bottom-color: var(--gold);
+  color: var(--gold-ink);
+}
+
+.tabs a:focus-visible {
+  outline-offset: -2px;
+}
+
 .rail-foot {
   display: grid;
   gap: 10px;
@@ -498,6 +538,31 @@ input::placeholder {
   gap: 4px 14px;
 }
 
+.pagehead > :is(.badge, .segmented, .chip) {
+  margin-left: auto;
+  align-self: center;
+}
+
+.badge {
+  padding: 3px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badge .money {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+#mover-direction button {
+  padding: 4px 14px;
+  font-size: 13px;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -545,16 +610,29 @@ main {
 }
 
 /* Panels whose tables run edge to edge under a ruled heading. */
-.prices-panel,
+.list-panel,
 .holdings .panel,
 .trades {
   padding: 0;
 }
 
 .holdings .panel > h3,
+.list-panel > h3,
 .trades > h3 {
   padding: 9px 14px 7px;
   border-bottom: 1px solid var(--line);
+}
+
+.list-note {
+  margin: 10px 14px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.list-panel .character,
+.list-panel .where,
+.list-panel .updated {
+  white-space: nowrap;
 }
 
 .holdings .panel > :not(h3, table),
@@ -567,11 +645,11 @@ main {
   margin-block: 8px;
 }
 
-:is(.prices-panel, .holdings .panel, .trades) :is(th, td):first-child {
+:is(.list-panel, .holdings .panel, .trades) :is(th, td):first-child {
   padding-left: 14px;
 }
 
-:is(.prices-panel, .holdings .panel, .trades) :is(th, td):last-child {
+:is(.list-panel, .holdings .panel, .trades) :is(th, td):last-child {
   padding-right: 14px;
 }
 
@@ -838,7 +916,7 @@ td.item button {
   padding: 8px 14px;
 }
 
-.pager #range {
+.pager .range {
   order: -1;
   margin-right: auto;
   font-size: 13px;
@@ -1383,8 +1461,23 @@ td.item button {
 }
 
 .character-gold .summary,
+#account-gold-summary,
+#bags-summary,
 .trades .summary {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+#account-gold-summary,
+#bags-summary {
+  margin: 0;
+}
+
+.list-panel .character a {
+  text-decoration: none;
+}
+
+.list-panel .character a:hover {
+  text-decoration: underline;
 }
 
 .panel-head {
@@ -1680,12 +1773,24 @@ code {
     flex-direction: row;
   }
 
+  /* Five hubs share a phone's width, each its icon over its name. */
   .views a {
     flex: 1 1 0;
+    flex-direction: column;
     justify-content: center;
-    gap: 7px;
-    padding: 10px 4px;
-    font-size: 15px;
+    gap: 3px;
+    min-width: 0;
+    padding: 8px 2px 7px;
+    font-size: 13px;
+  }
+
+  .views .group {
+    display: none;
+  }
+
+  .tabs a {
+    padding-inline: 10px;
+    font-size: 16px;
   }
 
   .views a[aria-current="page"] {
@@ -1731,7 +1836,7 @@ code {
     width: 100%;
   }
 
-  .panel:not(.prices-panel, .holdings .panel, .trades) {
+  .panel:not(.list-panel, .holdings .panel, .trades) {
     padding: 12px;
   }
 
@@ -1748,6 +1853,10 @@ code {
   #prices .market,
   #prices .listed,
   #prices .spark,
+  #deals :is(.sells, .week),
+  #movers :is(.before, .week),
+  #bags :is(.where, .action),
+  #gold-characters :is(.week-change, .updated),
   #history .mode,
   .holding .post,
   .holding .vendor,
@@ -1771,11 +1880,11 @@ code {
     padding-inline: 4px;
   }
 
-  :is(.prices-panel, .holdings .panel, .trades) :is(th, td):first-child {
+  :is(.list-panel, .holdings .panel, .trades) :is(th, td):first-child {
     padding-left: 10px;
   }
 
-  :is(.prices-panel, .holdings .panel, .trades) :is(th, td):last-child {
+  :is(.list-panel, .holdings .panel, .trades) :is(th, td):last-child {
     padding-right: 10px;
   }
 
