@@ -7,6 +7,27 @@ were released with.
 
 ## Unreleased
 
+## 0.2.2 - 2026-10-17
+
+### Desktop app
+
+- Require HTTPS for remote uploads, sign-in, and server price downloads.
+  HTTP remains available for loopback servers and bypasses environment proxies.
+- Refuse API redirects so credentials and account data stay with the configured
+  server.
+- Check manual upload credentials before saving settings or starting sync.
+- Backport the upstream GLib iterator security fix for Linux builds. Replace
+  the backport with an upstream release when Tauri's dependency chain supports it.
+
+### Addon
+
+- Remove the misleading "Nothing waiting to sync" and "N scans waiting to sync"
+  label from the side rail.
+
+### Build
+
+- Pin Linux CI, installer, release, and deployment jobs to Ubuntu 24.04.
+
 ## 0.2.1 - 2026-10-17
 
 - Build the desktop app and server with Rust 1.99.1 and align their shared
