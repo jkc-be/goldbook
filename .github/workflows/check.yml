@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -24,7 +24,7 @@ jobs:
       - run: python3 scripts/check-secrets.py
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -40,7 +40,7 @@ jobs:
       - run: make check
 
   desktop-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -55,7 +55,7 @@ jobs:
         run: cargo test --locked -p goldbook-desktop
 
   local-stack:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -85,7 +85,7 @@ jobs:
             bundles: app,dmg
           - os: windows-latest
             bundles: nsis
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             bundles: deb,rpm
     uses: ./.github/workflows/desktop.yml
     with:
