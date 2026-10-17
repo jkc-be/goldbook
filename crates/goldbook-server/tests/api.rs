@@ -926,19 +926,23 @@ async fn embedded_index_references_assets_by_content_version() {
     let (status, _, index) = raw(&f.app, "GET", "/", vec![], &[]).await;
     assert_eq!(status, 200);
     let index = String::from_utf8(index).unwrap();
-    let attribute = |tag: &str, name: &str| {
-        let tag = &index[index.find(tag).unwrap()..];
-        let value = &tag[tag.find(name).unwrap() + name.len()..];
-        value[..value.find('"').unwrap()].to_owned()
+    let reference = |name: &str| {
+        let url = &index[index.find(&format!("\"{name}?v=")).unwrap() + 1..];
+        url[..url.find('"').unwrap()].to_owned()
     };
-    let assets: [(String, &str, &[u8]); 2] = [
+    let assets: [(String, &str, &[u8]); 3] = [
         (
-            attribute("<script", " src=\""),
+            reference("app.js"),
             "app.js?v=",
             include_bytes!("../../../web/app.js"),
         ),
         (
-            attribute("<link rel=\"stylesheet\"", " href=\""),
+            reference("theme.js"),
+            "theme.js?v=",
+            include_bytes!("../../../web/theme.js"),
+        ),
+        (
+            reference("style.css"),
             "style.css?v=",
             include_bytes!("../../../web/style.css"),
         ),

@@ -334,9 +334,10 @@ def main():
         # The migration baseline fixes API behavior, not the evolving web UI.
         # Still require the server to serve the exact current, versioned assets.
         index = (ROOT / "web/index.html").read_text()
-        for name, label in (("app.js", "static-js"), ("style.css", "static-css")):
+        for name, label in (("app.js", "static-js"), ("theme.js", None), ("style.css", "static-css")):
             digest = hashlib.sha256((ROOT / "web" / name).read_bytes()).hexdigest()
-            expected[label]["body"] = {"sha256": digest}
+            if label:
+                expected[label]["body"] = {"sha256": digest}
             index = index.replace(f'"{name}"', f'"{name}?v={digest[:12]}"')
         expected["static-index"]["body"] = {"sha256": hashlib.sha256(index.encode()).hexdigest()}
         # Full scans now also upload seller snapshots. verify-sellers.py checks

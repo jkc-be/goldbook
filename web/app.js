@@ -32,7 +32,7 @@ const TRENDS = {
   flat: { arrow: "→", word: "flat" },
 };
 const SERIES = [
-  { field: "minBuyout", name: "Min buyout", color: "var(--series-1)" },
+  { field: "minBuyout", name: "Min buyout", color: "var(--series-1)", area: true },
   { field: "marketValue", name: "Market value", color: "var(--series-2)" },
 ];
 // Prices on top, the quantity listed in a band below that shares the time axis.
@@ -41,10 +41,10 @@ const LABEL_HEIGHT = 14;
 const SPARK = { width: 72, height: 22, pad: 3 };
 const NEWEST_SCANS = 5;
 const WOWHEAD_ITEM = "https://www.wowhead.com/forever/item=";
-const WIDE = matchMedia("(min-width: 1000px)");
+const WIDE = matchMedia("(min-width: 1240px)");
 
 const state = { realms: [], realm: null, q: "", profession: "", kind: "all", quality: "", sort: "name", order: "asc", offset: 0, selected: null };
-const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0 };
+const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0, session: 0 };
 const STALE = Symbol("stale");
 const $ = (id) => document.getElementById(id);
 
@@ -56,7 +56,7 @@ function element(tag, properties = {}, children = []) {
   return node;
 }
 
-function svg(tag, attributes = {}, text) {
+function svg(tag, attributes = {}, text, children = []) {
   const node = document.createElementNS(SVG, tag);
   for (const [name, value] of Object.entries(attributes)) {
     node.setAttribute(name, value);
@@ -64,6 +64,7 @@ function svg(tag, attributes = {}, text) {
   if (text !== undefined) {
     node.textContent = text;
   }
+  node.append(...children);
   return node;
 }
 
@@ -238,6 +239,7 @@ function sparkline(lows) {
   if (values.length === 0) {
     return root;
   }
+  root.classList.add(values.length > 1 ? direction(percent(values[0], values.at(-1))) : "flat");
   const [low, high] = [Math.min(...values), Math.max(...values)];
   const x = (index) => SPARK.pad + (index / (lows.length - 1)) * (SPARK.width - 2 * SPARK.pad);
   const y = (value) =>
@@ -312,6 +314,8 @@ function scanDates(start, end) {
 const chartWidth = (chart) => Math.max(300, Math.round(chart.getBoundingClientRect().width));
 
 const drawn = new Map();
+// Gradient ids are page-wide, so each area gets its own.
+let areas = 0;
 const resized = new ResizeObserver((entries) => {
   for (const { target } of entries) {
     const { width, options } = drawn.get(target);
@@ -377,6 +381,7 @@ function drawChart(chart, options) {
   // A line runs from one measured value to the next and passes over the
   // times in between that measured nothing.
   const ends = [];
+  let defs = null;
   for (const line of series) {
     const measured = times.flatMap((time, index) => {
       const value = line.values[index];
@@ -386,6 +391,15 @@ function drawChart(chart, options) {
       .map((point, index) => (index === 0 ? `M${point.x} ${point.y}` : `${steps ? `H${point.x} V` : `L${point.x} `}${point.y}`))
       .join(" ");
     const last = measured.at(-1);
+    if (line.area) {
+      const id = `area-${++areas}`;
+      defs ??= root.appendChild(svg("defs"));
+      defs.append(svg("linearGradient", { id, x1: 0, x2: 0, y1: 0, y2: 1 }, undefined, [
+        svg("stop", { offset: 0, "stop-color": line.color, "stop-opacity": 0.42 }),
+        svg("stop", { offset: 1, "stop-color": line.color, "stop-opacity": 0.03 }),
+      ]));
+      root.append(svg("path", { class: "area", d: `${path} V${bottom} H${measured[0].x} Z`, fill: `url(#${id})` }));
+    }
     root.append(
       svg("path", { class: "line", d: path, stroke: line.color }),
       svg("circle", { class: "dot", cx: last.x, cy: last.y, r: 4, fill: line.color }),
@@ -491,9 +505,8 @@ function drawChart(chart, options) {
 
 // Only a full scan measures a market value; quick scans leave it at 0.
 function drawItemChart(title, points) {
-  const series = SERIES.map(({ field, name, color }) => ({
-    name,
-    color,
+  const series = SERIES.map(({ field, ...line }) => ({
+    ...line,
     values: points.map((point) => (point[field] > 0 ? point[field] : null)),
   })).filter(({ values }) => values.some((value) => value !== null));
   drawChart($("chart"), {
@@ -705,13 +718,13 @@ function priceRow(item, market, trends) {
     element("td", { className: "number" }, trends ? [trend(changeOver(seenDays(trends.days, lows), item.minBuyout, 7), "over 7 days")] : []),
   ]);
   const compare = element("button", {
-    className: "button compare-item", textContent: "Compare",
+    className: "compare-item",
     onclick: () => toggleComparison({ itemKey: item.itemKey, name: itemName(item), ...state.realm }),
   });
   compare.dataset.compareKey = item.itemKey;
   compare.setAttribute("aria-label", `Compare ${itemName(item)}`);
   compare.setAttribute("aria-pressed", String(comparisonItems.some((entry) => entry.itemKey === item.itemKey)));
-  row.append(element("td", { className: "compare-column" }, [compare]));
+  row.prepend(element("td", { className: "compare-column" }, [compare]));
   row.dataset.itemKey = item.itemKey;
   row.setAttribute("aria-selected", String(item.itemKey === state.selected));
   return row;
@@ -788,9 +801,9 @@ async function openPrices() {
   }
 }
 
-function showPanel(id) {
+function showPanel(...ids) {
   for (const section of $("account-view").children) {
-    section.hidden = section.id !== id;
+    section.hidden = !ids.includes(section.id);
   }
 }
 
@@ -813,27 +826,62 @@ function about(character, { faction = false } = {}) {
     .join(" · ");
 }
 
-function characterLink(character) {
+function characterLink(character, current) {
   const route = { view: "character", name: character.name, realm: character.realm };
   const name = element("span", { className: "name", textContent: character.name });
   name.style.color = classColor(character.class);
-  return element("li", {}, [
-    element("a", { href: routeHash(route) }, [
-      name,
-      character.gold === null ? "–" : money(character.gold, { aligned: true }),
-      element("span", { className: "about", textContent: about(character) }),
-    ]),
+  const link = element("a", { href: routeHash(route) }, [
+    name,
+    character.gold === null ? "–" : money(character.gold),
+    element("span", { className: "about", textContent: about(character) }),
   ]);
+  if (current?.name === character.name && current.realm === character.realm) {
+    link.setAttribute("aria-current", "page");
+  }
+  return element("li", {}, [link]);
 }
 
 const groupedId = (id) => `${id.slice(0, 4)}-${id.slice(4)}`;
 
-async function loadAccount() {
-  const [account, trades] = await latestOnly("view", Promise.all([api("/api/account"), loadTrades()]));
+// The account in the rail, and the purse with the gold of all its characters.
+// `account` is null when signed out and undefined while that is not known.
+function drawSession(account) {
+  // Newer than any answer still on its way.
+  latest.session++;
+  $("session").hidden = account === undefined;
+  $("session").replaceChildren(
+    ...(account ? ["Signed in as ", element("strong", { textContent: groupedId(account.id) })] : ["Not signed in"]),
+  );
+  $("log-in-link").hidden = account !== null;
+  $("log-out").hidden = !account;
+  const golds = (account?.characters ?? []).map(({ gold }) => gold).filter((gold) => gold !== null);
+  $("purse").hidden = golds.length === 0;
+  $("purse-gold").replaceChildren(...(golds.length ? [money(golds.reduce((total, gold) => total + gold, 0))] : []));
+}
+
+async function loadSession() {
+  const account = await latestOnly("session", api("/api/account")).catch((error) => {
+    if (error.status === 401) {
+      return null;
+    }
+    throw error;
+  });
+  drawSession(account);
+}
+
+// The roster, with the character on show marked.
+function drawAccount(account, current = null) {
   const linked = account.linked?.length ? `, linked with ${account.linked.map(groupedId).join(", ")}` : "";
   $("account-id").textContent = `ID ${groupedId(account.id)}${linked}`;
-  $("character-list").replaceChildren(...account.characters.map(characterLink));
+  $("character-list").replaceChildren(...account.characters.map((character) => characterLink(character, current)));
+  drawSession(account);
+}
+
+async function loadAccount() {
+  const [account, trades] = await latestOnly("view", Promise.all([api("/api/account"), loadTrades()]));
+  drawAccount(account);
   drawTrades($("account-trades"), trades, { withCharacter: true });
+  $("account-trades").hidden = false;
   showPanel("characters");
 }
 
@@ -967,7 +1015,7 @@ function drawGoldChart(name, gold) {
   const balances = hourlyGold(gold, times);
   drawChart($("gold-chart"), {
     times,
-    series: [{ name: "Gold", color: "var(--coin-g)", values: balances }],
+    series: [{ name: "Gold", color: "var(--series-1)", values: balances, area: true }],
     steps: true,
     heading: (index) => `${when(times[index])}–${clock(times[index] + HOUR)}`,
     label: `${name}: gold over the last ${SPAN_NAMES[goldSpan]}, from ${moneyText(balances[0])} to ${moneyText(balances.at(-1))}. Use the arrow keys to read each hour.`,
@@ -999,7 +1047,7 @@ function holdingRow(row) {
 function holdings(title, snapshot, seen, missing) {
   const heading = element("h3", { textContent: title });
   if (snapshot === null) {
-    return element("div", {}, [heading, element("p", { className: "muted", textContent: missing })]);
+    return element("div", { className: "panel" }, [heading, element("p", { className: "muted", textContent: missing })]);
   }
   const table =
     snapshot.rows.length === 0
@@ -1010,7 +1058,7 @@ function holdings(title, snapshot, seen, missing) {
           ]),
           element("tbody", {}, snapshot.rows.map(holdingRow)),
         ]);
-  return element("div", {}, [
+  return element("div", { className: "panel" }, [
     heading,
     element("p", { className: "muted" }, ["Total ", money(snapshot.total), ` · ${seen} ${age(snapshot.at)}`]),
     table,
@@ -1214,7 +1262,7 @@ function loadTrades(parameters = {}) {
 }
 
 async function loadCharacter({ name, realm }) {
-  const [character, trades] = await latestOnly(
+  const [character, trades, account] = await latestOnly(
     "view",
     Promise.all([
       api("/api/character", { name, realm }).catch((error) => {
@@ -1224,14 +1272,18 @@ async function loadCharacter({ name, realm }) {
         throw error;
       }),
       loadTrades({ name, realm }),
+      api("/api/account"),
     ]),
   );
+  // The roster leads to the other characters; the trades of all of them stay on the account's page.
+  drawAccount(account, { name, realm });
+  $("account-trades").hidden = true;
   if (character === null) {
     $("no-character-text").textContent = `No character ${name} on ${realm} in this account.`;
-    showPanel("no-character");
+    showPanel("characters", "no-character");
     return;
   }
-  showPanel("character");
+  showPanel("characters", "character");
   $("character-title").textContent = character.name;
   $("character-title").style.color = classColor(character.class);
   $("character-about").textContent = about(character, { faction: true });
@@ -1286,6 +1338,7 @@ async function run(action) {
     await action();
   } catch (error) {
     if (error.status === 401) {
+      drawSession(null);
       showPanel("login");
     } else if (error !== STALE) {
       showMessage(`Something went wrong: ${error.message}`);
@@ -1295,7 +1348,7 @@ async function run(action) {
 
 let comparisonRequest = 0;
 let comparisonItems = [];
-const COMPARISON_COLORS = ["var(--series-1)", "var(--series-2)", "var(--up)", "var(--q-epic)", "var(--down)", "var(--coin-g)"];
+const COMPARISON_COLORS = [1, 2, 3, 4, 5, 6].map((index) => `var(--compare-${index})`);
 
 function updateCompareButtons() {
   for (const button of document.querySelectorAll("[data-compare-key]")) {
@@ -1470,6 +1523,7 @@ $("show-key").onclick = () => {
 $("log-out").onclick = () =>
   run(async () => {
     await api("/api/logout", {}, {});
+    drawSession(null);
     render();
   });
 
@@ -1502,6 +1556,7 @@ $("link-form").onsubmit = async (event) => {
   } catch (error) {
     // A session that ran out shows the login, as any other view does.
     if (error.status === 401) {
+      drawSession(null);
       showPanel("login");
     } else {
       $("link-error").textContent = loginError(error);
@@ -1601,7 +1656,7 @@ async function loadDownload() {
 }
 
 const VIEWS = {
-  prices: { shows: ["price-tools", "prices-view"], link: "#prices", load: openPrices },
+  prices: { shows: ["realm-picker", "price-tools", "prices-view"], link: "#prices", load: openPrices },
   characters: { shows: ["account-view"], link: "#characters", load: loadAccount },
   character: { shows: ["account-view"], link: "#characters", load: loadCharacter },
   download: { shows: ["download-view"], link: "#download", load: loadDownload },
@@ -1625,5 +1680,27 @@ function render() {
   run(() => view.load(route));
 }
 
+// Marks the theme on show; theme.js applied a stored choice before the first paint.
+function drawTheme() {
+  for (const button of document.querySelectorAll("[data-theme-choice]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.themeChoice === document.documentElement.dataset.theme));
+  }
+}
+
+for (const button of document.querySelectorAll("[data-theme-choice]")) {
+  button.onclick = () => {
+    document.documentElement.dataset.theme = button.dataset.themeChoice;
+    try {
+      localStorage.setItem("goldbook-theme", button.dataset.themeChoice);
+    } catch {
+      // Without storage the choice lasts until the page is left.
+    }
+    drawTheme();
+  };
+}
+
 window.onhashchange = render;
+drawTheme();
+// The rail shows the session on every view. A failure leaves it blank; the view reports its own.
+loadSession().catch(() => {});
 render();

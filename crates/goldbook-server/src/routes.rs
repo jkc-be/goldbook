@@ -815,8 +815,9 @@ fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     )?;
     Ok(Reply::json(json!({"trades": rows})))
 }
-const ASSETS: [(&str, &[u8], &str); 6] = [
+const ASSETS: [(&str, &[u8], &str); 7] = [
     ("app.js", include_bytes!("../../../web/app.js"), "js"),
+    ("theme.js", include_bytes!("../../../web/theme.js"), "js"),
     ("style.css", include_bytes!("../../../web/style.css"), "css"),
     (
         "fonts/marcellus-latin-400-normal.woff2",
