@@ -383,7 +383,7 @@ options.checks.minimap.checked = true
 options.checks.minimap.scripts.OnClick(options.checks.minimap)
 
 SlashCmdList.GOLDBOOK("")
-eq(lastPrint(), "Goldbook /gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark", "/gb lists /gb web and /gb theme")
+eq(lastPrint(), "Goldbook /gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>", "/gb lists /gb web, /gb theme and /gb scale")
 
 GoldbookDB.account = { id = "K7Q2M9PX", key = "7KQ2M9PXABCDEFGHJKMN" }
 SlashCmdList.GOLDBOOK("web")
@@ -1107,6 +1107,30 @@ options.checks.light.scripts.OnClick(options.checks.light)
 eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.31", "the options switch to parchment")
 SlashCmdList.GOLDBOOK("theme dark")
 eq(tostring(options.checks.light.checked), "false", "/gb theme dark unticks the options' light box")
+UIParent.width, UIParent.height = 1280, 768
+GoldbookWindow.center = { 640, 384 }
+SlashCmdList.GOLDBOOK("scale 1.2")
+local function placed()
+  local point = GoldbookWindow.point
+  return ("%s %s %.1f %.1f"):format(point[1], point[3], point[4], point[5])
+end
+eq(lastPrint() .. " / " .. GoldbookWindow.scale .. " " .. GoldbookDB.settings.scale .. " " .. placed(),
+  "Goldbook The window is at size 1.20. Change it with /gb scale <0.7-1.4>. / 1.2 1.2 CENTER BOTTOMLEFT 533.3 320.0",
+  "/gb scale sizes the window and keeps its centre where it was on the screen")
+eq(options.scale.value, 1.2, "the options' slider follows /gb scale")
+GoldbookWindow.center = { 1200, 384 }
+options.scale.scripts.OnValueChanged(options.scale, 1.4, true)
+eq(GoldbookDB.settings.scale .. " " .. placed() .. " / " .. tostring(GoldbookDB.settings.window[3]), "1.4 CENTER BOTTOMLEFT 484.3 228.6 / 484.28571428571",
+  "the slider sizes the window too, and a window grown past the screen's edge moves back onto it with its title bar at the top")
+SlashCmdList.GOLDBOOK("scale 2")
+eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. GoldbookDB.settings.scale, "Goldbook The window's size goes from 0.7 to 1.4, 1 being its normal size. / 1.4",
+  "a size out of range says so and changes nothing")
+SlashCmdList.GOLDBOOK("scale large")
+eq(GoldbookDB.settings.scale, 1.4, "nor does a size that is not a number")
+GoldbookWindow.center = nil
+SlashCmdList.GOLDBOOK("scale 1")
+eq(GoldbookWindow.scale, 1, "/gb scale 1 gives the window its normal size")
+
 ns.UI.ShowItem("99999")
 eq(plain(GoldbookWindow.chart.grid[1].label.text .. " " .. GoldbookWindow.chart.grid[2].label.text .. " " .. GoldbookWindow.chart.grid[5].label.text)
   .. " " .. tostring(GoldbookWindow.chart.grid[6].label.shown), "0c 1c 4c false", "an item without prices gets an axis in whole coppers")

@@ -362,6 +362,9 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | `/gb web` | The web page's address, and the ID and key that log you in to its character pages. See [Web login](#web-login) |
 | Right click the minimap button | Quick scan, while the auction house is open |
 | Drag the minimap button, `/gb minimap` | Moves it, hides or shows it |
+| `/gb theme dark`, `/gb theme light`, or the half-filled ring by the window's close button | Draws the window in dark ink, the default, or on light parchment |
+| `/gb scale <0.7-1.4>`, or the slider in Options > AddOns > Goldbook | Sizes the window, apart from the game's UI scale. 1 is its normal size |
+| **Back to Prices** in an item's history | Returns to the list the item was opened from, with its search, filters, sort and scroll |
 | Hover an item | The price lines below. Hold Shift over a stack to price the whole stack |
 
 ### Price sources

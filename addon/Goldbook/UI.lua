@@ -24,6 +24,8 @@ local STRIP = 3
 local CHART_DAYS = 30
 local SELL_ACTIONS = { auction = "Auction", vendor = "Vendor", unknown = "No price" }
 local REFRESH_DELAY = 0.2
+-- The window's own scale, over the game's UI scale.
+local MIN_SCALE, MAX_SCALE = 0.7, 1.4
 local DAY = 24 * 3600
 local MONTH = 30
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -1987,6 +1989,8 @@ end
 local function createWindow()
   window = CreateFrame("Frame", "GoldbookWindow", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+  -- Before the position, which counts in the scaled window's units.
+  window:SetScale(UI.Scale())
   local saved = ns.db.settings.window
   if saved then
     window:SetPoint(saved[1], UIParent, saved[2], saved[3], saved[4])
@@ -2146,6 +2150,47 @@ end
 function UI.Theme()
   return PALETTES[ns.db.settings.theme] and ns.db.settings.theme or DEFAULT_THEME
 end
+
+function UI.Scale()
+  return ns.db.settings.scale or 1
+end
+
+-- Where the window's centre may go, in its own units at `scale`: wholly on
+-- the screen, or, when it is larger than the screen, with its title bar on it.
+local function onScreen(x, y, scale)
+  local width, height = UIParent:GetWidth() / scale, UIParent:GetHeight() / scale
+  local function within(at, size, room)
+    return size >= room and room / 2 or math.max(size / 2, math.min(room - size / 2, at))
+  end
+  x = within(x, WINDOW_WIDTH, width)
+  y = WINDOW_HEIGHT >= height and height - WINDOW_HEIGHT / 2 or within(y, WINDOW_HEIGHT, height)
+  return x, y
+end
+
+-- Sizes the window, from MIN_SCALE to MAX_SCALE times, and keeps the choice.
+-- Its centre stays where it was on the screen, moved only as far as keeps it
+-- there. Returns false for a size out of range.
+function UI.SetScale(scale)
+  if type(scale) ~= "number" or scale < MIN_SCALE or scale > MAX_SCALE then
+    return false
+  end
+  scale = math.floor(scale * 100 + 0.5) / 100
+  ns.db.settings.scale = scale
+  if window then
+    local old = window:GetScale()
+    local x, y = window:GetCenter()
+    window:SetScale(scale)
+    if x then
+      x, y = onScreen(x * old / scale, y * old / scale, scale)
+      window:ClearAllPoints()
+      window:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+      ns.db.settings.window = { "CENTER", "BOTTOMLEFT", x, y }
+    end
+  end
+  changed()
+  return true
+end
+UI.MIN_SCALE, UI.MAX_SCALE = MIN_SCALE, MAX_SCALE
 
 local function createScanButton()
   scanButton = UI.Button(AuctionHouseFrame, "Goldbook scan", 150, 22, "GoldbookScanButton")

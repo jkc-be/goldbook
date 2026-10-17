@@ -94,6 +94,8 @@ local SETTERS = {
   SetThickness = "thickness",
   SetScale = "scale",
   SetTexCoord = "texCoord",
+  SetMinMaxValues = "range",
+  SetValue = "value",
 }
 for method, field in pairs(SETTERS) do
   recorders[method] = function(self, original, ...)
@@ -494,6 +496,14 @@ function layout(snapshot, screen) {
       el.append(border);
       Object.assign(el.style, { display: "flex", alignItems: "center" });
       text(el, w, w.font || "ChatFontNormal").style.position = "relative";
+    },
+    // A track with its thumb at the value.
+    OptionsSliderTemplate(el, w) {
+      const [low, high] = w.range || [0, 1], share = ((w.value ?? low) - low) / (high - low || 1);
+      const track = document.createElement("div"), thumb = document.createElement("div");
+      Object.assign(track.style, { position: "absolute", left: "0", right: "0", top: "50%", height: "6px", marginTop: "-3px", background: "rgba(0,0,0,0.6)", border: "1px solid rgb(120,120,120)", borderRadius: "3px" });
+      Object.assign(thumb.style, { position: "absolute", top: "50%", width: "10px", height: "18px", marginTop: "-9px", left: `calc(${share * 100}% - 5px)`, background: "linear-gradient(#d8d8d8,#8a8a8a)", borderRadius: "2px" });
+      el.append(track, thumb);
     },
     UICheckButtonTemplate(el, w) {
       Object.assign(el.style, centred, { background: "rgba(0,0,0,0.6)", border: "1px solid rgb(170,170,170)", borderRadius: "3px" });
@@ -1075,6 +1085,12 @@ local function captureViews(suffix)
   run("item Gold Ore")
   hoverDay(29)
   captureWindow("item-sparse" .. suffix)
+  local toggle = GoldbookWindow.themeToggle
+  hover(toggle, true)
+  toggle.scripts.OnEnter(toggle)
+  captureWindow("toggle" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  hover(toggle, false)
   GoldbookWindow:Hide()
 
   run("web")
@@ -1088,6 +1104,19 @@ local function captureViews(suffix)
 end
 
 captureViews("")
+-- The window at other sizes, its centre where it was: the middle of the screen.
+run("show")
+local function centred()
+  GoldbookWindow.center = { SCREEN_WIDTH / 2 / GoldbookWindow:GetScale(), SCREEN_HEIGHT / 2 / GoldbookWindow:GetScale() }
+end
+for _, scale in ipairs({ 0.8, 1.2 }) do
+  centred()
+  ns.UI.SetScale(scale)
+  captureWindow(("scale-%.1f"):format(scale))
+end
+centred()
+ns.UI.SetScale(1)
+GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 -- An item tooltip goes right of the window, or left where the screen ends
 -- first. The addon asks how far right the window and the screen reach and
 -- how wide the tooltip is; the stub lays nothing out, so the preview answers.

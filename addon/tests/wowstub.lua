@@ -143,11 +143,28 @@ end
 function methods:GetWidth()
   return rawget(self, "width") or 0
 end
+function methods:GetHeight()
+  return rawget(self, "height") or 0
+end
 function methods:GetRight()
   return rawget(self, "right") or 0
 end
+-- A test places a frame by setting its centre.
 function methods:GetCenter()
-  return 0, 0
+  local center = rawget(self, "center") or { 0, 0 }
+  return center[1], center[2]
+end
+function methods:SetScale(scale)
+  self.scale = scale
+end
+function methods:GetScale()
+  return rawget(self, "scale") or 1
+end
+function methods:SetValue(value)
+  self.value = value
+end
+function methods:GetValue()
+  return self.value
 end
 function methods:GetEffectiveScale()
   return 1
