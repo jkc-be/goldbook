@@ -20,7 +20,10 @@ were released with.
 - Draw the item chart as the website does: lowest buyout over an area,
   market value, the amount listed as bars, a legend, the latest values and
   a tooltip per point, over 1D, 1W, 1M or 2M. A few days fill the plot.
-- Keep the last week of prices by the hour, and chart them.
+- Keep the last week of prices by the hour, and chart them. A day's and an
+  hour's price is its lowest, as on the website.
+- Take the newer prices, days and hours the app downloads from the server
+  when the addon loads. Tooltips and the item view say "from the server".
 - Add Back to Prices (or the list an item came from) to the item view.
 - Fix the Gold, Prices and Sell icons in the rail, which lost their curves
   in game.
