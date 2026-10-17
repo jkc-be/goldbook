@@ -936,7 +936,10 @@ npm run preview
 
 `make check` runs the checks of the Check workflow. `make hooks`, once per
 clone, makes `git push` run it first. Skip it once with `git push --no-verify`.
-`make build` is `npm run desktop:pack` with dependencies installed first.
+`make build` is `npm run desktop:pack` with dependencies installed first,
+followed by `make install-addon`, which copies this checkout's addon into every
+game in the World of Warcraft folder and keeps each one's `ServerData.lua`
+(`make install-addon WOW=/path` for another folder).
 `make app` builds only the app without an installer, which is faster and needs
 no `rpmbuild` on Linux. `make run`, `make test` and `make clean` do what they
 say. `make clean` removes `target/release/bundle`.

@@ -42,6 +42,8 @@ were released with.
 
 - A development build (`make run`) always installs the addon of its checkout,
   and no longer installs a published addon update over it.
+- `make build` also installs this checkout's addon into the World of Warcraft
+  folder; `make install-addon` does only that.
 
 ### Server
 
