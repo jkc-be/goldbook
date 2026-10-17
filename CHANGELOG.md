@@ -7,6 +7,16 @@ were released with.
 
 ## Unreleased
 
+### Addon
+
+- Add a Mail view, between Gold and Trades, that opens with the mailbox. It
+  lists every mail with its items, a Sold, Bought, Cancelled, Expired or Other
+  tag, the sender, the days left and its gold or COD, with segments, search
+  and sorting. **Collect N mails** takes the mails shown one at a time, skips
+  COD mail, and stops when the bags fill, the mailbox closes or you click
+  **Stop**. `/gb mail` opens it; an Options tick keeps it from opening by
+  itself.
+
 ## 0.2.1 - 2026-10-17
 
 - Build the desktop app and server with Rust 1.99.1 and align their shared
