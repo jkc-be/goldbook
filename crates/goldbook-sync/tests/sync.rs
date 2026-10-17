@@ -915,3 +915,72 @@ assert(count == 40002, count)
     );
     task.abort();
 }
+#[tokio::test]
+async fn watcher_refreshes_server_data_once_per_flavor_and_on_request() {
+    let (api, mock, task) = export_server(HashMap::from([(
+        "Faramon-Horde".to_owned(),
+        faramon_export(),
+    )]))
+    .await;
+    let temp = tempfile::tempdir().unwrap();
+    let flavor = temp.path().join("_classic_");
+    let addon = flavor.join("Interface/AddOns/Goldbook");
+    std::fs::create_dir_all(&addon).unwrap();
+    std::fs::write(addon.join("ServerData.lua"), STUB).unwrap();
+    let text = "GoldbookDB = { [\"items\"] = {}, [\"scans\"] = {}, [\"scanned\"] = { [\"Faramon-Horde\"] = 1 } }";
+    let files = ["ONE", "TWO"]
+        .into_iter()
+        .map(|account| WatchFile {
+            file: write_account(&flavor, account, text),
+            token: "test".into(),
+        })
+        .collect();
+    let (log, lines) = recording_logger();
+    let handle = watch_files(WatchOptions {
+        files,
+        api,
+        state_path: temp.path().join("state.json"),
+        interval: Some(Duration::from_secs(60)),
+        log,
+    })
+    .unwrap();
+    let path = addon.join("ServerData.lua");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while std::fs::read_to_string(&path).unwrap() == STUB {
+            tokio::time::sleep(Duration::from_millis(50)).await
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(
+        *mock.requests.lock().unwrap(),
+        vec![("Faramon".to_owned(), "Horde".to_owned(), false)]
+    );
+    let refreshed = handle.refresh_server_data().await;
+    assert_eq!(refreshed.len(), 1);
+    assert_eq!(refreshed[0].0, flavor);
+    assert_eq!(
+        refreshed[0].1.as_ref().unwrap(),
+        &ServerData::Unchanged {
+            realms: vec!["Faramon-Horde".into()]
+        }
+    );
+    assert_eq!(mock.requests.lock().unwrap().len(), 2);
+    let shown = path.display();
+    assert_eq!(
+        lines
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|line| line.starts_with("server prices "))
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            format!("server prices for Faramon-Horde written to {shown}: 2 items"),
+            format!("server prices for Faramon-Horde unchanged in {shown}"),
+        ]
+    );
+    handle.close();
+    task.abort();
+}

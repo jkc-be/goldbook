@@ -1,10 +1,10 @@
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use goldbook_sync::{
-    default_state_path, saved_variables_files, sync_file, watch_files, SyncOptions, WatchFile,
-    WatchOptions,
+    default_state_path, flavor_of, saved_variables_files, sync_file, watch_files,
+    write_server_data, SyncOptions, WatchFile, WatchOptions,
 };
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
 #[derive(Subcommand)]
 enum InstallCommand {
     /// Install the bundled addon into each installed game flavor.
@@ -73,7 +73,8 @@ async fn main() -> Result<()> {
     let log: goldbook_sync::Logger = Arc::new(|line| println!("{line}"));
     if args.once {
         let mut failed = false;
-        for file in files {
+        let mut uploaded = true;
+        for file in &files {
             match sync_file(&SyncOptions {
                 file: file.clone(),
                 api: args.api.clone(),
@@ -83,11 +84,21 @@ async fn main() -> Result<()> {
             })
             .await
             {
-                Ok(result) => failed |= result.failed + result.invalid > 0,
+                Ok(result) => {
+                    failed |= result.failed + result.invalid > 0;
+                    uploaded &= result.failed == 0
+                }
                 Err(e) => {
                     log(&format!("{}: {e}", file.display()));
-                    failed = true
+                    failed = true;
+                    uploaded = false
                 }
+            }
+        }
+        if uploaded {
+            let flavors = files.iter().filter_map(|file| flavor_of(file));
+            for flavor in flavors.collect::<BTreeSet<_>>() {
+                failed |= write_server_data(&flavor, &args.api, &log).await.is_err();
             }
         }
         if failed {

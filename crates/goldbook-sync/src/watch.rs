@@ -1,12 +1,19 @@
-use crate::{sync_file, Logger, SyncOptions, SyncResult};
+use crate::{flavor_of, sync_file, write_server_data, Logger, ServerData, SyncOptions, SyncResult};
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
 use std::{
+    collections::{BTreeSet, HashMap},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
-use tokio::sync::{mpsc, watch};
+use tokio::{
+    sync::{mpsc, watch},
+    time::Instant,
+};
 #[derive(Clone)]
 pub struct WatchFile {
     pub file: PathBuf,
@@ -22,10 +29,12 @@ pub struct WatchOptions {
     pub log: Logger,
 }
 const RETRY: Duration = Duration::from_secs(15);
+type Refreshed = Arc<Mutex<HashMap<PathBuf, Instant>>>;
 pub struct WatchHandle {
     options: WatchOptions,
     stop: watch::Sender<bool>,
     closed: AtomicBool,
+    refreshed: Refreshed,
 }
 impl WatchHandle {
     pub fn close(&self) {
@@ -39,6 +48,34 @@ impl WatchHandle {
         }
         Ok(results)
     }
+    pub async fn refresh_server_data(&self) -> Vec<(PathBuf, Result<ServerData>)> {
+        let flavors = self
+            .options
+            .files
+            .iter()
+            .filter_map(|file| flavor_of(&file.file))
+            .collect::<BTreeSet<_>>();
+        let mut results = Vec::new();
+        for flavor in flavors {
+            claim_refresh(&self.refreshed, &flavor, Duration::ZERO);
+            let result = write_server_data(&flavor, &self.options.api, &self.options.log).await;
+            results.push((flavor, result));
+        }
+        results
+    }
+}
+// Claims before the refresh awaits, so two account files of one flavor do not both fetch.
+fn claim_refresh(refreshed: &Refreshed, flavor: &Path, interval: Duration) -> bool {
+    let mut refreshed = refreshed.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if refreshed
+        .get(flavor)
+        .is_some_and(|last| now.duration_since(*last) < interval)
+    {
+        return false;
+    }
+    refreshed.insert(flavor.to_owned(), now);
+    true
 }
 impl Drop for WatchHandle {
     fn drop(&mut self) {
@@ -75,6 +112,7 @@ pub fn is_goldbook_write(changed: Option<&Path>, file: &Path) -> bool {
 }
 pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
     let (stop, _) = watch::channel(false);
+    let refreshed = Refreshed::default();
     let (files, interval) = match options.interval {
         Some(interval) => (options.files.clone(), interval),
         None => (Vec::new(), RETRY),
@@ -82,6 +120,8 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
     for file in &files {
         let options = options.for_file(file);
         let mut stopped = stop.subscribe();
+        let flavor = flavor_of(&options.file);
+        let refreshed = refreshed.clone();
         tokio::spawn(async move {
             let (tx, mut rx) = mpsc::unbounded_channel();
             let file = options.file.clone();
@@ -128,6 +168,11 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
                         false
                     }
                 };
+                if let Some(flavor) = flavor.as_deref().filter(|_| healthy) {
+                    if claim_refresh(&refreshed, flavor, interval) {
+                        let _ = write_server_data(flavor, &options.api, &options.log).await;
+                    }
+                }
                 let wait = if healthy {
                     interval
                 } else {
@@ -144,5 +189,6 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
         options,
         stop,
         closed: AtomicBool::new(false),
+        refreshed,
     })
 }
