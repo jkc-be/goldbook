@@ -303,3 +303,78 @@ fn a_party_is_optional_text_that_travels_only_when_known() {
         );
     }
 }
+fn record(min: u64, market: Option<u64>, days: &[u64]) -> PriceRecord {
+    PriceRecord {
+        min,
+        market,
+        days: days.to_vec(),
+    }
+}
+#[test]
+fn the_median_rounds_the_middle_two_up() {
+    assert_eq!(median(&[100, 300, 200]), Some(200));
+    assert_eq!(median(&[100, 101]), Some(101));
+    assert_eq!(median(&[]), None);
+}
+#[test]
+fn a_flip_is_priced_under_70_percent_of_its_resale_value() {
+    let earlier = [100, 110, 90, 60];
+    let usual = Some(Flip {
+        sell: 100,
+        profit: 35,
+    });
+    assert_eq!(flip(&record(60, None, &earlier), false), usual);
+    assert_eq!(flip(&record(75, None, &[100, 110, 90, 75]), false), None);
+    assert_eq!(
+        flip(&record(60, None, &[100, 110, 60]), false),
+        None,
+        "two earlier days are not enough history"
+    );
+    assert_eq!(
+        flip(&record(50, Some(100), &[50]), false),
+        Some(Flip {
+            sell: 100,
+            profit: 45
+        }),
+        "priced under the newest scan's market value"
+    );
+    assert_eq!(
+        flip(&record(60, Some(200), &earlier), false),
+        usual,
+        "the lower of market value and earlier days is the resale price"
+    );
+    assert_eq!(flip(&record(60, None, &earlier), true), None);
+}
+#[test]
+fn movers_compare_with_the_day_before_and_skip_copper_noise() {
+    assert_eq!(
+        mover(&record(150, None, &[100, 150])),
+        Some(Mover {
+            before: 100,
+            change: 50.0
+        })
+    );
+    assert_eq!(
+        mover(&record(100, None, &[200, 100])),
+        Some(Mover {
+            before: 200,
+            change: -50.0
+        })
+    );
+    assert_eq!(
+        mover(&record(6000, None, &[10000, 9000, 6000])),
+        Some(Mover {
+            before: 9000,
+            change: -33.3
+        })
+    );
+    assert_eq!(mover(&record(500, None, &[500])), None, "one day");
+    assert_eq!(mover(&record(60, None, &[50, 60])), None, "under a silver");
+    assert_eq!(mover(&record(200, None, &[200, 200])), None, "unchanged");
+}
+#[test]
+fn merchant_goods_are_known_by_base_item_id() {
+    assert!(merchant_sells("3857"));
+    assert!(merchant_sells("2320:584"));
+    assert!(!merchant_sells("2589"));
+}
