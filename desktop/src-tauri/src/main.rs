@@ -642,8 +642,10 @@ async fn show_view(
     layout_site(window, viewport_height, bar_height)
 }
 
+// Not get_webview_window: once the website view is added the window holds two
+// webviews, and Tauri then no longer returns it as a webview window.
 fn show(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
     }
