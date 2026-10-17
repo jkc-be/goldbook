@@ -182,7 +182,11 @@ eq(cells(1):match("^[^|]+") .. "/ " .. cells(6):match("^[^|]+"), "Linen Cloth x2
 GoldbookWindow.tabs.gold.scripts.OnClick()
 GoldbookWindow.tabs.accounting.scripts.OnClick()
 eq(tostring(GoldbookWindow.tabs.accounting.selected.shown) .. " " .. GoldbookWindow.tabs.accounting.label.text, "true Accounting", "the Accounting tab is drawn selected")
-eq(GoldbookWindow.tabs.accounting.point[3] .. " " .. GoldbookWindow.tabs.gold.point[3], "-226 -154", "the tabs run down the rail, Mail between Gold and Accounting")
+local hubs = GoldbookWindow.hubs
+eq(table.concat({ hubs.market.point[3], hubs.inventory.point[3], hubs.ledger.point[3], hubs.ledger.label.text, tostring(hubs.ledger.selected.shown) }, " "),
+  "-10 -46 -82 Ledger true", "the hubs run down the rail, Ledger last and picked")
+eq(tostring(GoldbookWindow.tabs.accounting.label.point[2] == GoldbookWindow.tabs.gold) .. " " .. tostring(GoldbookWindow.tabs.mail.shown),
+  "true false", "Accounting's tab follows Gold's, and the other hubs' tabs are hidden")
 
 local window = { trades = {}, accruing = {} }
 local old = {}

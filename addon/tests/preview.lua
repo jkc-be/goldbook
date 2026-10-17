@@ -1165,7 +1165,7 @@ local function captureViews(suffix)
   hover(GoldbookWindow.rows[1].hit, true)
   captureWindow("deals" .. suffix)
   hover(GoldbookWindow.rows[1].hit, false)
-  for _, view in ipairs({ "sell", "movers", "accounting" }) do
+  for _, view in ipairs({ "bags", "movers", "accounting" }) do
     run(view)
     captureWindow(view .. suffix)
   end

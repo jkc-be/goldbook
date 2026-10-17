@@ -11,6 +11,13 @@ were released with.
 
 ### Addon
 
+- The window's rail has three hubs instead of seven views, each with tabs
+  across the top of the page: **Market** (Prices, Deals, Movers),
+  **Inventory** (Bags, Mail) and **Ledger** (Gold, Accounting). A hub opens
+  the tab it showed last. Every command still opens its own tab, the mailbox
+  still opens Mail, and the mail count sits by Inventory. An item's history
+  keeps the hub it was opened from. Lists show 17 rows instead of 19.
+- Sell becomes Bags (`/gb bags`; `/gb sell` still opens it).
 - Shift+click an item at the auction house to open its price history in
   Goldbook, as Midas does: in the auction house's lists, your bags and addons
   such as Auctionator, but not while writing in chat. An Options tick turns it
@@ -26,7 +33,7 @@ were released with.
   game's item data or the merchant's buyback list, and `/gb deals` no longer
   marks vendor deals as `Vendor?`. Vendor prices saved before are read again
   the next time an item is scanned or in your bags.
-- Add a Mail view, between Gold and Accounting, that opens with the mailbox. It
+- Add a Mail view, beside Bags under Inventory, that opens with the mailbox. It
   lists every mail with its items, a Sold, Bought, Cancelled, Expired or Other
   tag, the sender, the days left and its gold or COD, with segments, search
   and sorting. **Collect N mails** takes the mails shown one at a time, skips

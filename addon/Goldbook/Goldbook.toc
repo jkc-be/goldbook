@@ -24,6 +24,7 @@ Core.lua
 Accounting.lua
 Tooltip.lua
 UI.lua
+Clicks.lua
 WebLogin.lua
 Minimap.lua
 Options.lua

@@ -80,9 +80,10 @@ local function click()
   GoldbookWindow.action.scripts.OnClick(GoldbookWindow.action)
 end
 
+-- The count by the Inventory hub in the rail, the Mail view's hub.
 local function badge()
-  local tab = GoldbookWindow.tabs.mail
-  return tab.count.shown and tab.pill.shown and tab.count.text or "none"
+  local entry = GoldbookWindow.hubs.inventory
+  return entry.count.shown and entry.pill.shown and entry.count.text or "none"
 end
 
 local function bags(free)
@@ -146,6 +147,12 @@ eq(segments(), "[All 8] Sold 1 Bought 1 Cancelled 1 Expired 1 Other 4", "each ki
 eq(GoldbookWindow.segments.anchors.RIGHT, GoldbookWindow.filters, "the segments sit on the toolbar, right of the search box")
 eq(GoldbookWindow.status.text, "Showing all 8 mails · bags have 4 free slots · COD mails are skipped", "the status line")
 eq(action() .. " / " .. badge(), "Collect 6 mails / 8", "the COD mail and the letter are not counted to collect; the rail counts the mail")
+eq(tostring(GoldbookWindow.hubs.inventory.selected.shown) .. " " .. tostring(GoldbookWindow.tabs.mail.selected.shown) .. " "
+  .. tostring(GoldbookWindow.tabs.bags.shown), "true true true", "the mailbox opens Inventory on its Mail tab, beside Bags")
+GoldbookWindow.hubs.ledger.scripts.OnClick()
+eq(badge() .. " " .. tostring(GoldbookWindow.hubs.ledger.count.shown), "8 false", "the count stays by Inventory while another hub is shown")
+GoldbookWindow.hubs.inventory.scripts.OnClick()
+eq(head(), "Mail | 8 mails · 7 items | 28g 11s 00c to collect", "Inventory opens again on Mail, the tab it showed last")
 eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[2].text .. " " .. GoldbookWindow.headers[3].text .. " "
   .. GoldbookWindow.headers[4].text .. " " .. GoldbookWindow.headers[5].text, "MAIL TYPE FROM LEFT GOLD", "the columns, in the inbox's order until one is sorted")
 

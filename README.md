@@ -344,12 +344,25 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 
 ## In game
 
+The Goldbook window has three hubs down its left rail. Each hub has tabs
+across the top of the page:
+
+| Hub | Tabs |
+|---|---|
+| Market | Prices, Deals, Movers |
+| Inventory | Bags, Mail |
+| Ledger | Gold, Accounting |
+
+Click a hub to open the tab it showed last, or its first tab the first time.
+Click a tab to switch to it. Each command below opens its own tab, and so its
+hub.
+
 | Action | Result |
 |---|---|
 | Left click **Goldbook scan**, or `/gb scan` | Quick scan: lowest price and quantity per item |
 | Right click **Goldbook scan**, or `/gb scan full` | Full scan: every auction, adds a market value. The server allows one per 15 minutes per account |
 | `/gb deals` | What is listed right now below its resale or vendor value. Click a row to search the auction house for it |
-| `/gb sell` | Your bags: what to auction, at what price, and what to vendor instead |
+| `/gb bags` | Your bags: what to auction, at what price, and what to vendor instead. `/gb sell` opens it too |
 | `/gb movers` | The prices that rose and fell most since the day before. Top gains first |
 | `/gb gold` | Your account: gold per character, gains, a 30 day chart and net worth |
 | `/gb mail [text]`, or open a mailbox | The open mailbox: every mail with its items, sender, days left and gold, and a button that collects the mails shown. See [Mail](#mail) |
@@ -379,7 +392,7 @@ Every item tooltip gets these lines, as far as they are known:
 | Min buyout | The lowest price in the newest scan that saw the item |
 | Market value | A per-unit price from the last full scan that ignores overpriced listings. It takes the cheapest 15% of units, extends to 30% while the price rises by less than 20% per step, and drops prices beyond 1.5 standard deviations |
 | Usual over N days | The median of the lowest price on each of the last 14 days the item was seen. Needs 3 days |
-| Post at | The price `/gb sell` would post it at. Not shown for goods merchants sell |
+| Post at | The price `/gb bags` would post it at. Not shown for goods merchants sell |
 | Vendor | What a vendor pays. See [Vendor prices](#vendor-prices) |
 | Merchant sells | What a merchant asks for one, or "Sold by merchants" when no merchant selling it was seen yet. See [Goods merchants sell](#goods-merchants-sell) |
 | Deal | Shown when the item is a deal right now |
@@ -399,7 +412,7 @@ above the merchant's price are a trap: only buyers who do not know the
 merchant pay them. Goldbook therefore never counts on reselling them:
 
 - `/gb deals` lists them only as vendor deals, never as resale deals;
-- `/gb sell` sends them to the vendor, and the bags and net worth count them at
+- `/gb bags` sends them to the vendor, and the bags and net worth count them at
   what a vendor pays.
 
 Goldbook knows the common ones from the start. It learns the rest at every
@@ -431,7 +444,7 @@ auction from a buyout, and a price can simply have dropped.
 
 ### How the sell price is chosen
 
-`/gb sell` posts one copper under the lowest listing, within limits:
+`/gb bags` posts one copper under the lowest listing, within limits:
 
 - never below 60% of the normal price, where normal is the usual price, else
   the market value, else the lowest listing;
@@ -467,11 +480,12 @@ left out.
 
 ### Mail
 
-When you open a mailbox, the Goldbook window opens on **Mail** and closes
-again with the mailbox. To keep it shut, clear **Open the Mail view when a
-mailbox opens** in Options > AddOns > Goldbook. `/gb mail` opens the view at
-any time, but it lists mail only while a mailbox is open. While it is open,
-the rail shows how many mails it holds.
+When you open a mailbox, the Goldbook window opens on the **Mail** tab of
+**Inventory** and closes again with the mailbox. To keep it shut, clear
+**Open the Mail view when a mailbox opens** in Options > AddOns > Goldbook.
+`/gb mail` opens the view at any time, but it lists mail only while a mailbox
+is open. While it is open, **Inventory** in the rail shows how many mails it
+holds.
 
 Each row is one mail: its first item in its quality's colour and how many,
 `+1 more` when it holds other items too, or its subject when it holds none.
@@ -640,7 +654,7 @@ stops working and every browser logged in with it is logged out. Until that
 sync the web page still takes the old key.
 
 At each `/reload` and logout, Goldbook saves what the character pages show:
-the character's class and level, and its bags with the advice of `/gb sell`.
+the character's class and level, and its bags with the advice of `/gb bags`.
 Gold comes from the balances `/gb gold` keeps. The game lets an addon read the
 bank only while it is open, so Goldbook keeps its contents from the last
 visit. Open the bank once on each character to have it on the web page.

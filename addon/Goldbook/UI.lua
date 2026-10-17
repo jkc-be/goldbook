@@ -7,8 +7,11 @@ ns.UI = UI
 
 local WINDOW_WIDTH, WINDOW_HEIGHT = 860, 640
 local TITLE_HEIGHT, RAIL_WIDTH, RAIL_STEP = 46, 148, 36
--- The page right of the rail, inside its padding and the window's border.
-local PAGE_LEFT, PAGE_TOP, PAGE_WIDTH, PAGE_BOTTOM = RAIL_WIDTH + 16, TITLE_HEIGHT + 13, 681, 11
+-- The tabs of the rail's hub across the top of the page; each tab is its
+-- text with TAB_PAD either side.
+local TABS_TOP, TAB_HEIGHT, TAB_PAD = TITLE_HEIGHT + 6, 28, 14
+-- The page right of the rail and under its tabs, inside its padding and the window's border.
+local PAGE_LEFT, PAGE_TOP, PAGE_WIDTH, PAGE_BOTTOM = RAIL_WIDTH + 16, TABS_TOP + TAB_HEIGHT + 11, 681, 11
 local GAP = 10
 local HEAD_HEIGHT, TOOLBAR_HEIGHT, STATUS_HEIGHT, HEADING_HEIGHT = 28, 28, 16, 30
 local CARD_GAP, CARD_HEIGHT, CARD_DETAIL_HEIGHT = 8, 54, 72
@@ -87,6 +90,7 @@ local FRIZ, NARROW = STANDARD_TEXT_FONT, NumberFontNormal:GetFont()
 local TYPE = {
   brand = { FRIZ, 22 },
   rail = { FRIZ, 16 },
+  tab = { FRIZ, 15 },
   title = { FRIZ, 22 },
   dialog = { FRIZ, 18 },
   heading = { FRIZ, 15 },
@@ -246,19 +250,9 @@ end
 -- client leaves out lines much shorter than 4, so curves are a few long
 -- strokes rather than many short ones.
 local GLYPHS = {
-  prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
-  deals = { { 8, 1, 10, 5.5, 15, 6, 11.2, 9.3, 12.3, 14.2, 8, 11.7, 3.7, 14.2, 4.8, 9.3, 1, 6, 6, 5.5, 8, 1 } },
-  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
-  movers = { { 1, 12, 5, 8, 8, 11, 14, 4 }, { 10, 4, 14, 4, 14, 8 } },
-  -- Two coins stacked, their rims as flat hexagons.
-  gold = {
-    { 1.5, 5, 5, 2, 11, 2, 14.5, 5, 11, 8, 5, 8, 1.5, 5 },
-    { 1.5, 5, 1.5, 10, 5, 13, 11, 13, 14.5, 10, 14.5, 5 },
-    { 1.5, 7.5, 5, 10.5, 11, 10.5, 14.5, 7.5 },
-  },
-  -- An envelope and its flap.
-  mail = { { 1.5, 3.5, 14.5, 3.5, 14.5, 12.5, 1.5, 12.5, 1.5, 3.5 }, { 1.5, 3.5, 8, 9, 14.5, 3.5 } },
-  accounting = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
+  tag = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
+  bag = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
+  scales = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
 
 local window, scanButton
@@ -601,7 +595,8 @@ end
 --             `badge` instead shows a label and a value there, `aside` a line of text;
 --             `rangesOnChart` puts the segments at the right of the chart's legend instead,
 --             `segmentsOnToolbar` at the right of the search box
---   railCount () -> a count shown by the view's name in the rail, or nil
+--   hub       the entry of HUBS that has the view as a tab, set from HUBS
+--   railCount () -> a count shown by the view's hub in the rail, or nil
 --   action    (rows) -> { label, enabled, run } for a button right of the status line
 --   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line;
 --             `back` puts a button before it that returns to the view the item came from
@@ -662,8 +657,8 @@ local VIEWS = {
       return joinedStatus(scrollRange(rows, visible), "Click a deal to search for it")
     end,
   },
-  sell = {
-    tab = "Sell",
+  bags = {
+    tab = "Bags",
     items = true,
     icons = true,
     blocks = { "toolbar", "table" },
@@ -896,7 +891,29 @@ local VIEWS = {
     end,
   },
 }
-local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "mail", "accounting" }
+
+-- The rail's hubs, top to bottom, each with the views its tabs open, in
+-- order. Each view listed gets its `hub`; the item view has none.
+local HUBS = {
+  { key = "market", label = "Market", icon = "tag", views = { "prices", "deals", "movers" } },
+  { key = "inventory", label = "Inventory", icon = "bag", views = { "bags", "mail" } },
+  { key = "ledger", label = "Ledger", icon = "scales", views = { "gold", "accounting" } },
+}
+for _, hub in ipairs(HUBS) do
+  for _, name in ipairs(hub.views) do
+    VIEWS[name].hub = hub
+  end
+end
+
+-- Every change of view comes through here, so that each hub keeps its last.
+local function setView(name)
+  view = name
+  local hub = VIEWS[name].hub
+  if hub then
+    ns.db.settings.hubViews = ns.db.settings.hubViews or {}
+    ns.db.settings.hubViews[hub.key] = name
+  end
+end
 
 -- The chips a toolbar can show: what each offers, as { value, label }.
 local FILTERS = {
@@ -1652,18 +1669,28 @@ function refresh()
   if definition.chart then
     drawChart(definition.chart.spec(chosen[view]))
   end
-  for name, tab in pairs(window.tabs) do
-    local active = name == view
-    tab.selected:SetShown(active)
-    tab.bar:SetShown(active)
-    tab.label:SetTextColor(rgb(active and "goldhi" or "railText"))
-    for _, line in ipairs(tab.glyph) do
+  -- The rail with the view's hub picked, and that hub's tabs with the view
+  -- picked. The item view shows the hub of the view it goes back to.
+  local shown = definition.hub or VIEWS[origin and origin.view or "prices"].hub
+  for _, hub in ipairs(HUBS) do
+    local entry, active, count = window.hubs[hub.key], hub == shown, nil
+    entry.selected:SetShown(active)
+    entry.bar:SetShown(active)
+    entry.label:SetTextColor(rgb(active and "goldhi" or "railText"))
+    for _, line in ipairs(entry.glyph) do
       line:SetColorTexture(rgb(active and "goldhi" or "railText", 0.85))
     end
-    local count = VIEWS[name].railCount and VIEWS[name].railCount()
-    tab.count:SetText(count and tostring(count) or "")
-    tab.count:SetShown(count ~= nil)
-    tab.pill:SetShown(count ~= nil)
+    for _, name in ipairs(hub.views) do
+      local tab, picked = window.tabs[name], name == view
+      tab:SetShown(active)
+      tab.selected:SetShown(picked)
+      tab.label:SetTextColor(rgb(picked and "goldhi" or "railText"))
+      local viewCount = VIEWS[name].railCount and VIEWS[name].railCount()
+      count = viewCount and (count or 0) + viewCount or count
+    end
+    entry.count:SetText(count and tostring(count) or "")
+    entry.count:SetShown(count ~= nil)
+    entry.pill:SetShown(count ~= nil)
   end
   local scanned = ns.db.scanned[ns.RealmKey()]
   window.lastScan:SetText(scanned and ("Last scan " .. tint("text", Codec.Age(time() - scanned))) or "No scan yet")
@@ -1878,7 +1905,7 @@ local function addToolbar()
   search:SetScript("OnTextChanged", function(self, userInput)
     self.hint:SetShown(self:GetText() == "" and not self:HasFocus())
     if userInput and view == "item" then
-      view = "prices"
+      setView("prices")
     end
     refresh()
   end)
@@ -2241,48 +2268,50 @@ local function addRail()
   edge:SetWidth(1)
   UI.Fill(edge, "edge")
 
-  window.tabs = {}
-  for index, name in ipairs(VIEW_ORDER) do
-    local tab = CreateFrame("Button", nil, rail)
-    tab:SetPoint("TOPLEFT", 0, -10 - (index - 1) * RAIL_STEP)
-    tab:SetSize(RAIL_WIDTH, RAIL_STEP)
-    tab.selected = tab:CreateTexture(nil, "BACKGROUND")
-    tab.selected:SetAllPoints()
-    shade(tab.selected, "HORIZONTAL", "gold", 0.16, "gold", 0)
-    tab.bar = tab:CreateTexture(nil, "ARTWORK")
-    tab.bar:SetPoint("TOPLEFT")
-    tab.bar:SetPoint("BOTTOMLEFT")
-    tab.bar:SetWidth(3)
-    UI.Fill(tab.bar, "gold")
-    tab.label = label(tab, "rail", "railText")
-    tab.label:SetPoint("LEFT", 40, 0)
-    tab.label:SetText(VIEWS[name].tab)
-    local box = CreateFrame("Frame", nil, tab)
+  window.hubs = {}
+  for index, hub in ipairs(HUBS) do
+    local entry = CreateFrame("Button", nil, rail)
+    entry:SetPoint("TOPLEFT", 0, -10 - (index - 1) * RAIL_STEP)
+    entry:SetSize(RAIL_WIDTH, RAIL_STEP)
+    entry.selected = entry:CreateTexture(nil, "BACKGROUND")
+    entry.selected:SetAllPoints()
+    shade(entry.selected, "HORIZONTAL", "gold", 0.16, "gold", 0)
+    entry.bar = entry:CreateTexture(nil, "ARTWORK")
+    entry.bar:SetPoint("TOPLEFT")
+    entry.bar:SetPoint("BOTTOMLEFT")
+    entry.bar:SetWidth(3)
+    UI.Fill(entry.bar, "gold")
+    entry.label = label(entry, "rail", "railText")
+    entry.label:SetPoint("LEFT", 40, 0)
+    entry.label:SetText(hub.label)
+    local box = CreateFrame("Frame", nil, entry)
     box:SetPoint("LEFT", 14, 0)
     box:SetSize(16, 16)
-    tab.glyph = {}
+    entry.glyph = {}
     -- A client without lines shows the labels alone.
-    if tab.CreateLine then
-      for _, stroke in ipairs(GLYPHS[name]) do
+    if entry.CreateLine then
+      for _, stroke in ipairs(GLYPHS[hub.icon]) do
         for point = 3, #stroke, 2 do
-          local line = tab:CreateLine(nil, "ARTWORK")
+          local line = entry:CreateLine(nil, "ARTWORK")
           line:SetThickness(1.5)
           line:SetStartPoint("TOPLEFT", box, stroke[point - 2], -stroke[point - 1])
           line:SetEndPoint("TOPLEFT", box, stroke[point], -stroke[point + 1])
-          tab.glyph[#tab.glyph + 1] = line
+          entry.glyph[#entry.glyph + 1] = line
         end
       end
     end
-    tab.count = label(tab, "header", "bg")
-    tab.count:SetPoint("RIGHT", -16, 0)
-    tab.pill = tab:CreateTexture(nil, "ARTWORK")
-    tab.pill:SetPoint("TOPLEFT", tab.count, "TOPLEFT", -6, 3)
-    tab.pill:SetPoint("BOTTOMRIGHT", tab.count, "BOTTOMRIGHT", 6, -3)
-    UI.Fill(tab.pill, "goldhi")
-    tab:SetScript("OnClick", function()
-      UI.Show(name)
+    entry.count = label(entry, "header", "bg")
+    entry.count:SetPoint("RIGHT", -16, 0)
+    entry.pill = entry:CreateTexture(nil, "ARTWORK")
+    entry.pill:SetPoint("TOPLEFT", entry.count, "TOPLEFT", -6, 3)
+    entry.pill:SetPoint("BOTTOMRIGHT", entry.count, "BOTTOMRIGHT", 6, -3)
+    UI.Fill(entry.pill, "goldhi")
+    -- Opens the view the hub showed last, or its first.
+    entry:SetScript("OnClick", function()
+      local last = ns.db.settings.hubViews and ns.db.settings.hubViews[hub.key]
+      UI.Show(VIEWS[last] and VIEWS[last].hub == hub and last or hub.views[1])
     end)
-    window.tabs[name] = tab
+    window.hubs[hub.key] = entry
   end
 
   local rule = rail:CreateTexture(nil, "BORDER")
@@ -2305,6 +2334,48 @@ local function addRail()
     GameTooltip:Show()
   end)
   window.reload:SetScript("OnLeave", GameTooltip_Hide)
+end
+
+-- Every hub's tabs along the top of the page, over a rule; refresh shows
+-- those of one hub. A tab is sized from its text, so the text is what gets
+-- placed, after the tab before it.
+local function addTabs()
+  local strip = CreateFrame("Frame", nil, window)
+  strip:SetPoint("TOPLEFT", window, "TOPLEFT", PAGE_LEFT, -TABS_TOP)
+  strip:SetSize(PAGE_WIDTH, TAB_HEIGHT)
+  local rule = strip:CreateTexture(nil, "BORDER")
+  rule:SetPoint("BOTTOMLEFT")
+  rule:SetPoint("BOTTOMRIGHT")
+  rule:SetHeight(1)
+  UI.Fill(rule, "line")
+
+  window.tabs = {}
+  for _, hub in ipairs(HUBS) do
+    local previous
+    for _, name in ipairs(hub.views) do
+      local tab = CreateFrame("Button", nil, strip)
+      tab.label = label(tab, "tab", "railText")
+      tab.label:SetText(VIEWS[name].tab)
+      if previous then
+        tab.label:SetPoint("LEFT", previous, "RIGHT", TAB_PAD, 0)
+      else
+        tab.label:SetPoint("LEFT", strip, "LEFT", TAB_PAD, 0)
+      end
+      tab:SetPoint("LEFT", tab.label, "LEFT", -TAB_PAD, 0)
+      tab:SetPoint("RIGHT", tab.label, "RIGHT", TAB_PAD, 0)
+      tab:SetHeight(TAB_HEIGHT)
+      tab.selected = tab:CreateTexture(nil, "ARTWORK")
+      tab.selected:SetPoint("BOTTOMLEFT")
+      tab.selected:SetPoint("BOTTOMRIGHT")
+      tab.selected:SetHeight(2)
+      UI.Fill(tab.selected, "gold")
+      tab:SetScript("OnClick", function()
+        UI.Show(name)
+      end)
+      window.tabs[name] = tab
+      previous = tab
+    end
+  end
 end
 
 -- The band across the top of a Goldbook frame, gilded along its top edge,
@@ -2458,6 +2529,7 @@ local function createWindow()
 
   addTitleBar()
   addRail()
+  addTabs()
   addHead()
   addToolbar()
   addCards()
@@ -2481,7 +2553,7 @@ function UI.Show(name, text)
   if not window then
     createWindow()
   end
-  view = name
+  setView(name)
   window:Show()
   window:Raise()
   if text and text ~= window.search:GetText() then
@@ -2516,7 +2588,7 @@ end
 function UI.Back()
   local back = origin or { view = "prices" }
   origin = nil
-  view = back.view
+  setView(back.view)
   if back.filters then
     filters = back.filters
     chipLabels()
@@ -2676,38 +2748,6 @@ if HandleModifiedItemClick then
       UI.ShowItem(link)
     end
   end)
-end
-
--- At the auction house, Shift+click on an item Goldbook has a price for also
--- opens its history. The auction house and addons such as Auctionator pass
--- Shift+clicks through these functions; one click can pass through several,
--- so the same item within half a second opens once. Not while a chat message
--- is being written, where Shift+click links the item.
-local shiftKey, shiftAt
-local function shiftClick(link)
-  if not link or (issecretvalue and issecretvalue(link)) or type(link) ~= "string" or not link:find("item:", 1, true) then
-    return
-  end
-  if not (Scanner.open and IsShiftKeyDown() and not IsAltKeyDown() and not IsControlKeyDown())
-    or ns.db.settings.shiftClick == false or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then
-    return
-  end
-  local realmKey = ns.RealmKey()
-  local key = Database.KeyFromLink(ns.db, realmKey, link)
-  if not (key and Database.Lookup(ns.db, realmKey, key)) or (key == shiftKey and GetTime() - shiftAt < 0.5) then
-    return
-  end
-  shiftKey, shiftAt = key, GetTime()
-  UI.ShowItem(link)
-end
-if HandleModifiedItemClick then
-  hooksecurefunc("HandleModifiedItemClick", shiftClick)
-end
-if ChatEdit_InsertLink then
-  hooksecurefunc("ChatEdit_InsertLink", shiftClick)
-end
-if ChatFrameUtil and ChatFrameUtil.InsertLink then
-  hooksecurefunc(ChatFrameUtil, "InsertLink", shiftClick)
 end
 
 Scanner.Subscribe(function(kind, payload)

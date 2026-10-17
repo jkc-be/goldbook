@@ -211,8 +211,8 @@ local COMMANDS = {
   deals = function(argument)
     ns.UI.Show("deals", argument)
   end,
-  sell = function(argument)
-    ns.UI.Show("sell", argument)
+  bags = function(argument)
+    ns.UI.Show("bags", argument)
   end,
   gold = function(argument)
     ns.UI.Show("gold", argument)
@@ -293,8 +293,9 @@ local COMMANDS = {
   end,
 }
 
--- The name the Accounting view had before.
+-- The names the Accounting and Bags views had before.
 COMMANDS.trades = COMMANDS.accounting
+COMMANDS.sell = COMMANDS.bags
 
 SLASH_GOLDBOOK1, SLASH_GOLDBOOK2 = "/goldbook", "/gb"
 SlashCmdList.GOLDBOOK = function(input)
@@ -303,7 +304,7 @@ SlashCmdList.GOLDBOOK = function(input)
   if run then
     run(argument)
   else
-    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb show [text]")
+    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb bags  |  /gb movers  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
     ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end
