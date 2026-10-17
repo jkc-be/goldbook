@@ -538,7 +538,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
     );
     assert_eq!(
         first[0],
-        json!({"name":"Mirelle","realm":"Faramon","at":1760000200,"side":"buy","item":"Linen Cloth","itemKey":"2589","quality":1,"count":20,"price":1500,"fee":0}),
+        json!({"name":"Mirelle","realm":"Faramon","at":1760000200,"side":"buy","item":"Linen Cloth","itemKey":"2589","quality":1,"count":20,"price":1500,"fee":0,"party":null}),
         "newest first, with the quality of a known item"
     );
     assert_eq!(first[3]["quality"], Value::Null);
@@ -691,6 +691,118 @@ async fn vendor_sales_are_trades_without_a_cut() {
             400,
             json!("trades[0].fee must not exceed the price, and only an auction sale has one")
         )
+    );
+}
+fn entry(at: u64, side: &str, item: &str, count: u64, price: u64, party: Option<&str>) -> Value {
+    json!({"name":"Sultan","realm":"Faramon","at":at,"side":side,"item":item,"itemKey":null,"count":count,"price":price,"fee":0,"party":party})
+}
+#[tokio::test]
+async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
+    let f = Fixture::new();
+    let mut upload = account();
+    let mut sale = entry(
+        1760000900,
+        "tradeSell",
+        "Linen Cloth",
+        20,
+        0,
+        Some("Mirelle"),
+    );
+    sale["itemKey"] = json!("2589");
+    let entries = [
+        sale,
+        entry(1760000900, "tradeIn", "Gold", 1, 50000, Some("Mirelle")),
+        entry(
+            1760000800,
+            "cod",
+            "Gnomish Widget",
+            1,
+            7000,
+            Some("Mirelle"),
+        ),
+        entry(1760000700, "merchant", "Simple Flour", 5, 125, None),
+        entry(
+            1760000600,
+            "mailIn",
+            "Thanks for the help",
+            1,
+            12000,
+            Some("Mirelle"),
+        ),
+        entry(1760000500, "quest", "The Defias Brotherhood", 1, 3500, None),
+        entry(1760000400, "repair", "Repairs", 1, 3456, None),
+        entry(1759996800, "loot", "Looted gold", 37, 8120, None),
+    ];
+    upload["trades"] = json!(entries);
+    assert_eq!(
+        call(&f.app, "POST", "/api/account", upload.clone(), &AUTH)
+            .await
+            .0,
+        200
+    );
+    let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    let expected = json!([
+        {"name":"Sultan","realm":"Faramon","at":1760000900,"side":"tradeIn","item":"Gold","itemKey":null,"quality":null,"count":1,"price":50000,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000900,"side":"tradeSell","item":"Linen Cloth","itemKey":"2589","quality":null,"count":20,"price":0,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000800,"side":"cod","item":"Gnomish Widget","itemKey":null,"quality":null,"count":1,"price":7000,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000700,"side":"merchant","item":"Simple Flour","itemKey":null,"quality":null,"count":5,"price":125,"fee":0,"party":null},
+        {"name":"Sultan","realm":"Faramon","at":1760000600,"side":"mailIn","item":"Thanks for the help","itemKey":null,"quality":null,"count":1,"price":12000,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000500,"side":"quest","item":"The Defias Brotherhood","itemKey":null,"quality":null,"count":1,"price":3500,"fee":0,"party":null},
+        {"name":"Sultan","realm":"Faramon","at":1760000400,"side":"repair","item":"Repairs","itemKey":null,"quality":null,"count":1,"price":3456,"fee":0,"party":null},
+        {"name":"Sultan","realm":"Faramon","at":1759996800,"side":"loot","item":"Looted gold","itemKey":null,"quality":null,"count":37,"price":8120,"fee":0,"party":null}
+    ]);
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"],
+        expected
+    );
+    for t in upload["trades"].as_array_mut().unwrap() {
+        t.as_object_mut().unwrap().remove("party");
+    }
+    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"],
+        expected,
+        "an upload without the party adds nothing and keeps the party booked before"
+    );
+    for (bad, message) in [
+        (
+            entry(1760001000, "gift", "Gold", 1, 100, Some("Mirelle")),
+            "trades[0].side must be one of sell, buy, vendor, merchant, tradeSell, tradeBuy, tradeIn, tradeOut, mailIn, mailOut, cod, quest, loot, repair, postage, deposit, travel, training, respec, otherIn, otherOut",
+        ),
+        (
+            entry(1760001000, "mailOut", "Gold", 1, 0, Some("Mirelle")),
+            "trades[0].price must be a positive integer",
+        ),
+        (
+            entry(1760001000, "mailOut", "Gold", 1, 100, Some("")),
+            "trades[0].party must be a string of 1 to 64 characters",
+        ),
+    ] {
+        upload["trades"] = json!([bad]);
+        let (status, _, error) = call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+        assert_eq!((status, error["error"].clone()), (400, json!(message)));
+    }
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"],
+        expected
+    );
+    let sides = "sell buy vendor merchant tradeSell tradeBuy tradeIn tradeOut mailIn mailOut cod \
+        quest loot repair postage deposit travel training respec otherIn otherOut";
+    upload["trades"] = sides
+        .split_whitespace()
+        .map(|side| entry(1760002000, side, "Gold", 1, 100, None))
+        .collect();
+    assert_eq!(
+        call(&f.app, "POST", "/api/account", upload, &AUTH).await.0,
+        200
+    );
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"]
+            .as_array()
+            .unwrap()
+            .len(),
+        8 + 21,
+        "the table takes every side the upload does"
     );
 }
 async fn get(app: &Router, target: &str, cookie: &str) -> Value {
@@ -1029,6 +1141,64 @@ async fn upgrading_a_python_database_preserves_ids_prices_and_retry_identity() {
     );
 }
 
+#[tokio::test]
+async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
+    let f = Fixture::new();
+    let mut upload = account();
+    upload["trades"] = json!([trade(
+        "Sultan",
+        1760000600,
+        "vendor",
+        "Broken Fang",
+        json!(null),
+        85,
+        0
+    )]);
+    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    // Rebuilding with the vendor migration again leaves the table as it was before accounting.
+    let mut db = db::connect(&f.database()).unwrap();
+    db.execute_batch(include_str!(
+        "../../../server/migrations/0008_vendor_trades.sql"
+    ))
+    .unwrap();
+    db.execute_batch("DELETE FROM migrations WHERE name='0012_accounting.sql'")
+        .unwrap();
+    assert!(
+        db.execute("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy) VALUES ('K7Q2M9PX','Sultan','Faramon',1760000700,'quest','Q',1,1,0,0)", [])
+            .is_err()
+    );
+    db::migrate(&mut db).unwrap();
+    let app = router(Config::new(f.database(), "dev-token")).unwrap();
+    upload["trades"] = json!([entry(
+        1760000700,
+        "quest",
+        "The Defias Brotherhood",
+        1,
+        3500,
+        None
+    )]);
+    assert_eq!(
+        call(&app, "POST", "/api/account", upload, &AUTH).await.0,
+        200
+    );
+    let cookie = log_in(&app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    assert_eq!(
+        get(&app, "/api/trades", &cookie).await["trades"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| (
+                t["side"].as_str().unwrap(),
+                t["item"].as_str().unwrap(),
+                t["party"].clone()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("quest", "The Defias Brotherhood", Value::Null),
+            ("vendor", "Broken Fang", Value::Null)
+        ]
+    );
+}
 #[tokio::test]
 async fn json_surrogates_validate_at_original_length_then_match_python_storage() {
     let f = Fixture::new();
