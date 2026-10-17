@@ -7,13 +7,10 @@ were released with.
 
 ## Unreleased
 
-## 0.2.3 - 2026-10-17
+## 0.2.4 - 2026-10-17
 
 ### Addon
 
-- Fix a Lua error whenever a merchant opened, on clients that read merchant
-  items with `C_MerchantFrame.GetItemInfo` instead of `GetMerchantItemInfo`.
-  Goods merchants sell are now learned there, and purchases are booked.
 - Vendor prices come from the sell price the game's tooltip shows, for every
   item, so they are right before you sell one. They no longer come from the
   game's item data or the merchant's buyback list, and `/gb deals` no longer
@@ -40,6 +37,11 @@ were released with.
   side panel shows the same totals for the month.
 - Keep 3,000 entries per character instead of 1,000, and never drop one the
   mailbox may still show.
+
+### Desktop app
+
+- A development build (`make run`) always installs the addon of its checkout,
+  and no longer installs a published addon update over it.
 
 ### Server
 
