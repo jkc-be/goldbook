@@ -100,6 +100,7 @@ pub struct OrderBookLevel {
     pub unit_price: u64,
     pub quantity: u64,
     pub cumulative_quantity: u64,
+    pub cumulative_cost: u64,
     pub owners: BTreeSet<String>,
     pub has_unnamed_owners: bool,
 }
@@ -118,6 +119,7 @@ impl SellerSnapshot {
                     unit_price: offer.unit_price,
                     quantity: 0,
                     cumulative_quantity: 0,
+                    cumulative_cost: 0,
                     owners: BTreeSet::new(),
                     has_unnamed_owners: false,
                 });
@@ -126,12 +128,14 @@ impl SellerSnapshot {
             level.has_unnamed_owners |=
                 offer.owners.is_empty() || offer.total_owners > offer.owners.len() as u64;
         }
-        let mut cumulative = 0;
+        let (mut quantity, mut cost) = (0, 0);
         levels
             .into_values()
             .map(|mut level| {
-                cumulative += level.quantity;
-                level.cumulative_quantity = cumulative;
+                quantity += level.quantity;
+                cost += level.unit_price * level.quantity;
+                level.cumulative_quantity = quantity;
+                level.cumulative_cost = cost;
                 level
             })
             .collect()

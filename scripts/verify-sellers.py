@@ -24,8 +24,8 @@ def main():
             assert len(ore["history"]) == 2 and ore["snapshot"]["orderBook"] == []
             first = api.request("GET", query + "&snapshot=" + ore["history"][1]["id"])[0]["body"]["snapshot"]
             assert first["orderBook"] == [
-                {"unitPrice": 100, "quantity": 15, "cumulativeQuantity": 15, "owners": ["Alice-Faramon"], "hasUnnamedOwners": False},
-                {"unitPrice": 200, "quantity": 7, "cumulativeQuantity": 22, "owners": [], "hasUnnamedOwners": True},
+                {"unitPrice": 100, "quantity": 15, "cumulativeQuantity": 15, "cumulativeCost": 1500, "owners": ["Alice-Faramon"], "hasUnnamedOwners": False},
+                {"unitPrice": 200, "quantity": 7, "cumulativeQuantity": 22, "cumulativeCost": 2900, "owners": [], "hasUnnamedOwners": True},
             ]
             bar = api.request("GET", query.replace("2770", "2840"))[0]["body"]
             assert len(bar["history"]) == 2
@@ -59,10 +59,10 @@ def main():
             history = api.request("GET", query + "&history=1")[0]["body"]
             assert len(history["history"]) == 4
             assert history["snapshot"]["orderBook"] == [
-                {"unitPrice": 100, "quantity": 60, "cumulativeQuantity": 60, "owners": ["Alice"], "hasUnnamedOwners": False},
-                {"unitPrice": 120, "quantity": 10, "cumulativeQuantity": 70, "owners": ["Bob"], "hasUnnamedOwners": False},
-                {"unitPrice": 130, "quantity": 20, "cumulativeQuantity": 90, "owners": ["Alice", "Carol"], "hasUnnamedOwners": False},
-                {"unitPrice": 140, "quantity": 10, "cumulativeQuantity": 100, "owners": [], "hasUnnamedOwners": True},
+                {"unitPrice": 100, "quantity": 60, "cumulativeQuantity": 60, "cumulativeCost": 6000, "owners": ["Alice"], "hasUnnamedOwners": False},
+                {"unitPrice": 120, "quantity": 10, "cumulativeQuantity": 70, "cumulativeCost": 7200, "owners": ["Bob"], "hasUnnamedOwners": False},
+                {"unitPrice": 130, "quantity": 20, "cumulativeQuantity": 90, "cumulativeCost": 9800, "owners": ["Alice", "Carol"], "hasUnnamedOwners": False},
+                {"unitPrice": 140, "quantity": 10, "cumulativeQuantity": 100, "cumulativeCost": 11200, "owners": [], "hasUnnamedOwners": True},
             ]
             for observation, units in zip(history["history"], [60, 40, 60, 60], strict=True):
                 old = api.request("GET", query + "&snapshot=" + observation["id"])[0]["body"]["snapshot"]
@@ -104,8 +104,8 @@ def main():
             item_query = query.replace("2589", "1111")
             book = api.request("GET", item_query)[0]["body"]["snapshot"]
             assert book["orderBook"] == [
-                {"unitPrice": 100, "quantity": 11, "cumulativeQuantity": 11, "owners": ["Alice", "Bob"], "hasUnnamedOwners": True},
-                {"unitPrice": 200, "quantity": 3, "cumulativeQuantity": 14, "owners": ["Alice"], "hasUnnamedOwners": False},
+                {"unitPrice": 100, "quantity": 11, "cumulativeQuantity": 11, "cumulativeCost": 1100, "owners": ["Alice", "Bob"], "hasUnnamedOwners": True},
+                {"unitPrice": 200, "quantity": 3, "cumulativeQuantity": 14, "cumulativeCost": 1700, "owners": ["Alice"], "hasUnnamedOwners": False},
             ]
             repeated["scannedAt"], repeated["offers"] = 3, []
             api.request("POST", "/api/sellers", repeated, token="dev-token")
