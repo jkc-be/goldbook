@@ -1728,10 +1728,12 @@ local function addHead()
 
   -- On the link, so that it takes the clicks over the item's name.
   local back = UI.Button(link, "", 1, 24)
-  back:SetPoint("LEFT", head, "LEFT", 0, 0)
-  back:SetPoint("RIGHT", back.label, "RIGHT", 11, 0)
+  -- The label hangs on the head before the button is sized from it: hung on
+  -- the button, as UI.Button left it, it would depend on what it sizes.
   back.label:ClearAllPoints()
   back.label:SetPoint("LEFT", head, "LEFT", 23, 0)
+  back:SetPoint("LEFT", head, "LEFT", 0, 0)
+  back:SetPoint("RIGHT", back.label, "RIGHT", 11, 0)
   -- A chevron pointing back, drawn as the rail's icons are.
   if back.CreateLine then
     for _, stroke in ipairs({ { 13, 7, 8.5, 12 }, { 8.5, 12, 13, 17 } }) do

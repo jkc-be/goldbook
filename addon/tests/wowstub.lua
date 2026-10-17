@@ -87,14 +87,19 @@ end
 function methods:GetName()
   return self.name
 end
+local function child(parent)
+  local widget = Stub.widget()
+  widget.stubParent = parent
+  return widget
+end
 function methods:CreateFontString()
-  return Stub.widget()
+  return child(self)
 end
 function methods:CreateTexture()
-  return Stub.widget()
+  return child(self)
 end
 function methods:CreateLine()
-  return Stub.widget()
+  return child(self)
 end
 function methods:SetStartPoint(...)
   self.startPoint = { ... }
@@ -126,8 +131,53 @@ end
 function methods:SetHeight(height)
   self.height = height
 end
-function methods:SetPoint(...)
-  self.point = { ... }
+-- The client refuses an anchor that would make a region depend on itself,
+-- and so does the stub: anchors[point] is the region each point hangs on.
+local function dependsOn(region, target, seen)
+  if region == target then
+    return true
+  end
+  seen = seen or {}
+  if seen[region] then
+    return false
+  end
+  seen[region] = true
+  for _, relative in pairs(rawget(region, "anchors") or {}) do
+    if dependsOn(relative, target, seen) then
+      return true
+    end
+  end
+  return false
+end
+
+local function anchor(self, point, relative)
+  if type(relative) == "string" then
+    relative = _G[relative]
+  end
+  if type(relative) == "table" then
+    if dependsOn(relative, self) then
+      error("Action[SetPoint] failed because[Cannot anchor to a region dependent on it]", 3)
+    end
+    local anchors = rawget(self, "anchors") or {}
+    anchors[point] = relative
+    self.anchors = anchors
+  end
+end
+
+-- Without a region to hang on, a point hangs on the parent.
+function methods:SetPoint(point, relative, ...)
+  if relative == nil or type(relative) == "number" then
+    anchor(self, point, rawget(self, "stubParent"))
+  else
+    anchor(self, point, relative)
+  end
+  self.point = { point, relative, ... }
+end
+function methods:SetAllPoints(relative)
+  anchor(self, "ALL", relative or rawget(self, "stubParent"))
+end
+function methods:ClearAllPoints()
+  self.anchors = nil
 end
 function methods:GetPoint()
   return unpack(self.point)
@@ -241,8 +291,10 @@ function Stub.advance(seconds)
   Stub.clock = target
 end
 
-function CreateFrame(_, name)
-  return Stub.widget(name)
+function CreateFrame(_, name, parent)
+  local widget = Stub.widget(name)
+  widget.stubParent = parent
+  return widget
 end
 function CreateFont(name)
   return Stub.widget(name)
