@@ -7,36 +7,28 @@ were released with.
 
 ## Unreleased
 
-### Addon
-
-- Open the window dark by default. A light/dark button left of the close
-  button switches it, as do `/gb theme` and the Options tick.
-- Retune both palettes for how the game draws them: a client with raised
-  brightness turned the light window's panels, rules and edges white. Text,
-  labels, coin letters and quality colours keep their contrast either way.
-- Set words in Friz Quadrata and figures in a larger Arial Narrow.
-- Size the window with `/gb scale <0.7-1.4>` or the Options slider, apart
-  from the game's UI scale.
-- Draw the item chart as the website does: lowest buyout over an area,
-  market value, the amount listed as bars, a legend, the latest values and
-  a tooltip per point, over 1D, 1W, 1M or 2M. A few days fill the plot.
-- Keep the last week of prices by the hour, and chart them. A day's and an
-  hour's price is its lowest, as on the website.
-- Take the newer prices, days and hours the app downloads from the server
-  when the addon loads. Tooltips and the item view say "from the server".
-- Add Back to Prices (or the list an item came from) to the item view.
-- Fix the Gold, Prices and Sell icons in the rail, which lost their curves
-  in game.
-
 ## 0.2.0 - 2026-10-17
 
 ### Addon
 
-- Restyle the Goldbook window in the Ledger design: a light parchment theme by
-  default and a dark ledger theme with `/gb theme dark` or the Options panel.
-  Views move to a side rail, with the last scan, scans waiting to sync and
-  Reload at its foot.
+- Restyle the Goldbook window in the Ledger design, dark by default. A
+  light/dark button left of the close button switches it to parchment, as do
+  `/gb theme` and the Options tick. Views move to a side rail, with the last
+  scan, scans waiting to sync and Reload at its foot.
+- Tune both palettes for how the game draws them: a client with raised
+  brightness turned light panels, rules and edges white. Words are set in
+  Friz Quadrata and figures in a larger Arial Narrow.
+- Size the window with `/gb scale <0.7-1.4>` or the Options slider, apart
+  from the game's UI scale.
 - Show a 7-day price line on Prices, Deals, Sell and Movers.
+- Draw the item chart as the website does: lowest buyout over an area,
+  market value, the amount listed as bars, a legend, the latest values and a
+  tooltip per point, over 1D, 1W, 1M or 2M. Back returns to the list the item
+  came from.
+- Keep the last week of prices by the hour, and chart them. A day's and an
+  hour's price is its lowest, as on the website.
+- Take the newer prices, days and hours the app downloads from the server
+  when the addon loads. Tooltips and the item view say "from the server".
 - Gold shows cards for total, today, 30 days and net worth, a 1W/1M/2M chart,
   and this month's trades. Trades shows totals and filters by kind and
   character. Movers switches between risers and fallers.
@@ -44,18 +36,29 @@ were released with.
 
 ### Desktop app
 
-- Restyle the masthead and the Sync page in the Ledger design, light by
-  default, with a Light/Dark switch in the masthead.
+- Lay the app out like the website, light by default, with one side rail and
+  a Light/Dark switch that the website inside the app follows.
+- Download the server's prices and history for your realms after a sync, at
+  most every 15 minutes, into `ServerData.lua` in the addon folder. Type
+  /reload in game to load them.
+- Bring the window back from the tray, the Dock or a second launch after
+  Prices or Characters was shown.
 
-### Website
+### Website and server
 
 - Restyle the site in the Ledger design: a light parchment theme by default
   and a dark ledger theme chosen with the Light/Dark switch in the side rail.
   The browser remembers the choice.
 - Show the account's total gold in the top bar and the sign-in state with
   Log in or Log out in the rail on every page.
-- Show the roster above a character's page, with that character marked.
-- Move each item's Compare toggle to the start of its row.
+- Show the roster above a character's page, with that character marked, and
+  the trade totals as one strip.
+- Show each item's 7-day line and change as one column over the same week.
+- Make the order-book depth chart interactive: each level's units,
+  cumulative units and cost to buy up to it, linked to the price ladder, for
+  any saved snapshot. Seller names are no longer shown.
+- Add `GET /api/export`, a realm's prices with hourly and daily history,
+  gzip-compressed when the client asks.
 
 ## 0.1.13 - 2026-10-16
 
