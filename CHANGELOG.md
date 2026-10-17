@@ -11,6 +11,10 @@ were released with.
 
 ### Addon
 
+- Shift+click an item at the auction house to open its price history in
+  Goldbook, as Midas does: in the auction house's lists, your bags and addons
+  such as Auctionator, but not while writing in chat. An Options tick turns it
+  off.
 - The Options panel scrolls, so the web login at its bottom is always within
   reach. It now says what the desktop app and the website add: the app syncs
   both ways, uploading your scans and bringing back the prices others scanned

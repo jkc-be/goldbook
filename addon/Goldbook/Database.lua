@@ -39,7 +39,7 @@ local PARK_MILLER = 2147483647
 --   fromServer[realmKey][itemKey] = the server's seen time of a price taken from GoldbookServerData,
 --                                until a scan here prices the item again
 --   serverMerged[realmKey]     = the scannedAt of the server data merged last, see Database.MergeServer
---   settings                   = { lastReplicate, minProfit, autoScan, minimapAngle, hideMinimap, altClick, theme, scale,
+--   settings                   = { lastReplicate, minProfit, autoScan, minimapAngle, hideMinimap, altClick, shiftClick, theme, scale,
 --                                  window = { point, relativePoint, x, y } where the window was dropped }
 
 -- Schema 1 records were "min,mv,avg,qty,seen".

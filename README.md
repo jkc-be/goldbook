@@ -355,6 +355,7 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | `/gb mail [text]`, or open a mailbox | The open mailbox: every mail with its items, sender, days left and gold, and a button that collects the mails shown. See [Mail](#mail) |
 | `/gb accounting` | Your revenue and expenses, newest first: auction and vendor sales, purchases, trades with players, mail, repairs, flights and every other gold movement, with what each did to your gold. `/gb trades` opens it too. See [Accounting](#accounting) |
 | Alt+click an item, or `/gb item <link or name>` | The item's price history. Works on items in bags, the bank, chat links, loot, the auction house and the Goldbook lists |
+| Shift+click an item at the auction house | Also opens its price history, for an item Goldbook has a price for. Works in the auction house's own lists, in your bags and in addons such as Auctionator, and not while you are writing in chat |
 | Click a column header | Sorts the list by that column. Click again to reverse |
 | `/gb show [text]`, or left click the minimap button | Price list, filtered by item name |
 | `/gb autoscan` | Turns on a quick scan each time the auction house opens, at most every 15 minutes. Off at first |

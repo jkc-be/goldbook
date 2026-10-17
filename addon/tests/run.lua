@@ -1051,6 +1051,34 @@ options.checks.altClick.checked = true
 options.checks.altClick.scripts.OnClick(options.checks.altClick)
 eq(GoldbookDB.settings.altClick, true, "Alt+click turned on again")
 
+Stub.alt = false
+SlashCmdList.GOLDBOOK("show")
+Stub.shift = true
+HandleModifiedItemClick(cloth)
+eq(GoldbookWindow.headers[1].text, "ITEM ↑", "Shift+click away from the auction house leaves the window alone")
+Stub.fire("AUCTION_HOUSE_SHOW")
+function ChatEdit_GetActiveWindow()
+  return {}
+end
+HandleModifiedItemClick(cloth)
+eq(GoldbookWindow.headers[1].text, "ITEM ↑", "Shift+click while writing in chat links the item and leaves Goldbook alone")
+ChatEdit_GetActiveWindow = nil
+HandleModifiedItemClick("|Hitem:99999::::::|h[Unknown Thing]|h")
+eq(GoldbookWindow.headers[1].text, "ITEM ↑", "Shift+click at the auction house on an item without a price does nothing")
+HandleModifiedItemClick(cloth)
+eq(GoldbookWindow.headers[1].text .. " " .. head(), "DAY ↓ Linen Cloth | 1s 00c | ",
+  "Shift+click on an item at the auction house opens its history in Goldbook")
+options.checks.shiftClick.checked = false
+options.checks.shiftClick.scripts.OnClick(options.checks.shiftClick)
+SlashCmdList.GOLDBOOK("show")
+HandleModifiedItemClick(cloth)
+eq(GoldbookWindow.headers[1].text, "ITEM ↑", "Shift+click at the auction house does nothing when turned off")
+options.checks.shiftClick.checked = true
+options.checks.shiftClick.scripts.OnClick(options.checks.shiftClick)
+Stub.fire("AUCTION_HOUSE_CLOSED")
+Stub.shift = false
+Stub.alt = true
+
 GoldbookWindow.rows[1].hit.scripts.OnClick(GoldbookWindow.rows[1].hit)
 eq(GoldbookWindow.headers[1].text .. " " .. AuctionHouseFrame.SearchBar.searches, "DAY ↓ 1", "Alt+click on a row opens its history instead of searching")
 Stub.alt = false

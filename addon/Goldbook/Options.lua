@@ -123,6 +123,16 @@ local CHECKS = {
       ns.db.settings.altClick = checked and true or false
     end,
   },
+  {
+    name = "shiftClick",
+    label = "Shift+click an item at the auction house to open its history in Goldbook",
+    get = function()
+      return ns.db.settings.shiftClick ~= false
+    end,
+    set = function(checked)
+      ns.db.settings.shiftClick = checked and true or false
+    end,
+  },
 }
 
 local anchor, offset = settings, -6
