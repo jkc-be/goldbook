@@ -789,11 +789,13 @@ local Codec, Database = ns.Codec, ns.Database
 -- name GetItemInfo gives a suffixed item), trend (change per day), deal (today's
 -- lowest price as a share of the usual), absent (days since last seen),
 -- vendorDeal (first seen today, listed under what a vendor pays), seen (the
--- days it was seen, as { days ago, lowest price, listed, market value }). Items
--- without a price are only in the bags.
+-- days it was seen, as { days ago, lowest price, listed, market value }),
+-- scans (each day seen in the last week as that many scans, so many hours
+-- apart: { count, every }). Items without a price are only in the bags.
 local ITEMS = {
   -- The four days of the in-game screenshot client.lua was measured from.
-  { "2776", "Gold Ore", 2, 500, 1024, 183, seen = { { 4, 860, 262, 860 }, { 2, 1188, 241, 1191 }, { 1, 799, 241, 800 }, { 0, 1958, 183, 1959 } } },
+  { "2776", "Gold Ore", 2, 500, 1024, 183, seen = { { 4, 860, 262, 860 }, { 2, 1188, 241, 1191 }, { 1, 799, 241, 800 }, { 0, 1958, 183, 1959 } },
+    scans = { 3, 3 } },
   { "2589", "Linen Cloth", 1, 13, 140, 400 },
   { "2592", "Wool Cloth", 1, 33, 210, 300 },
   { "4306", "Silk Cloth", 1, 150, 380, 260 },
@@ -819,7 +821,7 @@ local ITEMS = {
   { "13465", "Mountain Silversage", 1, 60, 3200, 75 },
   { "13467", "Icecap", 1, 60, 2600, 40, absent = 3 },
   { "8846", "Gromsblood", 1, 30, 850, 95 },
-  { "13468", "Black Lotus", 2, 1000, 860000, 4, deal = 0.58, trend = 0.01 },
+  { "13468", "Black Lotus", 2, 1000, 860000, 4, deal = 0.58, trend = 0.01, scans = { 14, 1 } },
   { "13446", "Major Healing Potion", 1, 250, 2600, 60 },
   { "13444", "Major Mana Potion", 1, 300, 3100, 45 },
   { "3928", "Superior Healing Potion", 1, 250, 820, 70 },
@@ -910,6 +912,33 @@ local function priceHistory(item)
   return entries
 end
 
+-- A day's entry as `count` scans `every` hours apart, up to that day's scan,
+-- that fold back into the entry: the other scans list dearer and measure no
+-- market value, and the newest has the entry's quantity and market value.
+-- Before today the cheapest scan falls at some hour; today it is the newest,
+-- the price the price record has. `wobble` is the item's own random stream,
+-- so that the other items keep their numbers.
+local function scansOf(entry, count, every, wobble)
+  local last = math.floor(scanTime(entry.day) / 3600)
+  local hours = {}
+  for hour = last, math.max(entry.day * 24, last - (count - 1) * every), -every do
+    table.insert(hours, 1, hour)
+  end
+  local cheapest = entry.day == TODAY and #hours or 1 + math.floor(wobble() * #hours)
+  local points = {}
+  for index, hour in ipairs(hours) do
+    local newest = index == #hours
+    points[index] = {
+      at = hour * 3600,
+      hourly = true,
+      min = index == cheapest and entry.min or math.floor(entry.min * (1.01 + wobble() * 0.07)),
+      qty = newest and entry.qty or math.max(1, math.floor(entry.qty * (0.8 + wobble() * 0.4))),
+      mv = newest and entry.mv or 0,
+    }
+  end
+  return points
+end
+
 -- Today's cheapest price levels; a deal is two cheap units below the usual
 -- price. Items with set days have none, so they draw no random numbers.
 local function ladder(item, newest)
@@ -947,9 +976,20 @@ local function seededDB()
     db.vendor[itemID] = vendor
     if price then
       local entries = priceHistory(item)
-      local newest, daily, recent, measured = entries[#entries], {}, {}, nil
+      local newest, points, recent, measured = entries[#entries], {}, {}, nil
+      local wobbleSeed = itemID
+      local function wobble()
+        wobbleSeed = wobbleSeed * 16807 % 2147483647
+        return wobbleSeed / 2147483647
+      end
       for index, entry in ipairs(entries) do
-        daily[index] = Codec.HistoryPoint(entry)
+        if item.scans and entry.day >= TODAY - 7 then
+          for _, point in ipairs(scansOf(entry, item.scans[1], item.scans[2], wobble)) do
+            points[#points + 1] = point
+          end
+        else
+          points[#points + 1] = entry
+        end
         if index > #entries - 14 then
           recent[#recent + 1] = entry.min
         end
@@ -957,7 +997,7 @@ local function seededDB()
           measured = entry
         end
       end
-      db.history[REALM][key] = table.concat(daily, ",")
+      db.history[REALM][key] = Codec.EncodeHistory(points)
       db.prices[REALM][key] = Codec.EncodePrice({
         min = newest.min,
         qty = newest.qty,
