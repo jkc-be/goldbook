@@ -276,6 +276,23 @@ for _, itemID in ipairs({ 3857, 2512, 6325, 18839 }) do
 end
 eq(table.concat(stock, " "), "3857=475 2512=1 6325=nil 18839=nil",
   "merchants' goods without limit and for gold alone are kept at their lowest price per unit")
+
+-- Newer clients have only C_MerchantFrame.GetItemInfo, and no GetMerchantItemCostInfo.
+local merchantItemInfo, merchantItemCostInfo = GetMerchantItemInfo, GetMerchantItemCostInfo
+GetMerchantItemInfo, GetMerchantItemCostInfo = nil, nil
+C_MerchantFrame = {
+  GetItemInfo = function(index)
+    local entry = goods[index]
+    return { name = "Goods", price = entry[2], stackCount = entry[3], numAvailable = entry[4], hasExtendedCost = entry[5] > 0 }
+  end,
+}
+ns.db.merchant[3857], ns.db.merchant[2512] = nil, nil
+goods = { { 3857, 500, 1, -1, 0 }, { 2512, 10, 200, -1, 0 }, { 18839, 900, 1, -1, 1 } }
+Stub.fire("MERCHANT_SHOW")
+Stub.fire("MERCHANT_CLOSED")
+eq(tostring(ns.db.merchant[3857]) .. " " .. tostring(ns.db.merchant[2512]) .. " " .. tostring(ns.db.merchant[18839]), "500 1 nil",
+  "a client with only C_MerchantFrame.GetItemInfo still records the merchant's goods")
+GetMerchantItemInfo, GetMerchantItemCostInfo, C_MerchantFrame = merchantItemInfo, merchantItemCostInfo, nil
 goods = {}
 
 SlashCmdList.GOLDBOOK("trades jagged")
