@@ -207,7 +207,7 @@ struct Reply {
     headers: Vec<(&'static str, String)>,
 }
 impl Reply {
-    fn json(value: Value) -> Self {
+    fn json(value: impl serde::Serialize) -> Self {
         Self {
             status: 200,
             body: serde_json::to_vec(&value).expect("JSON value"),
