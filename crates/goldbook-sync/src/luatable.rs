@@ -1,7 +1,7 @@
 //! A data parser for WoW SavedVariables. It never evaluates Lua code.
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use regex::bytes::Regex;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{path::Path, sync::LazyLock};
 
 pub type SavedVariables = Map<String, Value>;
@@ -168,11 +168,7 @@ impl Parser<'_> {
             let n = if s.trim_start_matches('-').to_lowercase().starts_with("0x") {
                 let unsigned = s.trim_start_matches('-');
                 let n = u64::from_str_radix(&unsigned[2..], 16)? as f64;
-                if s.starts_with('-') {
-                    -n
-                } else {
-                    n
-                }
+                if s.starts_with('-') { -n } else { n }
             } else {
                 s.parse::<f64>()?
             };

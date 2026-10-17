@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
 use std::{
     collections::HashSet,
@@ -52,7 +52,7 @@ pub fn game_logins(wow_dir: &Path) -> Vec<GameLogin> {
             ));
         }
     }
-    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.sort_by_key(|a| std::cmp::Reverse(a.0));
     let mut seen = HashSet::new();
     found
         .into_iter()
@@ -96,7 +96,11 @@ pub async fn handoff(api: &str, login: GameLogin, lifetime: Duration) -> Result<
         html(&login.id),
         html(&login.key)
     );
-    let headers = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: origin\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'nonce-{nonce}'; form-action {}; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n", content.len(), target.origin().ascii_serialization());
+    let headers = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: origin\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'nonce-{nonce}'; form-action {}; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n",
+        content.len(),
+        target.origin().ascii_serialization()
+    );
     let task = tokio::spawn(async move {
         let serve = async {
             loop {

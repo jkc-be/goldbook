@@ -1,6 +1,6 @@
-use axum::{extract::State, routing::post, Json, Router};
+use axum::{Json, Router, extract::State, routing::post};
 use goldbook_sync::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
@@ -103,10 +103,12 @@ fn account_extraction_sorts_gold_and_uses_only_valid_login_keys() {
         vec![(1791846000, 1234), (1791932400, 5000)]
     );
     assert_eq!(a.characters[0].name, "Sultan");
-    assert!(serde_json::to_string(&a)
-        .unwrap()
-        .find("7KQ2M9PXABCDEFGHJKMN")
-        .is_none());
+    assert!(
+        serde_json::to_string(&a)
+            .unwrap()
+            .find("7KQ2M9PXABCDEFGHJKMN")
+            .is_none()
+    );
     let mut broken = saved;
     broken["GoldbookDB"]["account"]["key"] = json!("short");
     assert!(extract_account(&broken).is_err());
@@ -162,9 +164,11 @@ fn urls_and_install_preserve_subpath_and_original_addon() {
     let targets =
         install_addon(Some(dir.path()), &source, Some("https://example/goldbook")).unwrap();
     assert_eq!(targets.len(), 1);
-    assert!(std::fs::read_to_string(targets[0].join("Goldbook.toc"))
-        .unwrap()
-        .contains("https://example/goldbook"));
+    assert!(
+        std::fs::read_to_string(targets[0].join("Goldbook.toc"))
+            .unwrap()
+            .contains("https://example/goldbook")
+    );
     assert_eq!(
         std::fs::read_to_string(source.join("Goldbook.toc")).unwrap(),
         "## X-Website: old\nCode.lua\n"
@@ -246,11 +250,13 @@ async fn concurrent_passes_do_not_duplicate_scans_and_state_merges_files() {
     let saved: Value = serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
     assert_eq!(saved["uploaded"].as_array().unwrap().len(), 6);
     assert_eq!(sync_file(&a).await.unwrap().already_sent, 3);
-    assert!(!std::fs::read_dir(dir.path()).unwrap().any(|p| p
-        .unwrap()
-        .file_name()
-        .to_string_lossy()
-        .starts_with(".tmp")));
+    assert!(
+        !std::fs::read_dir(dir.path()).unwrap().any(|p| p
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tmp"))
+    );
     task.abort();
 }
 #[tokio::test]
@@ -259,7 +265,7 @@ async fn state_remembers_old_account_payloads_and_rotates_key_with_previous_hash
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("account.lua");
     let state = dir.path().join("state.json");
-    let text="GoldbookDB={[\"account\"]={[\"id\"]=\"K7Q2M9PX\",[\"key\"]=\"7KQ2M9PXABCDEFGHJKMN\"},[\"items\"]={},[\"scans\"]={}}";
+    let text = "GoldbookDB={[\"account\"]={[\"id\"]=\"K7Q2M9PX\",[\"key\"]=\"7KQ2M9PXABCDEFGHJKMN\"},[\"items\"]={},[\"scans\"]={}}";
     std::fs::write(&file, text).unwrap();
     let options = options(&file, &state, &api);
     assert_eq!(sync_file(&options).await.unwrap().sent, 1);
@@ -296,10 +302,10 @@ async fn watcher_reads_files_replaced_by_rename() {
         api,
         state_path: dir.path().join("state.json"),
         log: Arc::new(move |line| {
-            if line.starts_with("watching ") {
-                if let Some(tx) = ready.lock().unwrap().take() {
-                    let _ = tx.send(());
-                }
+            if line.starts_with("watching ")
+                && let Some(tx) = ready.lock().unwrap().take()
+            {
+                let _ = tx.send(());
             }
         }),
     })

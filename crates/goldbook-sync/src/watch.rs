@@ -1,4 +1,4 @@
-use crate::{sync_file, Logger, SyncOptions, SyncResult};
+use crate::{Logger, SyncOptions, SyncResult, sync_file};
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
 use std::{
@@ -105,13 +105,13 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
                 },
             );
             let mut watcher = watcher.ok();
-            if let Some(watcher) = &mut watcher {
-                if let Err(e) = watcher.watch(
+            if let Some(watcher) = &mut watcher
+                && let Err(e) = watcher.watch(
                     options.file.parent().unwrap_or(Path::new(".")),
                     RecursiveMode::NonRecursive,
-                ) {
-                    (options.log)(&format!("{}: {e}", options.file.display()))
-                }
+                )
+            {
+                (options.log)(&format!("{}: {e}", options.file.display()))
             }
             (options.log)(&format!("watching {}", options.file.display()));
             // Periodic passes also recover when a directory did not exist at startup or
