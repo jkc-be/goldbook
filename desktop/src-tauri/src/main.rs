@@ -31,7 +31,7 @@ const SITE: &str = "site";
 
 // Under this mark web/style.css hides the website's rail and brand, which the
 // app's own rail replaces. WebView2 can run this before the document element exists.
-const EMBED: &str = "const mark = () => document.documentElement && (document.documentElement.dataset.embed = 'desktop'); if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true });";
+const EMBED: &str = "{ const mark = () => document.documentElement && (document.documentElement.dataset.embed = 'desktop'); if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true }); }";
 
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
