@@ -226,7 +226,7 @@ eq(upgraded.prices.R["1"], "100,7,0,5000,105,5000;100;", "schema 1 prices are ca
 eq(#Codec.DecodePrice("100,7,0,5000,105,5000;100,90").days, 2, "records from before the ladder still read")
 eq(upgraded.scanned.R, 5000, "schema 1 realms know their newest scan")
 eq(upgraded.history.R["1"], "0:100:7:105", "schema 1 prices start a dated history")
-eq(upgraded.version, 4, "schema version raised")
+eq(upgraded.version, 5, "schema version raised")
 local fromSchema2 = Database.Init({ version = 2, prices = { R = {
   ["1"] = "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5",
   ["2"] = "100,4,0,1760000000,105,1759900000;100,90",
@@ -234,7 +234,7 @@ local fromSchema2 = Database.Init({ version = 2, prices = { R = {
 eq(fromSchema2.history.R["1"], "20370:1500:7:1400", "schema 2 history starts from the newest price, with that day's market value")
 eq(fromSchema2.history.R["2"], "20370:100:4:0", "a market value from an earlier day is not booked on the newest day")
 eq(fromSchema2.prices.R["1"], "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5", "schema 2 price records stay as they are")
-eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 4", "schema 2 is raised to 4, with its gold by hour")
+eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 5", "schema 2 is raised to 5, with its gold by hour")
 local fromSchema3 = Database.Init({ version = 3, gold = { ["A-R"] = { [20368] = 100, [20369] = 120, [20370] = 250 } } })
 eq(stored(fromSchema3.gold["A-R"]), "488855:100 488879:120 488888:250", "schema 3 gold per day goes to each day's last hour, and today's to the current hour")
 local reopened = Database.Init({ version = 3, gold = { ["A-R"] = { [488800] = 90, [20370] = 250 } } })
@@ -274,21 +274,68 @@ end
 local kept = Database.Lookup(history, "R-F", "1").days
 eq(#kept .. " " .. kept[1] .. " " .. kept[14], "14 103 116", "history keeps the last 14 days")
 
+local function days(entries)
+  local parts = {}
+  for index, entry in ipairs(entries) do
+    parts[index] = entry.day .. " " .. entry.min .. " " .. entry.qty .. " " .. entry.mv
+  end
+  return table.concat(parts, " / ")
+end
+local function points(entries)
+  local parts = {}
+  for index, point in ipairs(entries) do
+    parts[index] = point.at .. " " .. point.min .. " " .. point.qty .. " " .. point.mv .. " " .. tostring(point.hourly)
+  end
+  return table.concat(parts, " / ")
+end
+local function aged(db, at)
+  Database.ApplyScan(db, { realm = "R", faction = "F", region = "EU", at = at, mode = "browse", by = "x", build = "1", rows = {}, names = {} })
+end
+
 local daily = Database.Init(nil)
 scanned(daily, NOW, 100, 120, 4)
-scanned(daily, NOW + 3600, 90, nil, 6)
-eq(daily.history["R-F"]["1"], "20000:90:6:120", "a quick scan the same day replaces the price and quantity and keeps the day's market value")
+scanned(daily, NOW + 1800, 90, nil, 6)
+eq(daily.history["R-F"]["1"], "h480000:90:6:120", "a quick scan in the same hour lowers the price, takes its quantity and keeps the hour's market value")
+scanned(daily, NOW + 2400, 120, nil, 2)
+eq(daily.history["R-F"]["1"], "h480000:90:2:120", "a dearer scan later in the hour keeps the hour's lowest price")
+scanned(daily, NOW + HOUR, 95, nil, 5)
+eq(daily.history["R-F"]["1"], "h480000:90:2:120,h480001:95:5:0", "a scan in the next hour adds a point")
 priced(daily, NOW + DAY, { ["1"] = 110, ["2"] = 50 })
 scanned(daily, NOW + 2 * DAY + 60, 130, 125, 3)
-eq(daily.history["R-F"]["1"], "20000:90:6:120,20001:110:5:0,20002:130:3:125", "scans on three days make three dated days")
+eq(daily.history["R-F"]["1"], "h480000:90:2:120,h480001:95:5:0,h480024:110:5:0,h480048:130:3:125", "scans on three days are kept by the hour")
+eq(days(Database.History(daily, "R-F", "1")), "20000 90 5 120 / 20001 110 5 0 / 20002 130 3 125",
+  "history answers per day: the lowest price, the newest quantity and the day's market value")
+eq(points(Database.Points(daily, "R-F", "1")),
+  "1728000000 90 2 120 true / 1728003600 95 5 0 true / 1728086400 110 5 0 true / 1728172800 130 3 125 true", "points are the stored hours, oldest first")
+scanned(daily, NOW + 8 * DAY, 140)
+eq(daily.history["R-F"]["1"], "20000:90:5:120,h480024:110:5:0,h480048:130:3:125,h480192:140:1:0",
+  "the hours of a day before the last 7 fold into that day")
+aged(daily, NOW + 8 * DAY + HOUR)
+eq(daily.history["R-F"]["1"], "20000:90:5:120,h480024:110:5:0,h480048:130:3:125,h480192:140:1:0", "settling again the same day changes nothing")
+eq(points(Database.Points(daily, "R-F", "1")),
+  "1728000000 90 5 120 nil / 1728086400 110 5 0 true / 1728172800 130 3 125 true / 1728691200 140 1 0 true", "a folded day is one point at the start of the day")
+aged(daily, NOW + 10 * DAY)
+eq(daily.history["R-F"]["1"], "20000:90:5:120,20001:110:5:0,20002:130:3:125,h480192:140:1:0", "hours of an item left out of the scan fold too")
 scanned(daily, NOW + 61 * DAY, 140)
-eq(daily.history["R-F"]["1"], "20001:110:5:0,20002:130:3:125,20061:140:1:0", "days more than 60 days before the scan are cut off")
+eq(daily.history["R-F"]["1"], "20001:110:5:0,20002:130:3:125,20008:140:1:0,h481464:140:1:0", "days more than 60 days before the scan are cut off")
 eq(daily.history["R-F"]["2"], "20001:50:5:0", "an item listed 60 days ago keeps its history")
 scanned(daily, NOW + 62 * DAY, 150)
 eq(daily.history["R-F"]["2"], nil, "an item not listed for more than 60 days loses its history")
-local decoded = Database.History(daily, "R-F", "1")
-eq(#decoded .. " " .. decoded[1].day .. " " .. decoded[1].min .. " " .. decoded[1].qty .. " " .. decoded[1].mv, "3 20002 130 3 125", "history decodes to dated days, oldest first")
-eq(#Database.History(daily, "R-F", "2"), 0, "an item without history has no days")
+eq(#Database.History(daily, "R-F", "2") .. " " .. #Database.Points(daily, "R-F", "2"), "0 0", "an item without history has no days and no points")
+
+local half = Database.Init(nil)
+half.history["R-F"] = { ["1"] = "20000:90:5:120,h480000:100:4:120,h480001:90:5:0,h480024:110:5:0" }
+aged(half, NOW + 8 * DAY)
+eq(half.history["R-F"]["1"], "20000:90:5:120,h480024:110:5:0", "a day kept next to the hours it was folded from folds to the same point")
+
+local fromSchema4 = Database.Init({ version = 4, history = { ["R-F"] = { ["1"] = "20369:80:2:0,20370:100:3:105" } } })
+eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"], "5 20369:80:2:0,20370:100:3:105", "schema 4 history is kept as it is")
+eq(days(Database.History(fromSchema4, "R-F", "1")), "20369 80 2 0 / 20370 100 3 105", "schema 4 history answers the same days")
+eq(points(Database.Points(fromSchema4, "R-F", "1")), "1759881600 80 2 0 nil / 1759968000 100 3 105 nil", "schema 4 days are points at the start of their day")
+scanned(fromSchema4, 20370 * DAY + 9 * HOUR, 95, nil, 2)
+eq(fromSchema4.history["R-F"]["1"], "20369:80:2:0,20370:100:3:105,h488889:95:2:0", "the first hour of a day kept as a day follows it")
+eq(days(Database.History(fromSchema4, "R-F", "1")), "20369 80 2 0 / 20370 95 2 105", "that day answers its point and its hours folded")
+eq(points(Database.Points(fromSchema4, "R-F", "1")), "1759881600 80 2 0 nil / 1760000400 95 2 0 true", "a day with hours is only its hours among the points")
 
 local trend = Advisor.Evolution({
   { day = 19960, min = 200, qty = 1, mv = 0 },

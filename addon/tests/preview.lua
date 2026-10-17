@@ -928,7 +928,7 @@ end
 
 local function seededDB()
   local db = {
-    version = 4,
+    version = 5,
     prices = { [REALM] = {} },
     history = { [REALM] = {} },
     scanned = { [REALM] = SCAN },
@@ -949,7 +949,7 @@ local function seededDB()
       local entries = priceHistory(item)
       local newest, daily, recent, measured = entries[#entries], {}, {}, nil
       for index, entry in ipairs(entries) do
-        daily[index] = Codec.HistoryDay(entry.day, entry.min, entry.qty, entry.mv)
+        daily[index] = Codec.HistoryPoint(entry)
         if index > #entries - 14 then
           recent[#recent + 1] = entry.min
         end
