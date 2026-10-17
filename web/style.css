@@ -1486,15 +1486,30 @@ td.item button {
   margin-inline: 12px;
 }
 
+.trades .history-head {
+  margin-top: 18px;
+  margin-bottom: 4px;
+}
+
+.trades .history-head h4 {
+  margin: 0;
+}
+
 .trade-list .when,
-.trade-list .side {
+.trade-list .source {
   white-space: nowrap;
 }
 
-.trade-list td.side {
+.trade-list td.source,
+.trade-list td.detail {
   color: var(--muted);
 }
 
+.trade-list td.detail {
+  overflow-wrap: break-word;
+}
+
+.trade-list .party,
 .trade-list .character a {
   color: var(--ink);
 }
@@ -1746,7 +1761,8 @@ code {
     white-space: nowrap;
   }
 
-  .trade-list .when {
+  .trade-list .when,
+  .trade-list .source {
     white-space: normal;
   }
 
