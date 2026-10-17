@@ -26,10 +26,7 @@ struct Registration {
 }
 
 async fn register(api: &str, fingerprint: &str, session: Option<&str>) -> Result<Option<String>> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
+    let client = goldbook_sync::api_client(api, Duration::from_secs(10))?;
     let request = client
         .post(goldbook_sync::api_url(api, "/api/installations")?)
         .header("content-type", "application/json")

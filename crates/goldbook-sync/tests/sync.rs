@@ -153,6 +153,29 @@ fn account_extraction_carries_valid_trades_and_leaves_them_out_when_there_are_no
     );
 }
 #[test]
+fn api_urls_require_tls_except_on_loopback() {
+    for api in [
+        "http://example.com/goldbook",
+        "http://192.168.1.20:8787",
+        "http://localhost.example.com:8787",
+        "http://127.0.0.1.example.com:8787",
+        "http://[::ffff:192.168.1.20]:8787",
+        "ftp://example.com",
+    ] {
+        assert!(api_url(api, "/api/scans").is_err(), "accepted {api}");
+    }
+    for api in [
+        "https://example.com/goldbook",
+        "http://localhost:8787",
+        "http://127.0.0.1:8787",
+        "http://127.0.0.2:8787",
+        "http://[::1]:8787",
+    ] {
+        assert!(api_url(api, "/api/scans").is_ok(), "rejected {api}");
+    }
+}
+
+#[test]
 fn urls_and_install_preserve_subpath_and_original_addon() {
     assert_eq!(
         api_url("https://app.example/goldbook", "/api/scans")
@@ -228,6 +251,42 @@ fn options(file: &Path, state: &Path, api: &str) -> SyncOptions {
         log: logger(),
     }
 }
+#[tokio::test]
+async fn sync_does_not_follow_upload_redirects() {
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let app = Router::new()
+        .route(
+            "/goldbook/api/scans",
+            post(|| async { axum::response::Redirect::temporary("/receiver") }),
+        )
+        .route(
+            "/receiver",
+            post(
+                |State(rows): State<Arc<Mutex<Vec<Value>>>>, Json(body): Json<Value>| async move {
+                    rows.lock().unwrap().push(body);
+                    "ok"
+                },
+            ),
+        )
+        .with_state(received.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let api = format!("http://{}/goldbook", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("Goldbook.lua");
+    std::fs::write(&file, FIXTURE).unwrap();
+    let result = sync_file(&options(&file, &dir.path().join("state.json"), &api))
+        .await
+        .unwrap();
+    task.abort();
+    assert!(
+        received.lock().unwrap().is_empty(),
+        "forwarded private data"
+    );
+    assert_eq!(result.sent, 0);
+    assert_eq!(result.failed, 1);
+}
+
 #[tokio::test]
 async fn concurrent_passes_do_not_duplicate_scans_and_state_merges_files() {
     let (api, received, task) = server().await;

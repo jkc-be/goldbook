@@ -1,5 +1,5 @@
 use crate::{extract_account, extract_scans, extract_seller_snapshots, read_saved_variables};
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use fs2::FileExt;
 use goldbook_core::sha256;
 use serde::{Deserialize, Serialize};
@@ -110,12 +110,43 @@ fn state_change<T>(path: &Path, update: impl FnOnce(&mut State, bool) -> Result<
     temp.persist(path).map_err(|e| e.error)?;
     Ok(output)
 }
+fn is_loopback(url: &reqwest::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain("localhost")) => true,
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        _ => false,
+    }
+}
+
 pub fn api_url(api: &str, path: &str) -> Result<reqwest::Url> {
     let mut base = api.to_owned();
     if !base.ends_with('/') {
         base.push('/')
     }
-    Ok(reqwest::Url::parse(&base)?.join(path.trim_start_matches('/'))?)
+    let url = reqwest::Url::parse(&base)?.join(path.trim_start_matches('/'))?;
+    if url.host().is_none()
+        || !(url.scheme() == "https" || (url.scheme() == "http" && is_loopback(&url)))
+    {
+        bail!("The server address must use HTTPS. HTTP is only allowed on this computer.");
+    }
+    Ok(url)
+}
+
+pub fn api_client(api: &str, timeout: Duration) -> Result<reqwest::Client> {
+    let url = api_url(api, "")?;
+    let mut builder = reqwest::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .https_only(true);
+    if is_loopback(&url) {
+        // Local credentials must not leave the computer through an environment proxy.
+        builder = builder.no_proxy();
+        if url.scheme() == "http" {
+            builder = builder.https_only(false);
+        }
+    }
+    Ok(builder.build()?)
 }
 async fn upload(
     client: &reqwest::Client,
@@ -180,9 +211,7 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
     })?;
     let mut sent = state.uploaded.into_iter().collect::<HashSet<_>>();
     let saved = read_saved_variables(&options.file)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()?;
+    let client = api_client(&options.api, Duration::from_secs(15))?;
     for queued in extract_scans(&saved)? {
         if sent.contains(&queued.id) {
             result.already_sent += 1;

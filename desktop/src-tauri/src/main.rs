@@ -353,10 +353,7 @@ async fn battlenet_login(app: tauri::AppHandle) -> Reply {
 }
 
 async fn check_upload(settings: &Settings) -> anyhow::Result<()> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
+    let client = goldbook_sync::api_client(&settings.api, Duration::from_secs(10))?;
     let response = client
         .post(goldbook_sync::api_url(&settings.api, "/api/scans")?)
         .bearer_auth(&settings.token)
@@ -400,6 +397,9 @@ async fn save(app: tauri::AppHandle, input: Settings, token_edited: bool) -> Rep
         let mut settings = input.prepare()?;
         let previous = settings::read(&state.config);
         settings.reconcile_token(&previous, token_edited);
+        if !registration::needs_registration(&settings) {
+            check_upload(&settings).await?;
+        }
         let source = updates::source(&app)?;
         let game = PathBuf::from(&settings.wow_dir);
         let website = settings.api.clone();
@@ -409,9 +409,6 @@ async fn save(app: tauri::AppHandle, input: Settings, token_edited: bool) -> Rep
         stop_sync(&app);
         settings::write(&state.config, &settings)?;
         let settings = connect(&app, settings).await?;
-        if !registration::needs_registration(&settings) {
-            check_upload(&settings).await?;
-        }
         let message = format!("Installed the addon in {} game {}. Restart World of Warcraft if this is the first time.", installed.len(), if installed.len() == 1 { "folder" } else { "folders" });
         Ok::<_, anyhow::Error>((settings, message))
     }.await;
@@ -921,6 +918,17 @@ mod tests {
 
     const WEB_STYLE: &str = include_str!("../../../web/style.css");
     const APP_STYLE: &str = include_str!("../../ui/style.css");
+
+    #[tokio::test]
+    async fn upload_check_rejects_saved_remote_http_settings() {
+        let settings = Settings {
+            api: "http://example.com/goldbook".into(),
+            token: "test-token".into(),
+            ..Settings::default()
+        };
+        let error = check_upload(&settings).await.unwrap_err();
+        assert!(error.to_string().contains("HTTPS"));
+    }
 
     fn rules(css: &str) -> impl Iterator<Item = (Vec<&str>, &str)> {
         css.split('}').filter_map(|rule| {
