@@ -57,7 +57,6 @@ local SETTERS = {
   SetWordWrap = "wordWrap",
   SetTextColor = "textColor",
   SetTextInsets = "insets",
-  SetMask = "mask",
   SetVertexColor = "vertexColor",
   SetTexture = "texture",
   SetDrawLayer = "layer",
@@ -398,13 +397,16 @@ function layout(snapshot, screen) {
         Object.assign(inner.style, { overflow: "hidden", textOverflow: "ellipsis" });
       }
     },
-    // A highlight shows only on the frame the preview hovers.
+    // A highlight shows only on the frame the preview hovers. The portrait
+    // mask is a white disc, tinted by its vertex colour or gradient.
     Texture(el, w) {
       const owner = byId.get(w.parent);
       if (w.layer === "HIGHLIGHT" && !(owner && (owner.hover || owner.highlight))) { el.style.display = "none"; return; }
-      if (w.mask) el.style.borderRadius = "50%";
+      const disc = /AlphaMask/i.test(w.texture || "");
+      if (disc) el.style.borderRadius = "50%";
       const g = w.gradient;
       if (g) el.style.background = `linear-gradient(${g.orientation === "HORIZONTAL" ? "to right" : "to top"}, ${rgba(g.from)}, ${rgba(g.to)})`;
+      else if (disc) el.style.background = rgba(w.vertexColor || [1, 1, 1]);
       else if (w.color) el.style.background = rgba(w.color);
       else if (isIcon(w)) Object.assign(el.style, { background: "linear-gradient(135deg,#7a6440,#2b2116)", border: `1px solid ${w.vertexColor ? rgba(w.vertexColor) : GREY}` });
       else if (w.texture) Object.assign(el.style, { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.35)" });

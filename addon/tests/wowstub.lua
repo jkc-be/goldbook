@@ -447,6 +447,11 @@ SlashCmdList = {}
 UISpecialFrames = {}
 tinsert = table.insert
 GameTooltip_Hide = noop
+STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+NumberFontNormal = Stub.widget("NumberFontNormal")
+function NumberFontNormal.GetFont()
+  return "Fonts\\ARIALN.TTF", 14, "OUTLINE"
+end
 UIParent = Stub.widget("UIParent")
 AuctionHouseFrame = Stub.widget("AuctionHouseFrame")
 AuctionHouseFrame.SearchBar = Stub.widget()

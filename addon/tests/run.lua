@@ -1018,6 +1018,9 @@ eq(options.checks.dark.checked, true, "the options show the dark window")
 options.checks.dark.checked = false
 options.checks.dark.scripts.OnClick(options.checks.dark)
 eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.48", "the options switch back to parchment")
+ns.UI.ShowItem("99999")
+eq(plain(GoldbookWindow.chart.grid[1].label.text .. " " .. GoldbookWindow.chart.grid[2].label.text .. " " .. GoldbookWindow.chart.grid[5].label.text)
+  .. " " .. tostring(GoldbookWindow.chart.grid[6].label.shown), "0c 1c 4c false", "an item without prices gets an axis in whole coppers")
 
 Stub.fire("AUCTION_HOUSE_SHOW")
 Stub.ah.silent = true

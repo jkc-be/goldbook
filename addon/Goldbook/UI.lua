@@ -57,8 +57,9 @@ local PALETTES = {
 }
 
 -- The game's own faces: Friz Quadrata for names and headings, Arial Narrow
--- for figures.
-local FRIZ, NARROW = "Fonts\\FRIZQT__.TTF", "Fonts\\ARIALN.TTF"
+-- for figures. Taken from the client, which swaps them for faces with the
+-- letters of its language.
+local FRIZ, NARROW = STANDARD_TEXT_FONT, NumberFontNormal:GetFont()
 local function newFont(name, file, size)
   local font = CreateFont("GoldbookFont" .. name)
   font:SetFont(file, size, "")
@@ -118,9 +119,9 @@ function UI.Box(frame, background, edge)
   end)
 end
 
--- Clients from before SetGradient took colour objects have SetGradientAlpha.
+-- Shades the texture's own colours. Clients from before SetGradient took
+-- colour objects have SetGradientAlpha.
 local function setGradient(texture, orientation, r1, g1, b1, a1, r2, g2, b2, a2)
-  texture:SetColorTexture(1, 1, 1, 1)
   if texture.SetGradientAlpha then
     texture:SetGradientAlpha(orientation, r1, g1, b1, a1, r2, g2, b2, a2)
   else
@@ -131,6 +132,7 @@ end
 -- From `from` at the bottom or left to `to` at the top or right, each a
 -- palette key and an alpha.
 local function shade(texture, orientation, from, fromAlpha, to, toAlpha)
+  texture:SetColorTexture(1, 1, 1, 1)
   paint(function()
     local r1, g1, b1 = rgb(from)
     local r2, g2, b2 = rgb(to)
@@ -155,10 +157,17 @@ local function money(copper)
   return Codec.Money(copper, palette.coins)
 end
 
-local function circle(texture)
-  if texture.SetMask then
-    texture:SetMask(CIRCLE)
-  end
+-- A round mark: the portrait mask is a white disc, so it takes the colour
+-- it is given.
+local function disc(texture, size)
+  texture:SetTexture(CIRCLE)
+  texture:SetSize(size, size)
+end
+
+local function fillDisc(texture, key)
+  paint(function()
+    texture:SetVertexColor(rgb(key))
+  end)
 end
 
 -- A button in the gold of the reload button, its text in `button.label`.
@@ -1096,12 +1105,12 @@ local function drawChart(spec)
     end
   end
   if high < low then
-    low, high = 0, 1
+    low, high = 0, 4
   elseif high == low then
     local pad = math.max(high * 0.1, 2)
     low, high = math.max(0, low - pad), high + pad
   end
-  local step = niceStep(high - low)
+  local step = math.max(1, niceStep(high - low))
   low, high = math.floor(low / step) * step, math.ceil(high / step) * step
   local function x(index)
     return (index - 1) / (count - 1) * width
@@ -1142,6 +1151,7 @@ local function drawChart(spec)
     if not strip and index <= strips then
       strip = plot:CreateTexture(nil, "BACKGROUND", nil, 1)
       strip:SetWidth(STRIP)
+      strip:SetColorTexture(1, 1, 1, 1)
       chart.strips[index] = strip
     end
     local value
@@ -1177,7 +1187,7 @@ local function drawChart(spec)
       day.hit:SetSize(column, height)
       day.hit.tip, day.hit.x, day.hit.y = slot.tip, x(index), y(slot.value)
       day.dot:SetPoint("CENTER", plot, "BOTTOMLEFT", x(index), y(slot.value))
-      day.dot:SetColorTexture(rgb("gold"))
+      day.dot:SetVertexColor(rgb("gold"))
       if day.line and before then
         day.line:SetStartPoint("BOTTOMLEFT", plot, x(index - 1), y(before.value))
         day.line:SetEndPoint("BOTTOMLEFT", plot, x(index), y(slot.value))
@@ -1360,6 +1370,7 @@ local function addMenu()
   local menu = panel(window, "panel", "edge")
   menu:SetFrameStrata("TOOLTIP")
   menu:SetWidth(MENU_WIDTH)
+  menu:EnableMouse(true)
   menu.options = {}
   menu:Hide()
   window.menu = menu
@@ -1707,8 +1718,7 @@ local function addChart()
       day.line:SetThickness(1.6)
     end
     day.dot = plot:CreateTexture(nil, "OVERLAY")
-    day.dot:SetSize(5, 5)
-    circle(day.dot)
+    disc(day.dot, 5)
     -- The day's full height, so that a low value is as easy to hover as a high one.
     day.hit = CreateFrame("Frame", nil, plot)
     day.hit:EnableMouse(true)
@@ -1723,14 +1733,12 @@ local function addChart()
   marker.rule:SetWidth(1)
   UI.Fill(marker.rule, "muted", 0.8)
   marker.ring = plot:CreateTexture(nil, "OVERLAY", nil, 1)
-  marker.ring:SetSize(9, 9)
-  circle(marker.ring)
-  UI.Fill(marker.ring, "gold")
+  disc(marker.ring, 9)
+  fillDisc(marker.ring, "gold")
   marker.hole = plot:CreateTexture(nil, "OVERLAY", nil, 2)
-  marker.hole:SetSize(5, 5)
+  disc(marker.hole, 5)
   marker.hole:SetPoint("CENTER", marker.ring)
-  circle(marker.hole)
-  UI.Fill(marker.hole, "panel")
+  fillDisc(marker.hole, "panel")
   chart.marker = marker
   window.chart = chart
 end
@@ -1860,15 +1868,13 @@ end
 local function addTitleBar()
   local bar = UI.TitleBar(window, TITLE_HEIGHT)
   local rim = bar:CreateTexture(nil, "ARTWORK")
-  rim:SetSize(22, 22)
+  disc(rim, 22)
   rim:SetPoint("LEFT", 14, 0)
-  rim:SetColorTexture(0.66, 0.46, 0.1, 1)
-  circle(rim)
+  rim:SetVertexColor(0.66, 0.46, 0.1, 1)
   local coin = bar:CreateTexture(nil, "ARTWORK", nil, 1)
-  coin:SetSize(18, 18)
+  disc(coin, 18)
   coin:SetPoint("CENTER", rim)
   setGradient(coin, "VERTICAL", 0.6, 0.4, 0.07, 1, 1, 0.94, 0.7, 1)
-  circle(coin)
 
   local brand = label(bar, "brand", "brand")
   brand:SetPoint("LEFT", rim, "RIGHT", 12, 0)
