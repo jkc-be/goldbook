@@ -384,13 +384,10 @@ Every item tooltip gets these lines, as far as they are known:
 
 ### Vendor prices
 
-The game's item data says what a vendor pays, but for some items the server
-pays less: the data says 9s 62c for Rough Bronze Leggings, a vendor pays 5s 77c.
-Goldbook therefore reads what a vendor really paid from the merchant's buyback
-list whenever a merchant is open, and from the vendor sales booked under
-`/gb trades`. That price replaces the item data's from then on. In `/gb deals`,
-a vendor deal whose price was not seen paid yet says `Vendor?` instead of
-`Vendor`. Sell one to a vendor to confirm it.
+Goldbook takes what a vendor pays from the sell price the game's own tooltip
+shows, for every item, whether you hold it or not. The item data addons read
+with `C_Item.GetItemInfo` is wrong for some items: it says 9s 62c for Rough
+Bronze Leggings, while the tooltip and the vendor say 5s 77c.
 
 ### Goods merchants sell
 
@@ -411,8 +408,8 @@ alone, at the lowest price seen.
 
 A deal is an item in the newest scan that sells for more than it costs:
 
-- **Vendor deal.** The lowest listing is below what a vendor pays. The profit
-  is certain once the vendor price is confirmed; see [Vendor prices](#vendor-prices).
+- **Vendor deal.** The lowest listing is below what a vendor pays. See
+  [Vendor prices](#vendor-prices).
 - **Resale deal.** Not for [goods merchants sell](#goods-merchants-sell). The
   lowest listing is at most 70% of the resale price, and the
   profit after the 5% auction house cut clears `/gb minprofit`. The resale price

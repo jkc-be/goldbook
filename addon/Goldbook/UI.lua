@@ -553,9 +553,8 @@ local VIEWS = {
       return matching(Advisor.Deals(ns.db, ns.RealmKey(), ns.MinProfit()), text)
     end,
     cells = function(row)
-      local sellTo = row.kind == "vendor" and (row.confirmed and "Vendor" or tint("muted", "Vendor?")) or "Auction"
       return itemText(row) .. (row.units and tint("muted", " x" .. row.units) or ""), money(row.min), money(row.sell),
-        stretches(palette.gain, money(row.total)), sellTo
+        stretches(palette.gain, money(row.total)), row.kind == "vendor" and "Vendor" or "Auction"
     end,
     head = function(rows)
       local scanned = ns.db.scanned[ns.RealmKey()]
@@ -565,14 +564,7 @@ local VIEWS = {
       return { "Min profit", money(ns.MinProfit()) }
     end,
     status = function(rows, visible)
-      local unconfirmed
-      for _, row in ipairs(rows) do
-        if row.kind == "vendor" and not row.confirmed then
-          unconfirmed = "Vendor? prices are unconfirmed"
-          break
-        end
-      end
-      return joinedStatus(scrollRange(rows, visible), "Click a deal to search for it", unconfirmed)
+      return joinedStatus(scrollRange(rows, visible), "Click a deal to search for it")
     end,
   },
   sell = {

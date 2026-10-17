@@ -7,6 +7,14 @@ were released with.
 
 ## Unreleased
 
+### Addon
+
+- Vendor prices come from the sell price the game's tooltip shows, for every
+  item, so they are right before you sell one. They no longer come from the
+  game's item data or the merchant's buyback list, and `/gb deals` no longer
+  marks vendor deals as `Vendor?`. Vendor prices saved before are read again
+  the next time an item is scanned or in your bags.
+
 ## 0.2.1 - 2026-10-17
 
 - Build the desktop app and server with Rust 1.99.1 and align their shared

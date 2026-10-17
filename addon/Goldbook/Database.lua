@@ -4,7 +4,7 @@ local Codec = ns.Codec
 local Database = {}
 ns.Database = Database
 
-local SCHEMA = 5
+local SCHEMA = 6
 local MAX_QUEUED_SCANS = 20
 local MAX_QUEUE_AGE = 14 * 24 * 3600
 local HISTORY_DAYS = 14
@@ -22,9 +22,7 @@ local PARK_MILLER = 2147483647
 --   hours[realmKey][itemKey]   = the same per hour for the KEPT_HOURS up to the item's newest scan
 --   scanned[realmKey]          = time of the newest scan
 --   items[itemKey]             = "quality|name"
---   vendor[itemID]             = what the item's data says a vendor pays, 0 when it buys nothing
---   vendorPaid[itemID]         = what a vendor paid for one, read from the buyback list, which outranks
---                                the item's data: that is wrong for some items
+--   vendor[itemID]             = what a vendor pays for one, see ns.SellPrice, 0 when it buys nothing
 --   merchant[itemID]           = the lowest gold price a merchant asks for one it sells without limit
 --   gold[character][hour]      = gold at the end of that hour of unix time, see Ledger
 --   characters[character]      = { name, realm, faction, class, level, at, bags = { at, rows }, bank = { at, rows } }
@@ -96,19 +94,6 @@ local function upgradeFromSchema3(db, now)
   end
 end
 
--- Vendor sales booked before vendorPaid existed, or while the buyback list
--- was not read, say what a vendor paid too.
-local function vendorPaidFromTrades(db)
-  for _, booked in pairs(db.trades) do
-    for _, trade in ipairs(booked) do
-      local itemID = trade.side == "vendor" and trade.key and Codec.BaseID(trade.key)
-      if itemID and not db.vendorPaid[itemID] then
-        db.vendorPaid[itemID] = math.floor(trade.price / trade.count)
-      end
-    end
-  end
-end
-
 -- A random source for Codec.RandomCode. The client gives addons only
 -- math.random, which may be seeded from the clock in seconds, so two accounts
 -- made in the same second could get the same codes. A Park-Miller stream
@@ -142,6 +127,11 @@ function Database.Init(saved)
   if db.version == 3 then
     upgradeFromSchema3(db, time())
   end
+  -- Schema 6 reads vendor prices from the game's tooltip instead of the item's
+  -- data, so those stored before are read again.
+  if db.version and db.version < 6 then
+    db.vendor, db.vendorPaid = nil, nil
+  end
   db.version = SCHEMA
   db.prices = db.prices or {}
   db.history = db.history or {}
@@ -150,7 +140,6 @@ function Database.Init(saved)
   db.scanned = db.scanned or {}
   db.items = db.items or {}
   db.vendor = db.vendor or {}
-  db.vendorPaid = db.vendorPaid or {}
   db.merchant = db.merchant or {}
   db.gold = db.gold or {}
   db.scans = db.scans or {}
@@ -162,7 +151,6 @@ function Database.Init(saved)
   db.account = db.account or newAccount()
   db.fromServer = db.fromServer or {}
   db.serverMerged = db.serverMerged or {}
-  vendorPaidFromTrades(db)
   return db
 end
 
@@ -189,18 +177,7 @@ function Database.Item(db, key)
 end
 
 function Database.Vendor(db, key)
-  local itemID = Codec.BaseID(key)
-  return db.vendorPaid[itemID] or db.vendor[itemID]
-end
-
--- Whether Database.Vendor is what a vendor was seen paying, not the item's data.
-function Database.VendorSeen(db, key)
-  return db.vendorPaid[Codec.BaseID(key)] ~= nil
-end
-
--- `price` is what the vendor paid for `count` of the item.
-function Database.SetVendorPaid(db, key, count, price)
-  db.vendorPaid[Codec.BaseID(key)] = math.floor(price / count)
+  return db.vendor[Codec.BaseID(key)]
 end
 
 -- Goods merchants sell without limit, known before a merchant selling them

@@ -416,10 +416,11 @@ function C_AuctionHouse.GetReplicateItemLink(index)
   end
 end
 
--- Stub.items[itemID] = { name, quality, vendor, cached, delay }. Uncached items
--- answer nil, then arrive through GET_ITEM_INFO_RECEIVED after `delay`
--- seconds (half a second by default; math.huge for an item the server never
--- answers for).
+-- Stub.items[itemID] = { name, quality, vendor, itemData, cached, delay }.
+-- `vendor` is what the tooltip says a vendor pays, `itemData` what
+-- C_Item.GetItemInfo says instead when the two differ. Uncached items answer
+-- nil, then arrive through GET_ITEM_INFO_RECEIVED after `delay` seconds (half a
+-- second by default; math.huge for an item the server never answers for).
 C_Item = {}
 function C_Item.GetItemInfo(item)
   local itemID = tonumber(item) or tonumber(item:match("item:(%d+)"))
@@ -429,7 +430,7 @@ function C_Item.GetItemInfo(item)
   end
   if item.cached then
     local link = "|Hitem:" .. itemID .. "|h[" .. item.name .. "]|h"
-    return item.name, link, item.quality, nil, nil, nil, nil, nil, nil, nil, item.vendor
+    return item.name, link, item.quality, nil, nil, nil, nil, nil, nil, nil, item.itemData or item.vendor
   end
   C_Timer.After(item.delay or 0.5, function()
     item.cached = true
@@ -437,6 +438,19 @@ function C_Item.GetItemInfo(item)
   end)
 end
 function C_Item.RequestLoadItemDataByID() end
+
+C_TooltipInfo = {}
+function C_TooltipInfo.GetHyperlink(link)
+  local item = Stub.items[tonumber(link:match("item:(%d+)"))]
+  if not (item and item.cached) then
+    return nil
+  end
+  local lines = { { type = Enum.TooltipDataLineType.ItemName, leftText = item.name } }
+  if (item.vendor or 0) > 0 then
+    lines[#lines + 1] = { type = Enum.TooltipDataLineType.SellPrice, price = item.vendor, maxPrice = -1 }
+  end
+  return { lines = lines }
+end
 
 -- Stub.bags[container] = { slots = n, [slot] = item info }. The bank's
 -- containers, its own slots (-1) and its bags (5 to 10), read as empty
@@ -510,6 +524,7 @@ Enum = {
   },
   AuctionHouseSortOrder = { Price = 0, Name = 1 },
   TooltipDataType = { Item = 0 },
+  TooltipDataLineType = { ItemName = 1, SellPrice = 11 },
 }
 ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" }, [2] = { hex = "|cff1eff00" } }
 SlashCmdList = {}

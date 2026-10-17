@@ -36,6 +36,23 @@ function ns.MinProfit()
   return ns.db.settings.minProfit or DEFAULT_MIN_PROFIT
 end
 
+-- What a vendor pays for one, as the game's tooltip says, 0 when a vendor buys
+-- none; nil while the tooltip is not loaded. The item's data from
+-- C_Item.GetItemInfo is wrong for some items: it says 9s 62c for Rough Bronze
+-- Leggings, a vendor pays 5s 77c.
+function ns.SellPrice(link)
+  local data = C_TooltipInfo.GetHyperlink(link)
+  if not data then
+    return nil
+  end
+  for _, line in ipairs(data.lines) do
+    if line.type == Enum.TooltipDataLineType.SellPrice then
+      return line.price
+    end
+  end
+  return 0
+end
+
 -- Name, quality and vendor price load asynchronously; keys still waiting,
 -- grouped by item id.
 local awaiting = {}
@@ -54,7 +71,7 @@ end
 
 local function resolveItem(key)
   local itemID = Codec.BaseID(key)
-  local name, _, quality, _, _, _, _, _, _, _, vendor = C_Item.GetItemInfo(itemID)
+  local name, _, quality = C_Item.GetItemInfo(itemID)
   if not name then
     awaiting[itemID] = awaiting[itemID] or {}
     awaiting[itemID][key] = true
@@ -64,7 +81,7 @@ local function resolveItem(key)
   if not ns.db.items[key] then
     Database.SetItem(ns.db, key, name, quality or 1)
   end
-  ns.db.vendor[itemID] = vendor or 0
+  ns.db.vendor[itemID] = ns.SellPrice("item:" .. itemID)
 end
 
 local function unresolved(key)

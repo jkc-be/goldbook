@@ -232,7 +232,6 @@ Stub.money = Stub.money + 3100
 Stub.fire("MERCHANT_UPDATE")
 Stub.fire("MERCHANT_UPDATE")
 eq(vendored(), "Jagged Star of the Eagle 15301:1019 1 3100 0 0", "a new buyback entry is a vendor sale, booked once, keyed by its link")
-eq(ns.Database.Vendor(ns.db, "15301"), 3100, "the buyback list tells what a vendor pays")
 buyback[3] = { "Broken Fang", 1, 85 }
 buyback[4] = { "Broken Fang", 1, 85 }
 Stub.fire("MERCHANT_UPDATE")

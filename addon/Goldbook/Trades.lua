@@ -166,9 +166,7 @@ end
 local listed, listedById, listedMoney
 
 -- Called when a merchant opens, whenever its lists change, and when it
--- closes. Every entry tells what the vendor paid for the item, which
--- Database.Vendor trusts over the item's data. An entry new to the buyback
--- list is a sale to a vendor. An entry gone while nothing was added was
+-- closes. An entry new to the buyback list is a sale to a vendor. An entry gone while nothing was added was
 -- bought back, and its sale is taken off again; one gone as another came in
 -- fell off the end of a full list. A full list that sold the same stack as
 -- its oldest entry reads the same after, so then gold gained by exactly an
@@ -176,11 +174,6 @@ local listed, listedById, listedMoney
 -- were taken off.
 function Trades.Merchant(db, character, realmKey, now, money, opened)
   local entries = buyback(db, realmKey)
-  for _, entry in ipairs(entries) do
-    if entry.key then
-      Database.SetVendorPaid(db, entry.key, entry.count, entry.price)
-    end
-  end
   local counts, byId = tally(entries)
   local before, beforeById, beforeMoney = listed, listedById, listedMoney
   listed, listedById, listedMoney = counts, byId, money

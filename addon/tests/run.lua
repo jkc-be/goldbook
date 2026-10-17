@@ -138,11 +138,9 @@ Database.SetMerchantPrice(shop, 2589, 5, 98)
 Database.SetMerchantPrice(shop, 2589, 1, 25)
 eq(tostring(Database.MerchantSells(shop, "2589:584")) .. " " .. Database.MerchantPrice(shop, "2589"), "true 20",
   "a merchant seen selling an item keeps its lowest price per unit")
-shop.vendor[2865] = 962
-Database.SetVendorPaid(shop, "2865", 2, 1154)
-eq(Database.Vendor(shop, "2865"), 577, "what a vendor paid outranks the item's data")
-local sold = Database.Init({ vendor = { [2865] = 962 }, trades = { A = { { side = "vendor", key = "2865", count = 3, price = 1731 } } } })
-eq(Database.Vendor(sold, "2865"), 577, "vendor sales booked earlier say what a vendor pays")
+local upgraded = Database.Init({ version = 5, vendor = { [2865] = 962 }, vendorPaid = { [2865] = 577 } })
+eq(tostring(Database.Vendor(upgraded, "2865")) .. " " .. tostring(upgraded.vendorPaid), "nil nil",
+  "vendor prices stored from the item's data are read again from the tooltip")
 shop.scanned.R = NOW
 shop.prices.R = {
   ["3857"] = Codec.EncodePrice(record({ min = 2000, days = { 3000, 3000, 3000, 2000 } })),
@@ -226,7 +224,7 @@ eq(upgraded.prices.R["1"], "100,7,0,5000,105,5000;100;", "schema 1 prices are ca
 eq(#Codec.DecodePrice("100,7,0,5000,105,5000;100,90").days, 2, "records from before the ladder still read")
 eq(upgraded.scanned.R, 5000, "schema 1 realms know their newest scan")
 eq(upgraded.history.R["1"], "0:100:7:105", "schema 1 prices start a dated history")
-eq(upgraded.version, 5, "schema version raised")
+eq(upgraded.version, 6, "schema version raised")
 local fromSchema2 = Database.Init({ version = 2, prices = { R = {
   ["1"] = "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5",
   ["2"] = "100,4,0,1760000000,105,1759900000;100,90",
@@ -234,7 +232,7 @@ local fromSchema2 = Database.Init({ version = 2, prices = { R = {
 eq(fromSchema2.history.R["1"], "20370:1500:7:1400", "schema 2 history starts from the newest price, with that day's market value")
 eq(fromSchema2.history.R["2"], "20370:100:4:0", "a market value from an earlier day is not booked on the newest day")
 eq(fromSchema2.prices.R["1"], "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5", "schema 2 price records stay as they are")
-eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 5", "schema 2 is raised to 5, with its gold by hour")
+eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 6", "schema 2 is raised to 6, with its gold by hour")
 local fromSchema3 = Database.Init({ version = 3, gold = { ["A-R"] = { [20368] = 100, [20369] = 120, [20370] = 250 } } })
 eq(stored(fromSchema3.gold["A-R"]), "488855:100 488879:120 488888:250", "schema 3 gold per day goes to each day's last hour, and today's to the current hour")
 local reopened = Database.Init({ version = 3, gold = { ["A-R"] = { [488800] = 90, [20370] = 250 } } })
@@ -333,7 +331,7 @@ scanned(back, NOW, 80)
 eq(back.hours["R-F"]["1"], "480001:95:1:0", "a scan from a clock set back leaves the newer hour as it is")
 
 local fromSchema4 = Database.Init({ version = 4, history = { ["R-F"] = { ["1"] = "20369:80:2:0,20370:100:3:105" } } })
-eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "5 20369:80:2:0,20370:100:3:105 nil",
+eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "6 20369:80:2:0,20370:100:3:105 nil",
   "schema 4 history is kept as it is, with no hours yet")
 -- Server data, as the Goldbook app writes it to ServerData.lua.
 local function serverData(scannedAt)
@@ -722,13 +720,13 @@ GameTooltip.lines, GameTooltip.itemLink = {}, "|Hitem:4306::::::|h[Silk Cloth]|h
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")), "  / Goldbook =  /   Vendor = 1s 50c", "tooltip of an unscanned item shows the vendor price")
 
-ns.db.merchant[2589], ns.db.vendorPaid[2589] = 50, 10
+ns.db.merchant[2589] = 50
 GameTooltip.lines, GameTooltip.itemLink = {}, cloth
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")),
-  "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 00c /   Market value = 1s 05c /   Vendor = 10c /   Merchant sells = 50c /   Alt+click: price history",
-  "tooltip of what merchants sell shows their price, what a vendor paid, and no price to post at")
-ns.db.merchant[2589], ns.db.vendorPaid[2589] = nil, nil
+  "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 00c /   Market value = 1s 05c /   Vendor = 13c /   Merchant sells = 50c /   Alt+click: price history",
+  "tooltip of what merchants sell shows their price, what a vendor pays, and no price to post at")
+ns.db.merchant[2589] = nil
 GameTooltip.lines, GameTooltip.itemLink = {}, "|Hitem:3857::::::|h[Coal]|h"
 Stub.items[3857] = { name = "Coal", quality = 1, vendor = 125, cached = true }
 Stub.tooltipCalls[1](GameTooltip)
@@ -866,16 +864,9 @@ eq(GoldbookWindow.search.hint.shown, false, "the hint goes when the box is click
 GoldbookWindow.search.scripts.OnEditFocusLost(GoldbookWindow.search)
 eq(GoldbookWindow.search.hint.shown, true, "the hint comes back when the box is left empty")
 eq(GoldbookWindow.headers[2].text .. " / " .. GoldbookWindow.headers[5].text, "BUY FROM / PROFIT ↓", "deals view has its own columns, most profit first")
-eq(cells(1), "Elemental Water x3 | 3s 34c | 4s 00c | 1s 98c | Vendor?", "deals view lists the vendor deal with its units and total profit")
-eq(GoldbookWindow.status.text, "Click a deal to search for it · Vendor? prices are unconfirmed",
-  "deals status says the item's own vendor price is not confirmed")
+eq(cells(1), "Elemental Water x3 | 3s 34c | 4s 00c | 1s 98c | Vendor", "deals view lists the vendor deal with its units and total profit")
+eq(GoldbookWindow.status.text, "Click a deal to search for it", "deals status says how to act on a deal")
 eq(segments(), "Min profit [10s 00c]", "deals show the profit a resale deal must make")
-GoldbookDB.vendorPaid[7070] = 400
-SlashCmdList.GOLDBOOK("deals")
-eq(cells(1) .. " / " .. GoldbookWindow.status.text, "Elemental Water x3 | 3s 34c | 4s 00c | 1s 98c | Vendor / Click a deal to search for it",
-  "a vendor price seen paid is confirmed")
-GoldbookDB.vendorPaid[7070] = nil
-SlashCmdList.GOLDBOOK("deals")
 
 local firstRow = GoldbookWindow.rows[1].hit
 firstRow.scripts.OnEnter(firstRow)
@@ -960,13 +951,13 @@ Stub.advance(0.2)
 eq(cells(1), "Sultan | 126g 00s 00c | +26g 00s 00c | today", "the redraw a moment later shows the new balance")
 eq(plain(GoldbookWindow.purse.text), "126g 00s 00c", "the title bar shows the account's gold")
 
-Stub.items[5000] = { name = "Rough Stone", quality = 1, vendor = 2, cached = false }
+Stub.items[5000] = { name = "Rough Stone", quality = 1, vendor = 2, itemData = 3, cached = false }
 Stub.bags[1][2] = { hyperlink = "|Hitem:5000::::::|h[Rough Stone]|h", stackCount = 4 }
 Stub.bags[1].slots = 2
 GoldbookWindow.tabs.sell.scripts.OnClick()
 eq(cells(4), "item 5000 x4 |  |  | 0c | No price", "a bag item whose name is still loading is listed by its id")
 Stub.advance(0.7)
-eq(cells(4), "Rough Stone x4 |  | 2c | 8c | Vendor", "the name and vendor price fill in once they arrive")
+eq(cells(4), "Rough Stone x4 |  | 2c | 8c | Vendor", "the name and the tooltip's vendor price fill in once they arrive, not the item's data")
 Stub.bags[1][3] = { stackCount = 1 }
 Stub.bags[1].slots = 3
 GoldbookWindow.tabs.sell.scripts.OnClick()
