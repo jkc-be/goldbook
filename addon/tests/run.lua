@@ -1203,6 +1203,8 @@ local LEGIBLE = {
   { "buttonText", "buttonBottom", 7 }, { "buttonText", "buttonTop", 7 },
   { "muted", "panel", 4.5 }, { "muted", "bg", 4.5 }, { "muted", "rail", 4.5 }, { "muted", "field", 4.5 },
   { "goldhi", "panel", 4.5 }, { "goldhi", "on", 4.5 }, { "goldhi", "rail", 4.5 }, { "gain", "panel", 4.5 }, { "loss", "panel", 4.5 },
+  { "warn", "panel", 4.5 }, { "info", "panel", 4.5 }, { "gain", "bg", 4.5 }, { "loss", "bg", 4.5 }, { "warn", "bg", 4.5 },
+  { "info", "bg", 4.5 }, { "muted", "bg", 4.5 }, { "bg", "goldhi", 4.5 },
   { "coins.gold", "panel", 4.5 }, { "coins.silver", "panel", 4.5 }, { "coins.copper", "panel", 4.5 }, { "coins.gold", "bg", 4.5 },
   { "brand", "titleBottom", 3 }, { "gold", "panel", 3 }, { "second", "panel", 3 },
   { "edge", "panel", 1.6 }, { "edge", "bg", 1.5 }, { "line", "panel", 1.3 }, { "line", "bg", 1.3 }, { "titleBottom", "bg", 1.1 },
@@ -1233,7 +1235,7 @@ for _, tab in pairs(GoldbookWindow.tabs) do
     shortest, strokes = math.min(shortest, math.sqrt((to[3] - from[3]) ^ 2 + (to[4] - from[4]) ^ 2)), strokes + 1
   end
 end
-eq(("%d strokes, the shortest %.1f"):format(strokes, shortest), "49 strokes, the shortest 4.0", "every rail icon stroke is long enough for the client to draw")
+eq(("%d strokes, the shortest %.1f"):format(strokes, shortest), "55 strokes, the shortest 4.0", "every rail icon stroke is long enough for the client to draw")
 
 eq(ns.UI.Theme(), "dark", "the window starts dark")
 SlashCmdList.GOLDBOOK("theme light")

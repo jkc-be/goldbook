@@ -15,6 +15,7 @@ local HELP = {
   "/gb sell says what to auction and what to vendor from your bags.",
   "/gb movers lists the prices that rose most since the day before, and under Fallers those that fell.",
   "/gb gold shows your account: gold per character, gains, net worth, a chart and this month's trades.",
+  "/gb mail lists the open mailbox and collects the mails it shows; it opens by itself at a mailbox.",
   "/gb show [text] opens the price list.",
   "/gb item <link or name>, or Alt+click any item, shows how its price moved day by day.",
   "/gb status shows what is priced and what is waiting for sync.",
@@ -57,6 +58,16 @@ local CHECKS = {
     end,
     set = function(checked)
       ns.db.settings.autoScan = checked or nil
+    end,
+  },
+  {
+    name = "mailView",
+    label = "Open the Mail view when a mailbox opens",
+    get = function()
+      return ns.db.settings.mailView ~= false
+    end,
+    set = function(checked)
+      ns.db.settings.mailView = checked and true or false
     end,
   },
   {

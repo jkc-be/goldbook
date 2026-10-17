@@ -169,7 +169,7 @@ eq(cells(1):match("^[^|]+") .. "/ " .. cells(6):match("^[^|]+"), "Linen Cloth x2
 GoldbookWindow.tabs.gold.scripts.OnClick()
 GoldbookWindow.tabs.trades.scripts.OnClick()
 eq(GoldbookWindow.tabs.trades.selected.shown, true, "the Trades tab is drawn selected")
-eq(GoldbookWindow.tabs.trades.point[3] .. " " .. GoldbookWindow.tabs.gold.point[3], "-190 -154", "the tabs run down the rail")
+eq(GoldbookWindow.tabs.trades.point[3] .. " " .. GoldbookWindow.tabs.gold.point[3], "-226 -154", "the tabs run down the rail, Mail between Gold and Trades")
 
 local window = { trades = {} }
 local old = {}
