@@ -777,16 +777,29 @@ td.item button {
   color: var(--muted);
 }
 
-.spark-cell {
-  width: 1%;
-  padding-right: 0;
+.week {
+  white-space: nowrap;
+}
+
+.week .trend {
+  display: inline-block;
+  min-width: 52px;
 }
 
 .spark {
-  display: block;
-  width: 72px;
-  height: 22px;
+  display: inline-block;
+  width: 56px;
+  height: 20px;
+  margin-right: 8px;
   overflow: visible;
+  vertical-align: middle;
+}
+
+.spark-base {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
 }
 
 .spark-line {
@@ -867,7 +880,7 @@ td.item button {
 }
 
 @media (min-width: 1240px) and (max-width: 1399px) {
-  #prices-view:has(> #detail:not([hidden])) #prices .spark-cell {
+  #prices-view:has(> #detail:not([hidden])) #prices .spark {
     display: none;
   }
 }
@@ -1680,7 +1693,7 @@ code {
 
   #prices .market,
   #prices .listed,
-  #prices .spark-cell,
+  #prices .spark,
   #history .mode,
   .holding .post,
   .holding .vendor,

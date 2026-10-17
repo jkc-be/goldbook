@@ -38,7 +38,8 @@ const SERIES = [
 // Prices on top, the quantity listed in a band below that shares the time axis.
 const CHART = { height: 300, left: 56, right: 64, price: [16, 192], supply: [214, 262], dates: 282 };
 const LABEL_HEIGHT = 14;
-const SPARK = { width: 72, height: 22, pad: 3 };
+const SPARK = { width: 56, height: 20, pad: 3, floor: 0.05 };
+const WEEK = 7;
 const NEWEST_SCANS = 5;
 const WOWHEAD_ITEM = "https://www.wowhead.com/forever/item=";
 const WIDE = matchMedia("(min-width: 1240px)");
@@ -232,18 +233,31 @@ function trend(change, span) {
   });
 }
 
-// One line per run of consecutive days with a price; a day without one leaves a gap.
-function sparkline(lows) {
+// The days the 7-day change spans, the last at the price the row shows, so
+// that the line ends where the change is measured.
+function weekLows(lows, current) {
+  const week = lows.slice(-(WEEK + 1));
+  week[week.length - 1] = current;
+  return week;
+}
+
+// One line per run of consecutive days with a price; a day without one leaves
+// a gap. `kind` is the direction of the change beside it, so both read alike.
+// The scale spans at least SPARK.floor of the price either way, so that a move
+// of a few percent stays a small move, and a dashed rule marks the first price.
+function sparkline(lows, kind) {
   const values = lows.filter((low) => low !== null);
-  const root = svg("svg", { class: "spark", viewBox: `0 0 ${SPARK.width} ${SPARK.height}`, "aria-hidden": "true" });
+  const root = svg("svg", { class: `spark ${kind}`, viewBox: `0 0 ${SPARK.width} ${SPARK.height}`, "aria-hidden": "true" });
   if (values.length === 0) {
     return root;
   }
-  root.classList.add(values.length > 1 ? direction(percent(values[0], values.at(-1))) : "flat");
   const [low, high] = [Math.min(...values), Math.max(...values)];
+  const middle = (low + high) / 2;
+  const reach = Math.max((high - low) / 2, middle * SPARK.floor);
   const x = (index) => SPARK.pad + (index / (lows.length - 1)) * (SPARK.width - 2 * SPARK.pad);
-  const y = (value) =>
-    high === low ? SPARK.height / 2 : SPARK.height - SPARK.pad - ((value - low) / (high - low)) * (SPARK.height - 2 * SPARK.pad);
+  const y = (value) => SPARK.height / 2 - ((value - middle) / reach) * (SPARK.height / 2 - SPARK.pad);
+  const base = y(values[0]).toFixed(1);
+  root.append(svg("path", { class: "spark-base", d: `M${SPARK.pad} ${base}H${SPARK.width - SPARK.pad}` }));
   let path = "";
   lows.forEach((value, index) => {
     if (value === null) {
@@ -696,6 +710,11 @@ async function loadHistory(itemKey) {
   }
 }
 
+function weekTrend(days, lows, current) {
+  const change = changeOver(seenDays(days, lows), current, WEEK);
+  return [sparkline(weekLows(lows, current), change === null ? "none" : direction(change)), trend(change, "over 7 days")];
+}
+
 function priceRow(item, market, trends) {
   const open = element("button", {
     className: `quality-${quality(item)}`,
@@ -714,8 +733,7 @@ function priceRow(item, market, trends) {
     element("td", { className: "number" }, [money(item.minBuyout, { aligned: true })]),
     marketCell,
     element("td", { className: "number listed", textContent: item.quantity.toLocaleString("en") }),
-    element("td", { className: "spark-cell" }, trends ? [sparkline(lows)] : []),
-    element("td", { className: "number" }, trends ? [trend(changeOver(seenDays(trends.days, lows), item.minBuyout, 7), "over 7 days")] : []),
+    element("td", { className: "number week" }, trends ? weekTrend(trends.days, lows, item.minBuyout) : []),
   ]);
   const compare = element("button", {
     className: "compare-item",
