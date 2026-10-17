@@ -940,6 +940,34 @@ GoldbookWindow.search.text = "silk"
 GoldbookWindow.search.scripts.OnTextChanged(GoldbookWindow.search, true)
 eq(GoldbookWindow.headers[1].text .. " " .. head(), "ITEM ↑ Prices |  | 0 items on Faramon-Horde", "typing a search leaves the item view for the price list")
 
+for index = 1, 30 do
+  GoldbookDB.items["900" .. index] = "1|Test Ore " .. index
+  GoldbookDB.prices["Faramon-Horde"]["900" .. index] = ("%d,%d,1,1760000016,0,0;%d;"):format(100 + index, index, 100 + index)
+end
+SlashCmdList.GOLDBOOK("show test ore")
+GoldbookWindow.headerButtons[5].scripts.OnClick()
+GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -1)
+local before = GoldbookWindow.headers[5].text .. " / " .. plain(GoldbookWindow.status.text):match("^(.-) ·") .. " / " .. cells(1)
+Stub.alt = true
+GoldbookWindow.rows[2].hit.scripts.OnClick(GoldbookWindow.rows[2].hit)
+Stub.alt = false
+eq(GoldbookWindow.head.back.shown and GoldbookWindow.head.back.label.text .. " / " .. head(), "Back to Prices / Test Ore 26 | 1s 26c | ",
+  "the item view offers a way back to the list it was opened from")
+GoldbookWindow.head.back.scripts.OnClick(GoldbookWindow.head.back)
+eq(GoldbookWindow.search.text .. " / " .. GoldbookWindow.headers[5].text .. " / " .. plain(GoldbookWindow.status.text):match("^(.-) ·") .. " / " .. cells(1),
+  "test ore / " .. before, "Back returns to the same list, search, sort and scroll")
+eq(before, "LISTED ↓ / 4–22 of 30 / Test Ore 27 | 1s 27c |  | 27 | 18m ago", "the list was sorted and scrolled before the item opened")
+eq(GoldbookWindow.head.back.shown, false, "the list has no Back button")
+GoldbookWindow:Hide()
+ns.UI.ShowItem("9001")
+eq(GoldbookWindow.head.back.label.text, "Back to Prices", "an item opened with the window closed goes back to the price list")
+GoldbookWindow.head.back.scripts.OnClick(GoldbookWindow.head.back)
+eq(head(), "Prices |  | 30 items on Faramon-Horde", "and Back goes there")
+for index = 1, 30 do
+  GoldbookDB.items["900" .. index], GoldbookDB.prices["Faramon-Horde"]["900" .. index] = nil, nil
+end
+GoldbookWindow.search:SetText("")
+
 GoldbookDB.items["2996"] = "1|Bolt of Linen Cloth"
 GoldbookDB.prices["Faramon-Horde"]["2996"] = "500,3,0,1760000016,0,0;500;"
 GoldbookDB.history["Faramon-Horde"]["2996"] = "20370:500:3:0"

@@ -71,7 +71,8 @@ local DEFAULT_THEME = "dark"
 local FRIZ, NARROW = STANDARD_TEXT_FONT, NumberFontNormal:GetFont()
 -- Words in Friz, which the game draws with even, firm strokes down to small
 -- sizes; figures in Arial Narrow, as the game's own number fonts are, so that
--- money fits its columns.
+-- money fits its columns. Column headers too, as Friz may lack their sort
+-- arrows.
 local TYPE = {
   brand = { FRIZ, 22 },
   rail = { FRIZ, 16 },
@@ -228,6 +229,10 @@ local window, scanButton
 local view, results, offset = "prices", {}, 0
 -- The item the item view shows: { key, name, quality }.
 local shownItem
+-- Where the item view's Back button returns to: { view, search, filters,
+-- sort, segment, offset } as they were when the item was opened, or nil for
+-- an item opened with the window closed.
+local origin
 -- sorting[view] = { column, descending }, from the view's own order until a header is clicked.
 local sorting = {}
 -- chosen[view] = the key of the segment picked in a view with segments.
@@ -238,6 +243,14 @@ local function noFilters()
   return { profession = "", kind = "all" }
 end
 local filters = noFilters()
+
+local function copy(list)
+  local copied = {}
+  for key, value in pairs(list) do
+    copied[key] = value
+  end
+  return copied
+end
 
 local function plural(count, noun)
   return count .. " " .. noun .. (count == 1 and "" or "s")
@@ -470,7 +483,8 @@ local SPARK = { "7 days", nil, 87, spark = true }
 --   sort      { column, descending }, the order rows come in; a segment may set its own
 --   segments  { key, label } choices at the right of the title, `segment` the first one picked;
 --             `badge` instead shows a label and a value there, `aside` a line of text
---   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line
+--   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line;
+--             `back` puts a button before it that returns to the view the item came from
 --   cards     (rows) -> up to four { key, value, detail }
 --   chart     { height, spec(segment) }, see drawChart
 --   heading   a heading over the table; `side` a panel of { label, value } lines beside it
@@ -657,6 +671,7 @@ local VIEWS = {
     end,
   },
   item = {
+    back = true,
     blocks = { "toolbar", "chart", "cards", "table" },
     search = "Search items",
     columns = { { "Day", "day", 150 }, { "Min buyout", "min", 150 }, { "Market value", "mv", 150 }, { "Listed", "qty", 100 }, { "Change", "change", 129 } },
@@ -986,7 +1001,20 @@ local function drawHead(definition)
   head.frame:SetShown(item)
   head.link:SetShown(item)
   head.link.key = spec.icon
-  head.title:SetPoint("LEFT", window, "TOPLEFT", PAGE_LEFT + (item and 32 or 0), -(PAGE_TOP + HEAD_HEIGHT / 2))
+  head.back:SetShown(definition.back == true)
+  head.back.label:SetText("Back to " .. VIEWS[origin and origin.view or "prices"].tab)
+  head.frame:ClearAllPoints()
+  if definition.back then
+    head.frame:SetPoint("LEFT", head.back, "RIGHT", 12, 0)
+  else
+    head.frame:SetPoint("LEFT", head, "LEFT", 0, 0)
+  end
+  head.title:ClearAllPoints()
+  if item then
+    head.title:SetPoint("LEFT", head.frame, "RIGHT", 6, 0)
+  else
+    head.title:SetPoint("LEFT", window, "TOPLEFT", PAGE_LEFT, -(PAGE_TOP + HEAD_HEIGHT / 2))
+  end
   if item then
     head.icon:SetTexture(itemIcon(spec.icon))
     head.frame:SetColorTexture(hexRGB(qualityHex(spec.quality)))
@@ -1481,7 +1509,6 @@ local function addHead()
   head:SetSize(PAGE_WIDTH, HEAD_HEIGHT)
   head.title = label(head, "title", "text")
   head.icon, head.frame = addIcon(head, 24)
-  head.frame:SetPoint("LEFT", head, "LEFT", 0, 0)
   head.figure = label(head, "figure", "text")
   head.figure:SetPoint("BOTTOMLEFT", head.title, "BOTTOMRIGHT", 14, 1)
   head.sub = label(head, "small", "muted")
@@ -1512,6 +1539,27 @@ local function addHead()
     end
   end)
   head.link = link
+
+  -- On the link, so that it takes the clicks over the item's name.
+  local back = UI.Button(link, "", 1, 24)
+  back:SetPoint("LEFT", head, "LEFT", 0, 0)
+  back:SetPoint("RIGHT", back.label, "RIGHT", 11, 0)
+  back.label:ClearAllPoints()
+  back.label:SetPoint("LEFT", head, "LEFT", 23, 0)
+  -- A chevron pointing back, drawn as the rail's icons are.
+  if back.CreateLine then
+    for _, stroke in ipairs({ { 13, 7, 8.5, 12 }, { 8.5, 12, 13, 17 } }) do
+      local line = back:CreateLine(nil, "ARTWORK")
+      line:SetThickness(1.6)
+      line:SetStartPoint("TOPLEFT", back, stroke[1], -stroke[2])
+      line:SetEndPoint("TOPLEFT", back, stroke[3], -stroke[4])
+      UI.Fill(line, "buttonText")
+    end
+  end
+  back:SetScript("OnClick", function()
+    UI.Back()
+  end)
+  head.back = back
 
   -- The segmented control: a line around buttons that frame their text.
   local control = CreateFrame("Frame", nil, head)
@@ -2007,7 +2055,36 @@ function UI.ShowItem(linkOrKey)
     name, quality = infoName, infoQuality
   end
   shownItem = { key = key, name = name or ("item " .. key), quality = quality or 1 }
+  -- One item after another keeps the view the first came from.
+  if not (window and window:IsShown()) then
+    origin = nil
+  elseif view ~= "item" then
+    local sort = sorting[view]
+    origin = { view = view, search = window.search:GetText(), filters = copy(filters), sort = sort and { unpack(sort) },
+      segment = chosen[view], offset = offset }
+  end
   UI.Show("item")
+end
+
+-- From the item view to where it was opened from, as it was left; to the
+-- price list when it was opened with the window closed.
+function UI.Back()
+  local back = origin or { view = "prices" }
+  origin = nil
+  view = back.view
+  if back.filters then
+    filters = back.filters
+    chipLabels()
+  end
+  sorting[view] = back.sort or sorting[view]
+  chosen[view] = back.segment or chosen[view]
+  if back.search and back.search ~= window.search:GetText() then
+    window.search:SetText(back.search)
+  else
+    refresh()
+  end
+  offset = math.max(0, math.min(back.offset or 0, #results - visibleRows()))
+  render()
 end
 
 function UI.Toggle()
