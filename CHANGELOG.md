@@ -7,6 +7,16 @@ were released with.
 
 ## Unreleased
 
+### Website
+
+- Restyle the site in the Ledger design: a light parchment theme by default
+  and a dark ledger theme chosen with the Light/Dark switch in the side rail.
+  The browser remembers the choice.
+- Show the account's total gold in the top bar and the sign-in state with
+  Log in or Log out in the rail on every page.
+- Show the roster above a character's page, with that character marked.
+- Move each item's Compare toggle to the start of its row.
+
 ## 0.1.13 - 2026-10-16
 
 - Upload seller snapshots in batches of up to 100 instead of one request per
