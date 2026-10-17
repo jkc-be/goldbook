@@ -377,6 +377,10 @@ frame:SetScript("OnEvent", function(_, event, first, second)
   if event == "ADDON_LOADED" and first == ADDON then
     GoldbookDB = Database.Init(GoldbookDB)
     ns.db = GoldbookDB
+    local taken = Database.MergeServer(ns.db, GoldbookServerData)
+    if taken > 0 then
+      ns.Print("Took " .. plural(taken, "newer price") .. " from the Goldbook server.")
+    end
   elseif event == "PLAYER_LOGIN" then
     -- Before login the normalized realm name may be unknown, and gold booked
     -- under the display name would count the character twice.

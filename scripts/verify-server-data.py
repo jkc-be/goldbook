@@ -36,6 +36,29 @@ io.write(table.concat(lines, "\n"), "\n")
 """
 
 
+# The installed addon, as the game loads it with the saved data and the written
+# ServerData.lua, then what its merge left in GoldbookDB.
+MERGE = r"""
+local root, folder, saved = arg[1], arg[2], arg[3]
+local Stub = dofile(root .. "/addon/tests/wowstub.lua")
+dofile(saved)
+Stub.loadAddon(folder)
+Stub.fire("ADDON_LOADED", "Goldbook")
+local db, realm = GoldbookDB, "Faramon-Horde"
+for _, line in ipairs({
+  "price 2589 " .. db.prices[realm]["2589"],
+  "price 12345 " .. db.prices[realm]["12345"],
+  "days 2589 " .. db.history[realm]["2589"],
+  "hours 2589 " .. db.hours[realm]["2589"],
+  "from 2589 " .. tostring(db.fromServer[realm]["2589"]),
+  "price 7070 " .. db.prices["Mirage-Alliance"]["7070"],
+  "said " .. (Stub.printed[#Stub.printed] or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""),
+}) do
+  io.write(line, "\n")
+end
+"""
+
+
 def esc(text):
     return str(text).replace("\\", "\\\\").replace("\n", "\\n")
 
@@ -121,6 +144,19 @@ def main():
                 assert line in lines, (line, [l for l in lines if l.split("\t")[:3] == line.split("\t")[:3]])
             assert not any("Nowhere" in line for line in lines), "a realm the server does not know stays out"
 
+            script = directory / "merge.lua"
+            script.write_text(MERGE)
+            merged = helpers["run"](["luajit", script, ROOT, addon, saved]).splitlines()
+            assert merged == [
+                "price 2589 90,30,3,1760003600,95,1760003600;100;",
+                "price 12345 70000,1,1,1760003600,71000,1760003600;70000;",
+                "days 2589 20370:100:100:105",
+                "hours 2589 488888:100:100:105,488889:90:30:95",
+                "from 2589 1760003600",
+                "price 7070 250,9,0,1760007200,0,0;250;",
+                "said Goldbook Took 3 newer prices from the Goldbook server.",
+            ], merged
+
             content, modified = written.read_bytes(), written.stat().st_mtime_ns
             output = helpers["run"](command)
             assert "unchanged" in output and "written to" not in output, output
@@ -130,7 +166,7 @@ def main():
             assert not [p for p in addon.iterdir() if p.name.startswith(".")], list(addon.iterdir())
             assert {path: path.read_bytes() for path in (saved, other)} == before, "SavedVariables are never written"
         print(f"Verified seeded server -> sync -> ServerData.lua ({len(content)} bytes) -> LuaJIT: "
-              "every exported item matches, names are escaped, unchanged data is not rewritten, updates keep the file.")
+              "every exported item matches, names are escaped, the addon merges the file, unchanged data is not rewritten, updates keep the file.")
 
 
 if __name__ == "__main__":

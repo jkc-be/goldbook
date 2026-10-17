@@ -35,7 +35,8 @@ local function addPrices(tooltip, link)
   tooltip:AddLine(" ")
   tooltip:AddDoubleLine(
     "Goldbook" .. (stack > 1 and (" x" .. stack) or ""),
-    record and (record.qty .. " listed, seen " .. Codec.Age(time() - record.seen)) or "",
+    record and (record.qty .. " listed, seen " .. Codec.Age(time() - record.seen)
+      .. (Database.FromServer(ns.db, realmKey, key) and ", from the server" or "")) or "",
     1, 0.82, 0, 0.6, 0.6, 0.6
   )
   if record then

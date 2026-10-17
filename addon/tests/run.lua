@@ -335,6 +335,64 @@ eq(back.hours["R-F"]["1"], "480001:95:1:0", "a scan from a clock set back leaves
 local fromSchema4 = Database.Init({ version = 4, history = { ["R-F"] = { ["1"] = "20369:80:2:0,20370:100:3:105" } } })
 eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "5 20369:80:2:0,20370:100:3:105 nil",
   "schema 4 history is kept as it is, with no hours yet")
+-- Server data, as the Goldbook app writes it to ServerData.lua.
+local function serverData(scannedAt)
+  return {
+    version = 1,
+    server = "https://example.test/goldbook",
+    items = { ["1"] = "1|Server Name", ["3"] = "2|Gold Ore" },
+    realms = { ["R-F"] = {
+      scannedAt = scannedAt,
+      prices = {
+        ["1"] = "90,7,2," .. NOW + DAY .. ",95," .. NOW + DAY,
+        ["2"] = "400,3,0," .. NOW + DAY .. ",410," .. NOW + DAY,
+        ["3"] = "1958,183,0," .. NOW + DAY .. ",0,0",
+      },
+      days = { ["1"] = "19999:80:1:0,20000:70:9:0,20001:90:7:95", ["3"] = "20001:1958:183:0" },
+      hours = { ["1"] = "480000:70:9:0,480024:90:7:95" },
+    } },
+  }
+end
+local function saved(db)
+  local lines = {}
+  for _, name in ipairs({ "prices", "history", "hours", "fromServer" }) do
+    for key, value in pairs(db[name]["R-F"] or {}) do
+      lines[#lines + 1] = name .. " " .. key .. " " .. value
+    end
+  end
+  for key, value in pairs(db.items) do
+    lines[#lines + 1] = "items " .. key .. " " .. value
+  end
+  table.sort(lines)
+  return table.concat(lines, "\n")
+end
+local merged = Database.Init(nil)
+scanned(merged, NOW, 100, 120, 4)
+merged.items["1"] = "1|Linen Cloth"
+merged.prices["R-F"]["2"] = Codec.EncodePrice({ min = 500, qty = 1, n = 0, seen = NOW + 2 * DAY, mv = 0, mvAt = 0, days = { 500 }, ladder = {} })
+eq(Database.MergeServer(merged, serverData(NOW + DAY)), 2, "the server's newer prices are taken, the item seen later here is not")
+eq(saved(merged), table.concat({
+  "fromServer 1 1728086400",
+  "fromServer 3 1728086400",
+  "history 1 19999:80:1:0,20000:100:4:120,20001:90:7:95",
+  "history 3 20001:1958:183:0",
+  "hours 1 480000:100:4:120,480024:90:7:95",
+  "items 1 1|Linen Cloth",
+  "items 3 2|Gold Ore",
+  "prices 1 90,7,2,1728086400,95,1728086400;80,100,90;",
+  "prices 2 500,1,0,1728172800,410,1728086400;500;",
+  "prices 3 1958,183,0,1728086400,0,0;1958;",
+}, "\n"), "the server fills the days, hours and names this data lacks, keeps the local day and name, and gives a newer market value")
+eq(tostring(Database.FromServer(merged, "R-F", "1")) .. " " .. tostring(Database.FromServer(merged, "R-F", "2")), "true false",
+  "a price taken from the server is marked as such")
+local once = saved(merged)
+eq(Database.MergeServer(merged, serverData(NOW + DAY)) .. " " .. tostring(saved(merged) == once), "0 true", "the same server data again is skipped")
+merged.serverMerged["R-F"] = nil
+eq(Database.MergeServer(merged, serverData(NOW + DAY)) .. " " .. tostring(saved(merged) == once), "0 true", "and merged again it changes nothing")
+scanned(merged, NOW + 3 * DAY, 85)
+eq(tostring(Database.FromServer(merged, "R-F", "1")), "false", "a scan here clears the server's mark")
+eq(Database.MergeServer(Database.Init(nil), { version = 2, realms = serverData(NOW).realms }), 0, "data of a version the addon does not know is left alone")
+
 local trend = Advisor.Evolution({
   { day = 19960, min = 200, qty = 1, mv = 0 },
   { day = 19969, min = 250, qty = 2, mv = 0 },
@@ -643,6 +701,11 @@ Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")),
   "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 00c /   Market value = 1s 05c /   Post at = 99c /   Vendor = 13c /   Alt+click: price history",
   "tooltip lines")
+GoldbookDB.fromServer["Faramon-Horde"] = { ["2589"] = 1760000016 }
+GameTooltip.lines = {}
+Stub.tooltipCalls[1](GameTooltip)
+eq(plain(GameTooltip.lines[2]), "Goldbook = 100 listed, seen 3m ago, from the server", "the tooltip says a price came from the server")
+GoldbookDB.fromServer["Faramon-Horde"] = nil
 
 Stub.shift, GameTooltip.owner, GameTooltip.lines = true, { count = 20 }, {}
 Stub.tooltipCalls[1](GameTooltip)
@@ -950,6 +1013,11 @@ eq(cells(1), "Thu 09 Oct | 1s 00c | 1s 05c | 100 | ", "the newest day comes firs
 eq(cells(2), " |  |  |  | ", "one row per day the item was seen")
 eq(plain(GoldbookWindow.status.text), "1 day recorded for Linen Cloth · Shift+click its name to link it in chat", "item view status")
 eq(head(), "Linen Cloth | 1s 00c | ", "the item view's title names the item and its price")
+GoldbookDB.fromServer["Faramon-Horde"] = { ["2589"] = 1760000016 }
+ns.UI.Refresh()
+eq(plain(GoldbookWindow.cards.cards[3].detail.text), "From the server, 18m ago", "the item view says a price came from the server")
+GoldbookDB.fromServer["Faramon-Horde"] = nil
+ns.UI.Refresh()
 eq(selectedTabs(), "", "the item view has no tab to mark")
 eq(GoldbookWindow.scroll.shown, false, "one day needs no scroll marker")
 marks, lines, dots = plotted()

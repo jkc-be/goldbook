@@ -489,7 +489,8 @@ local function itemCards()
   return {
     { "Market value", record.mv > 0 and money(record.mv) or none, record.mv > 0 and tint("muted", Codec.Age(now - record.mvAt)) or nil },
     { "Usual", usual and money(usual) or none, vendor > 0 and labelled("Vendor", money(vendor)) or nil },
-    { "Listed", tostring(record.qty), tint("muted", "Seen " .. Codec.Age(now - record.seen)) },
+    { "Listed", tostring(record.qty), tint("muted", (Database.FromServer(ns.db, ns.RealmKey(), shownItem.key) and "From the server, " or "Seen ")
+      .. Codec.Age(now - record.seen)) },
     { "30-day low", moved.low and money(moved.low) or none, moved.high and labelled("High", money(moved.high)) or nil },
   }
 end

@@ -12,7 +12,7 @@ Data flows in three steps:
 
 1. The server answers `GET /api/export` with one realm's prices and history as JSON.
 2. The app (`goldbook_sync::write_server_data`) fetches the export for each realm in the flavor's SavedVariables and writes `ServerData.lua`.
-3. The addon reads `GoldbookServerData`. Merging it into `GoldbookDB` is a later change. [Merge rules](#merge-rules) describe how that merge behaves.
+3. The addon merges `GoldbookServerData` into `GoldbookDB` when it loads, by the [merge rules](#merge-rules).
 
 ## The export endpoint
 
@@ -118,13 +118,14 @@ The rule needs no version comparison. The app writes the file, so a newer one is
 
 ## Merge rules
 
-The addon does not read `GoldbookServerData` yet. The change that merges it into `GoldbookDB` follows these rules:
+`Database.MergeServer` merges the file into `GoldbookDB` when the addon loads, right after `Database.Init`. It follows these rules:
 
-- A local price wins when its `seen` is newer than or equal to the server's `seen`. Otherwise the server's `min`, `qty`, `n` and `seen` replace it, and the ladder becomes empty. The server's `mv` and `mvAt` replace the local ones only when the server's `mvAt` is newer.
-- Server days fill only the days that the local history lacks. A day that both have keeps the local entry. The merged history stays sorted by day and keeps only the last `KEPT_DAYS` days. Server hours fill hourly history the same way, if the addon keeps one.
+- A local price wins when its `seen` is newer than or equal to the server's `seen`. Otherwise the server's `min`, `qty`, `n` and `seen` replace it, the ladder becomes empty, and the record's recent days are the lows of the merged history's last 14 days. The server's `mv` and `mvAt` replace the local ones only when the server's `mvAt` is newer, also when the local price wins.
+- Server days fill only the days that the local history lacks. A day that both have keeps the local entry. The merged history stays sorted by day and keeps only the last `KEPT_DAYS` days. Server hours fill `GoldbookDB.hours`, which uses the same encoding, the same way, and keep the last 168 hours.
 - Server names fill only the items that `GoldbookDB.items` lacks.
-- The merge is idempotent. A second merge of the same file after `/reload` changes nothing, because every entry it would copy is already there or lost to a newer local one. The addon can skip the merge when the realm's `scannedAt` equals the `scannedAt` it merged last.
-- The addon marks a price it took from the server, for example with the server's `seen` in a `fromServer[realmKey][itemKey]` table, so the window and tooltip can say the price came from the server. A local scan of the item clears the mark.
+- The merge is idempotent. A second merge of the same file after `/reload` changes nothing, because every entry it would copy is already there or lost to a newer local one. The addon skips a realm whose `scannedAt` equals the one it merged last, kept in `serverMerged[realmKey]`.
+- The addon marks a price it took from the server with the server's `seen` in `fromServer[realmKey][itemKey]`. The tooltip then says "from the server" after the age of the price, and the item view's Listed card says "From the server". A local scan of the item clears the mark. Chat says how many prices the addon took, when it took any.
+- Merging the server data does not change `scanned`, the time of the newest scan here, so the quick scan when the auction house opens still runs.
 
 ## Limitations
 
