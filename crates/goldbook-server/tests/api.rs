@@ -711,7 +711,7 @@ async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
     sale["itemKey"] = json!("2589");
     let entries = [
         sale,
-        entry(1760000900, "tradeIn", "Gold", 1, 50000, Some("Mirelle")),
+        entry(1760000850, "tradeIn", "Gold", 1, 50000, Some("Mirelle")),
         entry(
             1760000800,
             "cod",
@@ -742,8 +742,8 @@ async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
     );
     let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
     let expected = json!([
-        {"name":"Sultan","realm":"Faramon","at":1760000900,"side":"tradeIn","item":"Gold","itemKey":null,"quality":null,"count":1,"price":50000,"fee":0,"party":"Mirelle"},
         {"name":"Sultan","realm":"Faramon","at":1760000900,"side":"tradeSell","item":"Linen Cloth","itemKey":"2589","quality":null,"count":20,"price":0,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000850,"side":"tradeIn","item":"Gold","itemKey":null,"quality":null,"count":1,"price":50000,"fee":0,"party":"Mirelle"},
         {"name":"Sultan","realm":"Faramon","at":1760000800,"side":"cod","item":"Gnomish Widget","itemKey":null,"quality":null,"count":1,"price":7000,"fee":0,"party":"Mirelle"},
         {"name":"Sultan","realm":"Faramon","at":1760000700,"side":"merchant","item":"Simple Flour","itemKey":null,"quality":null,"count":5,"price":125,"fee":0,"party":null},
         {"name":"Sultan","realm":"Faramon","at":1760000600,"side":"mailIn","item":"Thanks for the help","itemKey":null,"quality":null,"count":1,"price":12000,"fee":0,"party":"Mirelle"},

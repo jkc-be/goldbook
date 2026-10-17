@@ -1270,7 +1270,7 @@ function holdings(title, snapshot, seen, missing) {
 // The gold the addon booked, newest first:
 // [{ name, realm, at, side, item, itemKey, quality, count, price, fee, party }].
 // `price` is the whole stack's and never negative, `fee` the auction house cut
-// and `party` the other player of a trade or mail, or null.
+// and `party` the other player of a trade, mail or cash on delivery, or null.
 const NEWEST_TRADES = 20;
 
 // Every side an entry can have. Revenue adds its price less the cut to the

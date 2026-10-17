@@ -38,8 +38,8 @@ const SIDES: [(&str, u64); 21] = [
 /// repair bill or gold sent by mail. `item` names the goods, or describes a
 /// movement of gold alone. `price` is the whole stack's and never negative;
 /// the side gives its direction. `fee` is the auction house cut, 0 for
-/// anything but an auction sale. `party` is the other player of a trade or a
-/// mail.
+/// anything but an auction sale. `party` is the other player of a trade, a
+/// mail or a cash on delivery.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Trade {

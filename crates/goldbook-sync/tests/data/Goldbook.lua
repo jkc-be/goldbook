@@ -269,7 +269,7 @@ GoldbookDB = {
 ["side"] = "tradeBuy",
 }, -- [1]
 {
-["at"] = 1760000300,
+["at"] = 1760000350,
 ["count"] = 1,
 ["fee"] = 0,
 ["item"] = "Gold",
@@ -290,7 +290,7 @@ GoldbookDB = {
 ["side"] = "tradeSell",
 }, -- [1]
 {
-["at"] = 1760000300,
+["at"] = 1760000350,
 ["count"] = 1,
 ["item"] = "Gold",
 ["party"] = "Mirelle",
