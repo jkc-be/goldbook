@@ -981,10 +981,54 @@ workflow**. Pull requests and pushes to `main` run the test, local Docker stack,
 scan jobs, including the local HTTP checks and sandbox smoke test. Production deployment is a separate
 manual workflow.
 
+### Website
+
+The website is laid out like the addon's window. The rail on the left has
+three hubs, and each hub has tabs at the top of the page:
+
+| Hub | Tabs | Sign-in |
+| --- | --- | --- |
+| **Market** | Prices, Deals, Movers | No |
+| **Inventory** | Bags | Yes |
+| **Ledger** | Gold, Accounting | Yes |
+
+Under **Account** the rail has **Characters** and **Download**. Mail is in
+game only. Each tab has its own address, such as `#prices`, `#deals`,
+`#movers`, `#bags`, `#gold` or `#accounting`, and a character's page is at
+`#character/<name>-<realm>`. Links to the older `#characters/<name>-<realm>`
+still open it. The Market tabs show the realm chosen at the top. The other
+tabs show the login when you are signed out.
+
+- **Prices** lists the newest scan's prices. See
+  [Filter item lists](#filter-item-lists), [Compare item prices](#compare-item-prices)
+  and [Order book history](#order-book-history).
+- **Deals** lists the resale deals of the newest scan, found as in
+  [How deals are found](#how-deals-are-found): at most 70% of the lower of the
+  market value the newest scan measured and the median of at least three
+  earlier days, for an item merchants do not sell, with at least 10s profit
+  after the cut. It differs from `/gb deals` in three ways. Vendor deals are
+  left out, because the server has no vendor prices. Profit is per unit,
+  because the server keeps no price levels, as after a quick scan in game.
+  Only [the goods merchants sell](#goods-merchants-sell) that Goldbook knows
+  from the start count, not those your characters found at merchants.
+- **Movers** lists the prices that rose, or under **Fallers** fell, since the
+  day before each item was last seen, as `/gb movers` does.
+- **Bags** lists the items in the bags and banks of all your characters, the
+  most valuable first, with the values your characters last saved. Choose a
+  character to see only theirs.
+- **Gold** states the gold of all your characters together, or of the one
+  you choose, as a character's page does, with a row per character.
+- **Accounting** books the gold all your characters earned and spent. Each
+  character's page books its own.
+
+The tables of Prices, Deals and Movers open an item's price history in
+Prices. The server works out Deals and Movers from the lowest price of each
+day in the last 60, as the prices it sends the addon.
+
 ### Filter item lists
 
-Use **Profession**, **Item type**, and **Quality** above the price list on the
-website or desktop app. Selecting a profession shows only its materials. Choose **Crafted items** to see its products instead. Filters combine
+Use **Profession**, **Item type**, and **Quality** above Prices, Deals and
+Movers on the website or desktop app. Selecting a profession shows only its materials. Choose **Crafted items** to see its products instead. Filters combine
 with item search and sorting; **Clear filters** restores the full list.
 
 The in-game Goldbook window has the same dropdown lists on Prices, Deals,

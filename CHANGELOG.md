@@ -61,6 +61,9 @@ were released with.
 - Keep the other player of a trade or mail as `party`, and return it from
   `/api/trades`. Deploy the server before the app: an older server refuses an
   account upload with the new entries.
+- Add `/api/deals` and `/api/movers`. They apply the addon's deal and mover
+  rules to the realm's newest scan and the lowest price of each day in the
+  last 60, with the same search and filters as `/api/prices`.
 
 ### Website
 
@@ -68,6 +71,27 @@ were released with.
   and the profit realized on goods, and filters the history to all, revenue
   or expenses. Each entry names its source, such as "Trade sale to Mirelle"
   or "Mail gold in from Mirelle".
+- The website has the addon's navigation: **Market**, **Inventory** and
+  **Ledger** in the rail, with **Characters** and **Download** under Account.
+  Each hub has tabs at the top of the page: Market has Prices, Deals and
+  Movers, Inventory has Bags, and Ledger has Gold and Accounting. Every tab
+  has its own address, such as `#deals`, so links, back and forward work.
+  Mail stays in game.
+- Add **Deals**: what the newest scan lists at 70% or less of its resale
+  price, found as the addon finds resale deals, with the profit per unit
+  after the cut. Vendor deals stay in game, because the server has no vendor
+  prices.
+- Add **Movers**: the prices that rose or fell since the day before, as the
+  addon's Movers view has them.
+- Add **Bags**: the bags and banks of all the account's characters in one
+  list, with a character filter.
+- Add **Gold**: the account's gold over time, all characters summed or one
+  of them, with the same figures and chart as a character's page, and a row
+  per character.
+- The account's Accounting moves from Characters to Ledger. Each character's
+  page keeps its own.
+- A character's page is at `#character/<name>-<realm>`. Links to the old
+  `#characters/<name>-<realm>` still open it.
 
 ## 0.2.3 - 2026-10-17
 
