@@ -178,6 +178,15 @@ def exercise(port, directory):
         assert json.loads(request(port, host, query + '99999')[2])['snapshot'] is None
         assert request(port, host, prefix + '/api/login', body)[0] == 413, 'public routes keep 64 KiB buffer'
         assert request(port, host, path, b' ' * (20 * 1024 * 1024 + 1), 'dev-token')[0] == 413
+        if index == 0:
+            rows = [[str(30000 + i), 1000 + i, 0, 1, 0] for i in range(40000)]
+            scan = dict(realm='ProxyExport', faction='Horde', region='EU', scannedAt=1760000000, mode='browse',
+                        scanner='Proxy', build='1.15.7', rows=rows, items={})
+            assert request(port, host, prefix + '/api/scans', json.dumps(scan).encode(), 'dev-token')[0] == 200
+        for _ in range(3):
+            status, _, raw = request(port, host, prefix + '/api/export?realm=ProxyExport&faction=Horde')
+            assert status == 200 and len(raw) > 2 * 1024 * 1024, f'{host}{prefix}: export got {status}, {len(raw)} bytes'
+            assert json.loads(raw)['items']['69999']['price'] == [40999, 1, 0, 1760000000, 0, 0]
         # Drive the actual sync executable through Traefik, including lost state.
         fixture = directory / 'Books.lua'
         subprocess.run(['luajit', 'addon/tests/orderbook.lua', str(fixture)], cwd=ROOT, check=True)
@@ -185,7 +194,7 @@ def exercise(port, directory):
             subprocess.run([str(ROOT / 'target/debug/goldbook-sync'), '--once', '--file', str(fixture),
                 '--api', f'http://{host}:{port}{prefix}', '--token', 'dev-token',
                 '--state', str(directory / f'{index}-{state}')], cwd=ROOT, check=True)
-        print(f'Verified {host}{prefix}: {len(body):,}-byte batch, auth, readback, retries, atomic validation and body limits.', flush=True)
+        print(f'Verified {host}{prefix}: {len(body):,}-byte batch, auth, readback, retries, atomic validation, body limits and a {len(raw):,}-byte export.', flush=True)
     status, headers, _ = request(port, '127.0.0.1', '/goldbook')
     assert status == 301 and headers['Location'].endswith('/goldbook/')
     return body
