@@ -2,7 +2,7 @@
 publish = false
 license-file = "../../LICENSE"
 name = "goldbook-desktop"
-version = "0.2.1"
+version = "0.2.3"
 edition.workspace = true
 rust-version.workspace = true
 description = "Uploads World of Warcraft auction scans and character snapshots"

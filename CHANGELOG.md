@@ -7,6 +7,8 @@ were released with.
 
 ## Unreleased
 
+## 0.2.3 - 2026-10-17
+
 ### Addon
 
 - Vendor prices come from the sell price the game's tooltip shows, for every
