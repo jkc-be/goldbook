@@ -523,7 +523,7 @@ local VIEWS = {
     search = "Search items",
     chips = { "profession", "kind", "quality" },
     keep = keepItem,
-    columns = { { "Item", "name", 270 }, { "Min buyout", "min", 100 }, { "Market value", "mv", 100 }, SPARK, { "Listed", "qty", 56 }, { "Seen", "seen", 66 } },
+    columns = { { "Item", "name", 250 }, { "Min buyout", "min", 100 }, { "Market value", "mv", 100 }, SPARK, { "Listed", "qty", 56 }, { "Seen", "seen", 86 } },
     sort = { 1, false },
     rows = function(text)
       return Database.Search(ns.db, ns.RealmKey(), text)
