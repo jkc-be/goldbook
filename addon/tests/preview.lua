@@ -347,8 +347,9 @@ function layout(snapshot, screen) {
   const STRATA = ["BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP"];
   const GOLD = "rgb(255,209,0)", WHITE = "rgb(255,255,255)", GREY = "rgb(128,128,128)";
   const FACE = '"Friz Quadrata TT", Georgia, serif';
-  // Marcellus stands in for Friz Quadrata, which a browser does not have.
-  const FACES = { friz: '"Marcellus", "Friz Quadrata TT", Georgia, serif', narrow: '"Arial Narrow", "Roboto Condensed", sans-serif' };
+  // Marcellus stands in for Friz Quadrata, which a browser does not have,
+  // with Optima's digits, as Friz has lining figures and Marcellus has not.
+  const FACES = { friz: '"Friz digits", "Marcellus", "Friz Quadrata TT", Georgia, serif', narrow: '"Arial Narrow", "Roboto Condensed", sans-serif' };
   const LAYERS = ["BACKGROUND", "BORDER", "ARTWORK", "OVERLAY", "HIGHLIGHT"];
   const PANEL = { background: "rgba(0,0,0,0.85)", border: "2px solid rgb(150,135,100)", borderRadius: "4px" };
   const TEMPLATE_SIZE = { UIPanelCloseButton: [24, 24], UICheckButtonTemplate: [20, 20] };
@@ -633,11 +634,12 @@ local function page(view, data)
   return table.concat({
     '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>Goldbook preview: ', view, "</title>\n",
     "<style>body { margin: 0; background: #777; } #screen { position: relative; overflow: hidden; width: ",
-    SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px;", flags.client and " filter: url(#client);" or "", " }</style>\n",
+    SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px;", flags.client and " filter: url(#client);" or "", " }\n",
+    '@font-face { font-family: "Friz digits"; src: local("Optima Regular"), local("Optima"); unicode-range: U+0030-0039; }</style>\n',
     '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=block">\n',
     "</head><body>", flags.client and clientFilter() or "", '<div id="screen"></div>\n<script>\n', LAYOUT,
     -- Text is measured for the layout, so the faces must have loaded first.
-    '\nPromise.all([document.fonts.load(\'16px "Marcellus"\'), document.fonts.load(\'14px "Arial Narrow"\')])',
+    '\nPromise.all([document.fonts.load(\'16px "Marcellus"\'), document.fonts.load(\'14px "Arial Narrow"\'), document.fonts.load(\'14px "Friz digits"\', "0")])',
     '.catch(() => {}).then(() => layout(', (data:gsub("</", "<\\/")),
     ', document.getElementById("screen")));\n</script></body></html>\n',
   })
@@ -737,11 +739,26 @@ local function capture(view, roots, focus)
   write(base .. ".html", page(view, encoded))
 
   local url = quote("file://" .. base .. ".html")
-  local dom = output(CHROME .. "--dump-dom " .. url .. " 2>/dev/null")
-  local x, y, width, height = dom:match('data%-crop="(%d+),(%d+),(%d+),(%d+)"')
+  -- Chrome is sometimes killed when memory runs short, so each step gets three tries.
+  local dom, x, y, width, height
+  for _ = 1, 3 do
+    dom = output(CHROME .. "--dump-dom " .. url .. " 2>/dev/null")
+    x, y, width, height = dom:match('data%-crop="(%d+),(%d+),(%d+),(%d+)"')
+    if x then
+      break
+    end
+  end
   assert(x, view .. ": the page did not lay out; open " .. base .. ".html in a browser to see why")
   x, y, width, height = x * DPR, y * DPR, width * DPR, height * DPR
-  sh(CHROME .. "--screenshot=" .. quote(base .. ".png") .. " " .. url .. " >/dev/null 2>&1")
+  local shot = CHROME .. "--screenshot=" .. quote(base .. ".png") .. " " .. url .. " >/dev/null 2>&1"
+  local status = os.execute(shot)
+  for _ = 2, 3 do
+    if status == 0 or status == true then
+      break
+    end
+    status = os.execute(shot)
+  end
+  assert(status == 0 or status == true, "failed: " .. shot)
   -- Without dates in the file, two runs of an unchanged UI give identical PNGs.
   sh(("magick %s -crop %dx%d+%d+%d +repage -strip -define png:exclude-chunks=date,time %s")
     :format(quote(base .. ".png"), width, height, x, y, quote(base .. ".png")))
