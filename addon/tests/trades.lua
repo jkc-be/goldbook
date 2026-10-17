@@ -106,20 +106,20 @@ eq(GoldbookWindow.version.text .. " " .. tostring(GoldbookWindow.version.point[2
   "the window shows the addon's version beside its title")
 eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[3].text .. " " .. GoldbookWindow.headers[4].text, "Item Net Character",
   "the trades view has its own columns")
-eq(cells(1), "Linen Cloth x20 | 1s 0c | +19s 0c | Sultan | just now", "the newest trade comes first; a sale nets its price less the cut")
-eq(cells(3), "Bandit Cinch of the Monkey x1 | 90s 0c | -90s 0c | Sultan | 10m ago", "a purchase costs its price")
-eq(cells(5), "Linen Cloth x20 | 75c | -15s 0c | Mirelle | 1d ago", "every character's trades are listed")
-eq(cells(6), "Gnomish Widget x1 | 7s 0c | +6s 65c | Sultan | 2d ago", "a sale without a count is one item")
+eq(cells(1), "Linen Cloth x20 | 1s 00c | +19s 00c | Sultan | just now", "the newest trade comes first; a sale nets its price less the cut")
+eq(cells(3), "Bandit Cinch of the Monkey x1 | 90s 00c | -90s 00c | Sultan | 10m ago", "a purchase costs its price")
+eq(cells(5), "Linen Cloth x20 | 75c | -15s 00c | Mirelle | 1d ago", "every character's trades are listed")
+eq(cells(6), "Gnomish Widget x1 | 7s 00c | +6s 65c | Sultan | 2d ago", "a sale without a count is one item")
 eq(GoldbookWindow.rows[3].cells[1].text:sub(1, 10), "|cff1eff00", "an item booked under a known key keeps its quality colour")
 eq(GoldbookWindow.rows[3].cells[3].text:sub(1, 10), "|cffff2020", "a purchase is red, a sale green")
 eq(GoldbookWindow.rows[1].hit.shown, false, "trades are not items to hover")
-eq(plain(GoldbookWindow.status.text), "6 trades: sold 63s 65c, bought 1g 5s 0c, net -41s 35c, profit/loss +4s 0c",
+eq(plain(GoldbookWindow.status.text), "6 trades: sold 63s 65c, bought 1g 05s 00c, net -41s 35c, profit/loss +4s 00c",
   "the status totals the trades shown, sales after the cut, and the profit on the 20 Linen Cloth bought at 75c and sold at 95c")
 eq(GoldbookWindow.filters.shown, false, "the trades view has no item filters")
 
 GoldbookWindow.search:SetText("mirelle")
-eq(cells(1) .. " / " .. cells(2), "Linen Cloth x20 | 75c | -15s 0c | Mirelle | 1d ago /  |  |  |  | ", "the search matches the character")
-eq(plain(GoldbookWindow.status.text), "1 trade: sold 0c, bought 15s 0c, net -15s 0c", "and the status follows it, without a profit where nothing was both bought and sold")
+eq(cells(1) .. " / " .. cells(2), "Linen Cloth x20 | 75c | -15s 00c | Mirelle | 1d ago /  |  |  |  | ", "the search matches the character")
+eq(plain(GoldbookWindow.status.text), "1 trade: sold 0c, bought 15s 00c, net -15s 00c", "and the status follows it, without a profit where nothing was both bought and sold")
 GoldbookWindow.search:SetText("widget")
 eq(cells(1):match("^[^|]+"), "Gnomish Widget x1 ", "the search matches the item")
 GoldbookWindow.search:SetText("")
@@ -239,8 +239,8 @@ eq(table.concat(stock, " "), "3857=475 2512=1 6325=nil 18839=nil",
 goods = {}
 
 SlashCmdList.GOLDBOOK("trades jagged")
-eq(cells(1), "Jagged Star of the Eagle x1  vendor | 31s 0c | +31s 0c | Mirelle | just now", "a vendor sale is marked and nets what the vendor paid")
-eq(plain(GoldbookWindow.status.text), "2 trades: sold 31s 0c, bought 23s 0c, net +8s 0c, profit/loss +8s 0c",
+eq(cells(1), "Jagged Star of the Eagle x1  vendor | 31s 00c | +31s 00c | Mirelle | just now", "a vendor sale is marked and nets what the vendor paid")
+eq(plain(GoldbookWindow.status.text), "2 trades: sold 31s 00c, bought 23s 00c, net +8s 00c, profit/loss +8s 00c",
   "bought at 23s and sold to a vendor at 31s makes 8s")
 local loss = { trades = { A = {
   { at = 1, side = "buy", item = "Jagged Star of the Eagle", count = 1, price = 2300, fee = 0 },
