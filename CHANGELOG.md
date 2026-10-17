@@ -7,6 +7,24 @@ were released with.
 
 ## Unreleased
 
+### Addon
+
+- Open the window dark by default. A light/dark button left of the close
+  button switches it, as do `/gb theme` and the Options tick.
+- Retune both palettes for how the game draws them: a client with raised
+  brightness turned the light window's panels, rules and edges white. Text,
+  labels, coin letters and quality colours keep their contrast either way.
+- Set words in Friz Quadrata and figures in a larger Arial Narrow.
+- Size the window with `/gb scale <0.7-1.4>` or the Options slider, apart
+  from the game's UI scale.
+- Draw the item chart as the website does: lowest buyout over an area,
+  market value, the amount listed as bars, a legend, the latest values and
+  a tooltip per point, over 1D, 1W, 1M or 2M. A few days fill the plot.
+- Keep the last week of prices by the hour, and chart them.
+- Add Back to Prices (or the list an item came from) to the item view.
+- Fix the Gold, Prices and Sell icons in the rail, which lost their curves
+  in game.
+
 ## 0.2.0 - 2026-10-17
 
 ### Addon
