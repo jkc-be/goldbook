@@ -33,53 +33,67 @@ local BACKDROP = { bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 }
 
 -- Two palettes with the same keys, as hex. Every coloured widget is painted
 -- from the active one, and painted again when the theme changes.
+--
+-- A client's brightness and contrast settings brighten every pixel, and can
+-- turn anything lighter than about c0c0c0 white (tests/client.lua has the
+-- transfer one player's game showed). So the light palette draws its
+-- structure with lines dark enough to survive that, and its text dark enough
+-- to keep its contrast; tests/run.lua checks both palettes plainly and through
+-- that transfer.
 local PALETTES = {
   light = {
-    bg = "f4ecdb", rail = "ebe0c8", panel = "fbf6ea", line = "e0d3b6", edge = "cbb88f", field = "fffaf0",
-    text = "2b2216", muted = "7a6a4f", railText = "5a4a30", gold = "a8761a", goldhi = "8a5c08", brand = "9a6c10",
-    on = "ecd9a8", gain = "2e7d32", loss = "c0392b",
-    titleTop = "efe3c8", titleBottom = "e6d8b8",
-    buttonTop = "f3dc9a", buttonBottom = "e2c06a", buttonEdge = "b8913a", buttonText = "3a2a08",
-    hover = 0.12,
-    coins = { gold = "a87400", silver = "6e6e78", copper = "a0501c" },
-    quality = { [0] = "6f6f6f", "2b2216", "1b7a0c", "0062c4", "8a2ccf", "b35900", "8a6d1e", "00799e" },
+    bg = "f0e4c4", rail = "e2cc96", panel = "fcf7e8", line = "b19c70", edge = "a08a5c", field = "fffbf0",
+    text = "211a10", muted = "4e412d", railText = "3a2e1c", gold = "8a5a06", goldhi = "684202", brand = "80520a",
+    on = "e2cd92", gain = "0f5214", loss = "8e1a10",
+    titleTop = "e4cf98", titleBottom = "d2b574",
+    buttonTop = "eed59a", buttonBottom = "d8b464", buttonEdge = "8a6a24", buttonText = "2a1e04",
+    hover = 0.14,
+    coins = { gold = "674800", silver = "464650", copper = "843114" },
+    quality = { [0] = "4d4d4d", "211a10", "0e5208", "003ea1", "671da1", "803100", "57420c", "004a63" },
   },
   dark = {
-    bg = "120f0b", rail = "17130e", panel = "1c1813", line = "2c251b", edge = "3d3324", field = "0d0b08",
-    text = "ece4d4", muted = "9b8f7a", railText = "cfc4ae", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
-    on = "3a2d14", gain = "5fd35a", loss = "f0624d",
-    titleTop = "1f1a12", titleBottom = "15110c",
-    buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "7a5a1c", buttonText = "ffe08a",
+    bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
+    text = "f2ebdd", muted = "ab9f89", railText = "d8cdb6", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
+    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a",
+    titleTop = "2c2418", titleBottom = "221c13",
+    buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "8a6a24", buttonText = "ffe08a",
     hover = 0.08,
     coins = { gold = "ffd34d", silver = "c7c7cf", copper = "eda55f" },
-    quality = { [0] = "9d9d9d", "f3eee4", "1eff00", "3d9bff", "b55cff", "ff8000", "e6cc80", "00ccff" },
+    quality = { [0] = "a3a3a3", "f3eee4", "1eff00", "3d9bff", "c27df8", "ff8000", "e6cc80", "00ccff" },
   },
 }
+UI.Palettes = PALETTES
+local DEFAULT_THEME = "dark"
 
 -- The game's own faces: Friz Quadrata for names and headings, Arial Narrow
 -- for figures. Taken from the client, which swaps them for faces with the
 -- letters of its language.
 local FRIZ, NARROW = STANDARD_TEXT_FONT, NumberFontNormal:GetFont()
-local function newFont(name, file, size)
-  local font = CreateFont("GoldbookFont" .. name)
-  font:SetFont(file, size, "")
-  return font
-end
-local FONT = {
-  brand = newFont("Brand", FRIZ, 22),
-  rail = newFont("Rail", FRIZ, 16),
-  title = newFont("Title", FRIZ, 22),
-  dialog = newFont("Dialog", FRIZ, 18),
-  heading = newFont("Heading", FRIZ, 15),
-  button = newFont("Button", FRIZ, 14),
-  body = newFont("Body", NARROW, 14),
-  figure = newFont("Figure", NARROW, 17),
-  small = newFont("Small", NARROW, 13),
-  status = newFont("Status", NARROW, 12),
-  label = newFont("Label", NARROW, 11),
-  close = newFont("Close", NARROW, 20),
-  caret = newFont("Caret", NARROW, 8),
+-- Words in Friz, which the game draws with even, firm strokes down to small
+-- sizes; figures in Arial Narrow, as the game's own number fonts are, so that
+-- money fits its columns.
+local TYPE = {
+  brand = { FRIZ, 22 },
+  rail = { FRIZ, 16 },
+  title = { FRIZ, 22 },
+  dialog = { FRIZ, 18 },
+  heading = { FRIZ, 15 },
+  button = { FRIZ, 14 },
+  body = { FRIZ, 13 },
+  number = { NARROW, 15 },
+  figure = { NARROW, 19 },
+  small = { FRIZ, 12 },
+  status = { FRIZ, 12 },
+  label = { FRIZ, 11 },
+  axis = { NARROW, 12 },
+  close = { NARROW, 20 },
+  caret = { NARROW, 8 },
 }
+local FONT = {}
+for role, face in pairs(TYPE) do
+  FONT[role] = CreateFont("GoldbookFont" .. role:sub(1, 1):upper() .. role:sub(2))
+  FONT[role]:SetFont(face[1], face[2], "")
+end
 
 local palette
 local painted = {}
@@ -94,7 +108,7 @@ end
 
 -- Runs `apply` now and again whenever the theme changes.
 local function paint(apply)
-  palette = palette or PALETTES[ns.db.settings.theme] or PALETTES.light
+  palette = palette or PALETTES[UI.Theme()]
   painted[#painted + 1] = apply
   apply()
 end
@@ -941,6 +955,7 @@ local function layout(definition)
           cell:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + inset, 0)
           cell:SetWidth(spec[3] - 2 * CELL_PAD - inset)
           cell:SetJustifyH(column == 1 and "LEFT" or "RIGHT")
+          cell:SetFontObject(FONT[column == 1 and "body" or "number"])
         end
       end
       if spec.spark then
@@ -1650,7 +1665,7 @@ local function addTable()
     line:SetHeight(SIDE_ROW - 1)
     line.key = label(line, "body", "text")
     line.key:SetPoint("LEFT", 10, 0)
-    line.value = label(line, "body", "text")
+    line.value = label(line, "number", "text")
     line.value:SetPoint("RIGHT", -10, 0)
     line.rule = line:CreateTexture(nil, "BORDER")
     line.rule:SetPoint("TOPLEFT", line, "BOTTOMLEFT")
@@ -1676,7 +1691,7 @@ local function addChart()
     local rule = plot:CreateTexture(nil, "BACKGROUND")
     rule:SetSize(chart.plotWidth, 1)
     UI.Fill(rule, "line")
-    local value = label(plot, "label", "muted")
+    local value = label(plot, "axis", "muted")
     value:SetJustifyH("RIGHT")
     chart.grid[index] = { rule = rule, label = value }
   end
@@ -1685,7 +1700,7 @@ local function addChart()
     local rule = plot:CreateTexture(nil, "BACKGROUND")
     rule:SetWidth(1)
     UI.Fill(rule, "line")
-    local day = label(plot, "label", "muted")
+    local day = label(plot, "axis", "muted")
     chart.dates[index] = { rule = rule, label = day }
   end
   chart.strips = {}
@@ -1867,7 +1882,7 @@ local function addTitleBar()
 
   -- The account's gold in a box sized to it.
   local purse = panel(bar, "field", "edge")
-  window.purse = label(purse, "body", "text")
+  window.purse = label(purse, "number", "text")
   window.purse:SetPoint("RIGHT", bar.close, "LEFT", -23, 0)
   local caption = label(purse, "label", "muted")
   caption:SetPoint("RIGHT", window.purse, "LEFT", -8, 0)
@@ -1994,7 +2009,7 @@ function UI.SetTheme(name)
 end
 
 function UI.Theme()
-  return PALETTES[ns.db.settings.theme] and ns.db.settings.theme or "light"
+  return PALETTES[ns.db.settings.theme] and ns.db.settings.theme or DEFAULT_THEME
 end
 
 local function createScanButton()

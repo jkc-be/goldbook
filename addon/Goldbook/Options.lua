@@ -19,7 +19,7 @@ local HELP = {
   "/gb item <link or name>, or Alt+click any item, shows how its price moved day by day.",
   "/gb status shows what is priced and what is waiting for sync.",
   "/gb web shows the Goldbook site's address, and the ID and key to log in there.",
-  "/gb theme light or /gb theme dark draws the window on parchment or dark ink.",
+  "/gb theme dark or /gb theme light draws the window in dark ink, the default, or on light parchment; so does the button left of its close button.",
   "",
   "Type /reload or log out after a scan so Goldbook can upload it.",
 }
@@ -59,13 +59,13 @@ local CHECKS = {
     end,
   },
   {
-    name = "dark",
-    label = "Draw the Goldbook window dark",
+    name = "light",
+    label = "Draw the Goldbook window light, on parchment, instead of dark",
     get = function()
-      return ns.UI.Theme() == "dark"
+      return ns.UI.Theme() == "light"
     end,
     set = function(checked)
-      ns.UI.SetTheme(checked and "dark" or "light")
+      ns.UI.SetTheme(checked and "light" or "dark")
     end,
   },
   {
@@ -118,10 +118,11 @@ panel.webLogin:SetScript("OnClick", function()
   ns.WebLogin.Show()
 end)
 
-panel:SetScript("OnShow", function()
+local function showSettings()
   for _, definition in ipairs(CHECKS) do
     panel.checks[definition.name]:SetChecked(definition.get())
   end
-end)
+end
+panel:SetScript("OnShow", showSettings)
 
 Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(panel, "Goldbook"))

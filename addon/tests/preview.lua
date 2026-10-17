@@ -1090,8 +1090,8 @@ GameTooltip:Hide()
 GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 GoldbookWindow:Hide()
 
-ns.UI.SetTheme("dark")
-captureViews("-dark")
+ns.UI.SetTheme(ns.UI.Theme() == "dark" and "light" or "dark")
+captureViews("-" .. ns.UI.Theme())
 
 -- Options > AddOns puts the panel in a canvas of about this size.
 local canvas = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
