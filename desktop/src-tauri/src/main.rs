@@ -6,7 +6,7 @@ mod settings;
 mod updates;
 mod website;
 
-use goldbook_sync::{WatchHandle, WatchOptions};
+use goldbook_sync::{ServerData, WatchHandle, WatchOptions};
 use serde::{Deserialize, Serialize};
 use settings::Settings;
 use std::{
@@ -93,7 +93,29 @@ fn watching_message(count: usize, auto: bool) -> String {
     }
 }
 
+fn spoken_list(list: &str) -> String {
+    match list.rsplit_once(", ") {
+        Some((head, last)) => format!("{head} and {last}"),
+        None => list.to_owned(),
+    }
+}
+
 fn describe_log(line: &str) -> Option<String> {
+    // The error after " failed: " can quote a server's reply, so it decides
+    // before the upload branches below look at the line.
+    if let Some(rest) = line.strip_prefix("server prices for ") {
+        let failed = rest.find(" failed: ");
+        return match rest.find(" written to ") {
+            Some(at) if failed.is_none_or(|failed| at < failed) => Some(format!(
+                "Prices for {} updated from the server. /reload to load them.",
+                spoken_list(&rest[..at])
+            )),
+            _ if failed.is_some() => Some(
+                "Goldbook could not download prices from the server. It will try again.".into(),
+            ),
+            _ => None,
+        };
+    }
     if line.contains("this account is blocked") {
         return Some("The server has blocked uploads from this WoW account.".into());
     }
@@ -413,9 +435,17 @@ async fn do_sync(app: &tauri::AppHandle) -> Result<(), String> {
     if let Some(service) = service {
         let results = service.sync_now().await.map_err(|e| e.to_string())?;
         let mut any_update = false;
-        for result in results {
+        for result in &results {
             if result.sent + result.invalid + result.failed > 0 {
                 any_update = true;
+            }
+        }
+        // A written file or a failed download has already put its message in the status line.
+        if results.iter().all(|result| result.failed == 0) {
+            for (_, outcome) in service.refresh_server_data().await {
+                if matches!(outcome, Ok(ServerData::Written { .. }) | Err(_)) {
+                    any_update = true;
+                }
             }
         }
         if !any_update {
@@ -921,6 +951,52 @@ mod tests {
                 "web/style.css no longer hides {part} in the desktop app"
             );
         }
+    }
+
+    #[test]
+    fn server_price_lines_describe_written_and_failed_downloads() {
+        let path =
+            "/Applications/World of Warcraft/_classic_/Interface/AddOns/Goldbook/ServerData.lua";
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Faramon-Horde written to {path}: 2 items"
+            )),
+            Some("Prices for Faramon-Horde updated from the server. /reload to load them.".into())
+        );
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Faramon-Horde, Pyrewood Village-Alliance written to {path}: 3 items"
+            )),
+            Some(
+                "Prices for Faramon-Horde and Pyrewood Village-Alliance updated from the server. /reload to load them."
+                    .into()
+            )
+        );
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Area 52-Alliance, Faramon-Horde, Pyrewood Village-Alliance written to {path}: 9 items"
+            )),
+            Some(
+                "Prices for Area 52-Alliance, Faramon-Horde and Pyrewood Village-Alliance updated from the server. /reload to load them."
+                    .into()
+            )
+        );
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Faramon-Horde unchanged in {path}"
+            )),
+            None
+        );
+        assert_eq!(
+            describe_log(
+                "server prices for /Applications/World of Warcraft/_classic_ failed: export of Faramon-Horde answered 502 uploaded account written to unreadable another key"
+            ),
+            Some("Goldbook could not download prices from the server. It will try again.".into())
+        );
+        assert_eq!(
+            describe_log("uploaded account K7Q2-M9PX: 3 characters"),
+            Some("Uploaded 3 characters.".into())
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@ anyhow = "1"
 axum = "0.8"
 base64 = "0.23.1"
 dirs = "7"
+flate2 = "1"
 goldbook-core = { path = "crates/goldbook-core" }
 goldbook-server = { path = "crates/goldbook-server" }
 goldbook-sync = { path = "crates/goldbook-sync" }

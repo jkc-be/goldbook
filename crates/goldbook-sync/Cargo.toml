@@ -2,7 +2,7 @@
 publish = false
 license-file = "../../LICENSE"
 name = "goldbook-sync"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 rust-version.workspace = true
 [dependencies]
@@ -10,7 +10,7 @@ goldbook-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["gzip", "query"] }
 tokio = { workspace = true, features = ["full"] }
 clap = { version = "4", features = ["derive", "env"] }
 dirs.workspace = true
@@ -20,3 +20,4 @@ fs2 = "0.4"
 tempfile.workspace = true
 [dev-dependencies]
 axum.workspace = true
+flate2.workspace = true

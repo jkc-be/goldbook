@@ -23,7 +23,7 @@ def main():
         commands.append(["cargo", "clippy", "--locked", "--all-targets", "--", "-D", "warnings"])
     commands.append(["cargo", "build", "--locked"])
     commands.extend([sys.executable, f"scripts/verify-{name}.py"]
-                    for name in ("migration", "sellers", "trades", "professions", "proxy"))
+                    for name in ("migration", "sellers", "trades", "professions", "proxy", "server-data"))
     commands.append([sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests"])
     for command in commands:
         print("\n> " + " ".join(command), flush=True)

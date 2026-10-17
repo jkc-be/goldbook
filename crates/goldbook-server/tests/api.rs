@@ -175,6 +175,199 @@ async fn scans_preserve_identity_late_names_market_borrowing_and_queries() {
     assert_eq!(trends["items"]["2589"][13], 100);
 }
 #[tokio::test]
+async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
+    let f = Fixture::new();
+    let scans = [
+        (
+            "Faramon",
+            "Horde",
+            1754870399,
+            "replicate",
+            json!([["2589", 50, 60, 9, 1], ["999", 10, 10, 1, 1]]),
+            json!({"999": ["Old Item", 2]}),
+        ),
+        (
+            "Faramon",
+            "Horde",
+            1754870400,
+            "browse",
+            json!([["2589", 120, 0, 30, 0], ["7070", 300, 0, 5, 0]]),
+            json!({"7070": ["Elemental Water", 1]}),
+        ),
+        (
+            "Faramon",
+            "Horde",
+            1759485600,
+            "replicate",
+            json!([["2589", 115, 118, 20, 2]]),
+            json!({}),
+        ),
+        (
+            "Faramon",
+            "Horde",
+            1760083260,
+            "replicate",
+            json!([
+                ["2589", 110, 125, 42, 3],
+                ["2592", 200, 210, 4, 1],
+                ["4306:1024", 500, 520, 3, 1]
+            ]),
+            json!({"2589": ["Linen Cloth", 1]}),
+        ),
+        (
+            "Faramon",
+            "Horde",
+            1760086900,
+            "browse",
+            json!([
+                ["2589", 100, 0, 10, 0],
+                ["2592", 190, 0, 3, 0],
+                ["4306:1024", 480, 0, 2, 0]
+            ]),
+            json!({"2592": ["Wool Cloth", 1]}),
+        ),
+        (
+            "Faramon",
+            "Horde",
+            1760090000,
+            "replicate",
+            json!([["2589", 100, 105, 100, 4], ["4306:1024", 470, 490, 6, 2]]),
+            json!({}),
+        ),
+        (
+            "Faramon",
+            "Horde",
+            1760090000,
+            "replicate",
+            json!([["2589", 100, 107, 7, 5], ["4306:1024", 470, 495, 8, 3]]),
+            json!({}),
+        ),
+        (
+            "Faramon",
+            "Alliance",
+            1760095000,
+            "replicate",
+            json!([["2589", 1, 1, 1, 1]]),
+            json!({}),
+        ),
+        (
+            "Gehennas",
+            "Horde",
+            1760099000,
+            "replicate",
+            json!([["2589", 1, 1, 1, 1], ["8000", 1, 1, 1, 1]]),
+            json!({}),
+        ),
+    ];
+    for (realm, faction, at, mode, rows, items) in scans {
+        let scan = json!({"realm":realm,"faction":faction,"region":"EU","scannedAt":at,"mode":mode,"scanner":"Sultan","build":"1.60.1.70338","rows":rows,"items":items});
+        assert_eq!(call(&f.app, "POST", "/api/scans", scan, &AUTH).await.0, 200);
+    }
+    let (status, _, export) = call(
+        &f.app,
+        "GET",
+        "/api/export?realm=Faramon&faction=Horde",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        export,
+        json!({
+            "realm": "Faramon",
+            "faction": "Horde",
+            "scannedAt": 1760090000,
+            "items": {
+                "2589": {
+                    "name": "Linen Cloth",
+                    "quality": 1,
+                    "price": [100, 7, 5, 1760090000, 107, 1760090000],
+                    "hours": [[488746, 115, 20, 118], [488912, 110, 42, 125], [488913, 100, 10, 107]],
+                    "days": [[20311, 120, 30, 0], [20364, 115, 20, 118], [20371, 100, 10, 107]]
+                },
+                "2592": {
+                    "name": "Wool Cloth",
+                    "quality": 1,
+                    "price": [190, 3, 0, 1760086900, 210, 1760083260],
+                    "hours": [[488912, 200, 4, 210], [488913, 190, 3, 0]],
+                    "days": [[20371, 190, 3, 210]]
+                },
+                "4306:1024": {
+                    "name": null,
+                    "quality": null,
+                    "price": [470, 8, 3, 1760090000, 495, 1760090000],
+                    "hours": [[488912, 500, 3, 520], [488913, 470, 6, 495]],
+                    "days": [[20371, 470, 6, 495]]
+                },
+                "7070": {
+                    "name": "Elemental Water",
+                    "quality": 1,
+                    "price": [300, 5, 0, 1754870400, 0, 0],
+                    "hours": [],
+                    "days": [[20311, 300, 5, 0]]
+                }
+            }
+        })
+    );
+    let target = "/api/export?realm=Faramon&faction=Horde";
+    let (_, headers, gzipped) = raw(
+        &f.app,
+        "GET",
+        target,
+        vec![],
+        &[("accept-encoding", "br, GZIP;q=0.5")],
+    )
+    .await;
+    assert_eq!(
+        (&headers["content-encoding"], &headers["vary"]),
+        (
+            &"gzip".parse().unwrap(),
+            &"accept-encoding".parse().unwrap()
+        )
+    );
+    assert_eq!(
+        headers["content-length"],
+        gzipped.len().to_string().as_str()
+    );
+    let mut unzipped = String::new();
+    std::io::Read::read_to_string(
+        &mut flate2::read::GzDecoder::new(&gzipped[..]),
+        &mut unzipped,
+    )
+    .unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&unzipped).unwrap(), export);
+    for refused in ["gzip;q=0", "deflate", ""] {
+        let (_, headers, plain) = raw(
+            &f.app,
+            "GET",
+            target,
+            vec![],
+            &[("accept-encoding", refused)],
+        )
+        .await;
+        assert!(!headers.contains_key("content-encoding"), "{refused}");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&plain).unwrap(),
+            export,
+            "{refused}"
+        );
+    }
+    for (target, expected) in [
+        (
+            "/api/export?realm=Faramon",
+            (400, json!({"error": "faction is required"})),
+        ),
+        (
+            "/api/export?realm=Nowhere&faction=Horde",
+            (404, json!({"error": "no scans for this realm and faction"})),
+        ),
+    ] {
+        let (status, _, body) = call(&f.app, "GET", target, Value::Null, &[]).await;
+        assert_eq!((status, body), expected, "{target}");
+    }
+}
+#[tokio::test]
 async fn account_ownership_rotation_and_sessions_remain_atomic() {
     let f = Fixture::new();
     assert_eq!(

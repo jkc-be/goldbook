@@ -142,7 +142,7 @@ async fn upload(
 }
 static FILE_LOCKS: LazyLock<Mutex<HashMap<PathBuf, std::sync::Weak<AsyncMutex<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
-fn file_lock(path: &Path) -> Arc<AsyncMutex<()>> {
+pub(crate) fn file_lock(path: &Path) -> Arc<AsyncMutex<()>> {
     let key = fs::canonicalize(path).unwrap_or_else(|_| {
         if path.is_absolute() {
             path.to_owned()

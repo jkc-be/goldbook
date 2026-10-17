@@ -16,14 +16,20 @@ local CELL_PAD, ICON_SIZE = 10, 18
 local SPARK_WIDTH, SPARK_HEIGHT, SPARK_DAYS = 64, 16, 7
 local SEARCH_WIDTH, CHIP_HEIGHT, MENU_WIDTH, MENU_ROW = 240, 24, 200, 22
 local SIDE_ROW = 26
--- The plot sits right of its value labels and above its date labels.
-local AXIS_WIDTH, AXIS_HEIGHT, PLOT_TOP, PLOT_RIGHT, CHART_PAD = 50, 20, 8, 6, 4
-local AXIS_STEPS, MAX_GRID, MAX_DATES, MAX_CHART_DAYS = 4, 8, 10, 60
+-- The plot sits right of its axis labels and left of the latest values'
+-- labels, under its legend, over the band of amounts and the dates.
+local AXIS_WIDTH, AXIS_HEIGHT, VALUE_WIDTH, CHART_PAD = 50, 20, 58, 4
+local PLOT_TOP, LEGEND_TOP, BAND_HEIGHT, BAND_GAP = 8, 28, 30, 14
+local AXIS_STEPS, MAX_GRID, MAX_DATES = 4, 8, 10
 -- The area under a chart line is drawn as vertical strips this wide.
 local STRIP = 3
 local CHART_DAYS = 30
+-- A chart of few days still spans this many, so its points do not crowd one edge.
+local MIN_SPAN_DAYS = 3
 local SELL_ACTIONS = { auction = "Auction", vendor = "Vendor", unknown = "No price" }
 local REFRESH_DELAY = 0.2
+-- The window's own scale, over the game's UI scale.
+local MIN_SCALE, MAX_SCALE = 0.7, 1.4
 local DAY = 24 * 3600
 local MONTH = 30
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -33,53 +39,69 @@ local BACKDROP = { bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 }
 
 -- Two palettes with the same keys, as hex. Every coloured widget is painted
 -- from the active one, and painted again when the theme changes.
+--
+-- A client's brightness and contrast settings brighten every pixel, and can
+-- turn anything lighter than about c0c0c0 white (tests/client.lua has the
+-- transfer one player's game showed). So the light palette draws its
+-- structure with lines dark enough to survive that, and its text dark enough
+-- to keep its contrast; tests/run.lua checks both palettes plainly and through
+-- that transfer.
 local PALETTES = {
   light = {
-    bg = "f4ecdb", rail = "ebe0c8", panel = "fbf6ea", line = "e0d3b6", edge = "cbb88f", field = "fffaf0",
-    text = "2b2216", muted = "7a6a4f", railText = "5a4a30", gold = "a8761a", goldhi = "8a5c08", brand = "9a6c10",
-    on = "ecd9a8", gain = "2e7d32", loss = "c0392b",
-    titleTop = "efe3c8", titleBottom = "e6d8b8",
-    buttonTop = "f3dc9a", buttonBottom = "e2c06a", buttonEdge = "b8913a", buttonText = "3a2a08",
-    hover = 0.12,
-    coins = { gold = "a87400", silver = "6e6e78", copper = "a0501c" },
-    quality = { [0] = "6f6f6f", "2b2216", "1b7a0c", "0062c4", "8a2ccf", "b35900", "8a6d1e", "00799e" },
+    bg = "f0e4c4", rail = "e2cc96", panel = "fcf7e8", line = "b19c70", edge = "a08a5c", field = "fffbf0",
+    text = "211a10", muted = "4e412d", railText = "3a2e1c", gold = "8a5a06", goldhi = "684202", brand = "80520a",
+    on = "e2cd92", gain = "0f5214", loss = "8e1a10",
+    titleTop = "e4cf98", titleBottom = "d2b574",
+    buttonTop = "eed59a", buttonBottom = "d8b464", buttonEdge = "8a6a24", buttonText = "2a1e04",
+    hover = 0.14, area = 0.65, bar = 1, second = "464650",
+    coins = { gold = "674800", silver = "464650", copper = "843114" },
+    quality = { [0] = "4d4d4d", "211a10", "0e5208", "003ea1", "671da1", "803100", "57420c", "004a63" },
   },
   dark = {
-    bg = "120f0b", rail = "17130e", panel = "1c1813", line = "2c251b", edge = "3d3324", field = "0d0b08",
-    text = "ece4d4", muted = "9b8f7a", railText = "cfc4ae", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
-    on = "3a2d14", gain = "5fd35a", loss = "f0624d",
-    titleTop = "1f1a12", titleBottom = "15110c",
-    buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "7a5a1c", buttonText = "ffe08a",
-    hover = 0.08,
+    bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
+    text = "f2ebdd", muted = "ab9f89", railText = "d8cdb6", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
+    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a",
+    titleTop = "2c2418", titleBottom = "221c13",
+    buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "8a6a24", buttonText = "ffe08a",
+    hover = 0.08, area = 0.42, bar = 0.6, second = "c7c7cf",
     coins = { gold = "ffd34d", silver = "c7c7cf", copper = "eda55f" },
-    quality = { [0] = "9d9d9d", "f3eee4", "1eff00", "3d9bff", "b55cff", "ff8000", "e6cc80", "00ccff" },
+    quality = { [0] = "a3a3a3", "f3eee4", "1eff00", "3d9bff", "c27df8", "ff8000", "e6cc80", "00ccff" },
   },
 }
+UI.Palettes = PALETTES
+local DEFAULT_THEME = "dark"
 
 -- The game's own faces: Friz Quadrata for names and headings, Arial Narrow
 -- for figures. Taken from the client, which swaps them for faces with the
 -- letters of its language.
 local FRIZ, NARROW = STANDARD_TEXT_FONT, NumberFontNormal:GetFont()
-local function newFont(name, file, size)
-  local font = CreateFont("GoldbookFont" .. name)
-  font:SetFont(file, size, "")
-  return font
-end
-local FONT = {
-  brand = newFont("Brand", FRIZ, 22),
-  rail = newFont("Rail", FRIZ, 16),
-  title = newFont("Title", FRIZ, 22),
-  dialog = newFont("Dialog", FRIZ, 18),
-  heading = newFont("Heading", FRIZ, 15),
-  button = newFont("Button", FRIZ, 14),
-  body = newFont("Body", NARROW, 14),
-  figure = newFont("Figure", NARROW, 17),
-  small = newFont("Small", NARROW, 13),
-  status = newFont("Status", NARROW, 12),
-  label = newFont("Label", NARROW, 11),
-  close = newFont("Close", NARROW, 20),
-  caret = newFont("Caret", NARROW, 8),
+-- Words in Friz, which the game draws with even, firm strokes down to small
+-- sizes; figures in Arial Narrow, as the game's own number fonts are, so that
+-- money fits its columns. Column headers too, as Friz may lack their sort
+-- arrows.
+local TYPE = {
+  brand = { FRIZ, 22 },
+  rail = { FRIZ, 16 },
+  title = { FRIZ, 22 },
+  dialog = { FRIZ, 18 },
+  heading = { FRIZ, 15 },
+  button = { FRIZ, 14 },
+  body = { FRIZ, 13 },
+  number = { NARROW, 15 },
+  figure = { NARROW, 19 },
+  small = { FRIZ, 12 },
+  status = { FRIZ, 12 },
+  label = { FRIZ, 11 },
+  header = { NARROW, 12 },
+  axis = { NARROW, 12 },
+  close = { NARROW, 20 },
+  caret = { NARROW, 8 },
 }
+local FONT = {}
+for role, face in pairs(TYPE) do
+  FONT[role] = CreateFont("GoldbookFont" .. role:sub(1, 1):upper() .. role:sub(2))
+  FONT[role]:SetFont(face[1], face[2], "")
+end
 
 local palette
 local painted = {}
@@ -94,7 +116,7 @@ end
 
 -- Runs `apply` now and again whenever the theme changes.
 local function paint(apply)
-  palette = palette or PALETTES[ns.db.settings.theme] or PALETTES.light
+  palette = palette or PALETTES[UI.Theme()]
   painted[#painted + 1] = apply
   apply()
 end
@@ -192,38 +214,19 @@ function UI.Button(parent, text, width, height, name)
   return button
 end
 
--- A list of { x, y, x, y, ... } points around an ellipse, from one angle to
--- another in degrees, y growing downward.
-local function arc(cx, cy, rx, ry, from, to, steps)
-  local points = {}
-  for step = 0, steps do
-    local angle = math.rad(from + (to - from) * step / steps)
-    points[#points + 1] = cx + rx * math.cos(angle)
-    points[#points + 1] = cy + ry * math.sin(angle)
-  end
-  return points
-end
-
-local function joined(...)
-  local points = {}
-  for _, part in ipairs({ ... }) do
-    for _, value in ipairs(part) do
-      points[#points + 1] = value
-    end
-  end
-  return points
-end
-
--- The rail's icons as strokes in a 16 by 16 box, y growing downward.
+-- The rail's icons as strokes in a 16 by 16 box, y growing downward. The
+-- client leaves out lines much shorter than 4, so curves are a few long
+-- strokes rather than many short ones.
 local GLYPHS = {
-  prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 }, arc(11, 5, 1.2, 1.2, 0, 360, 6) },
+  prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
   deals = { { 8, 1, 10, 5.5, 15, 6, 11.2, 9.3, 12.3, 14.2, 8, 11.7, 3.7, 14.2, 4.8, 9.3, 1, 6, 6, 5.5, 8, 1 } },
-  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, joined({ 5.5, 5 }, arc(8, 4, 2.5, 2.5, 180, 360, 6), { 10.5, 5 }) },
+  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
   movers = { { 1, 12, 5, 8, 8, 11, 14, 4 }, { 10, 4, 14, 4, 14, 8 } },
+  -- Two coins stacked, their rims as flat hexagons.
   gold = {
-    arc(8, 4.5, 5.5, 2.5, 0, 360, 16),
-    joined({ 13.5, 4.5 }, arc(8, 11.5, 5.5, 2.5, 0, 180, 8), { 2.5, 4.5 }),
-    arc(8, 8, 5.5, 2.5, 0, 180, 8),
+    { 1.5, 5, 5, 2, 11, 2, 14.5, 5, 11, 8, 5, 8, 1.5, 5 },
+    { 1.5, 5, 1.5, 10, 5, 13, 11, 13, 14.5, 10, 14.5, 5 },
+    { 1.5, 7.5, 5, 10.5, 11, 10.5, 14.5, 7.5 },
   },
   trades = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
@@ -232,6 +235,10 @@ local window, scanButton
 local view, results, offset = "prices", {}, 0
 -- The item the item view shows: { key, name, quality }.
 local shownItem
+-- Where the item view's Back button returns to: { view, search, filters,
+-- sort, segment, offset } as they were when the item was opened, or nil for
+-- an item opened with the window closed.
+local origin
 -- sorting[view] = { column, descending }, from the view's own order until a header is clicked.
 local sorting = {}
 -- chosen[view] = the key of the segment picked in a view with segments.
@@ -242,6 +249,14 @@ local function noFilters()
   return { profession = "", kind = "all" }
 end
 local filters = noFilters()
+
+local function copy(list)
+  local copied = {}
+  for key, value in pairs(list) do
+    copied[key] = value
+  end
+  return copied
+end
 
 local function plural(count, noun)
   return count .. " " .. noun .. (count == 1 and "" or "s")
@@ -388,11 +403,12 @@ end
 local function goldChart(span)
   local now = time()
   local today = math.floor(now / DAY)
-  local days = {}
+  local points = {}
   for index, total in ipairs(Ledger.History(ns.db, now, span)) do
-    days[index] = { value = total, tip = { dayText(today - span + index), "Total " .. Codec.Money(total) } }
+    local day = today - span + index
+    points[index] = { at = day * DAY, values = { total }, when = dayText(day) }
   end
-  return { days = days, from = today - span + 1 }
+  return { from = (today - span + 1) * DAY, to = today * DAY, points = points, series = { { name = "Total", colour = "gold", area = true } } }
 end
 
 local function monthLines()
@@ -411,21 +427,37 @@ local function evolution()
   return Advisor.Evolution(shownHistory(), time(), CHART_DAYS)
 end
 
--- The shown item's lowest price per day it was seen.
-local function itemChart()
-  local days = {}
-  for index, entry in ipairs(evolution().chart) do
-    days[index] = entry and {
-      value = entry.min,
-      tip = {
-        dayText(entry.day),
-        "Min buyout " .. Codec.Money(entry.min),
-        "Listed " .. entry.qty,
-        entry.mv > 0 and ("Market value " .. Codec.Money(entry.mv)) or nil,
-      },
-    }
+-- The shown item's prices over the chosen range of days, as the web's item
+-- chart has them: the lowest buyout over an area, the market value, and the
+-- amount listed below, by the hour for the last week and by the day before.
+-- The time axis starts at the first price in the range, so that an item
+-- seen on a few days fills the plot.
+local function itemChart(range)
+  local now = time()
+  local today = math.floor(now / DAY)
+  local start = range == 1 and now - DAY or (today - range + 1) * DAY
+  local points = {}
+  for _, entry in ipairs(Database.Points(ns.db, ns.RealmKey(), shownItem.key)) do
+    if entry.at >= start then
+      local day = math.floor(entry.at / DAY)
+      points[#points + 1] = {
+        at = entry.at,
+        values = { entry.min, entry.mv > 0 and entry.mv or nil },
+        amount = entry.qty,
+        when = entry.hourly and date("%a %d %b %H:%M", entry.at) or dayText(day),
+      }
+    end
   end
-  return { days = days, from = math.floor(time() / DAY) - CHART_DAYS + 1 }
+  local to = math.max(today * DAY, points[#points] and points[#points].at or 0)
+  local from = math.max(start, points[1] and points[1].at or start)
+  from = math.max(start, math.min(from, to - MIN_SPAN_DAYS * DAY))
+  return {
+    from = from,
+    to = to,
+    points = points,
+    series = { { name = "Min buyout", colour = "gold", area = true }, { name = "Market value", colour = "second" } },
+    band = { name = "Listed" },
+  }
 end
 
 local function itemHead()
@@ -457,7 +489,8 @@ local function itemCards()
   return {
     { "Market value", record.mv > 0 and money(record.mv) or none, record.mv > 0 and tint("muted", Codec.Age(now - record.mvAt)) or nil },
     { "Usual", usual and money(usual) or none, vendor > 0 and labelled("Vendor", money(vendor)) or nil },
-    { "Listed", tostring(record.qty), tint("muted", "Seen " .. Codec.Age(now - record.seen)) },
+    { "Listed", tostring(record.qty), tint("muted", (Database.FromServer(ns.db, ns.RealmKey(), shownItem.key) and "From the server, " or "Seen ")
+      .. Codec.Age(now - record.seen)) },
     { "30-day low", moved.low and money(moved.low) or none, moved.high and labelled("High", money(moved.high)) or nil },
   }
 end
@@ -473,8 +506,10 @@ local SPARK = { "7 days", nil, 87, spark = true }
 --   items     rows are items to hover and click; `icons` puts the item's icon before its name
 --   sort      { column, descending }, the order rows come in; a segment may set its own
 --   segments  { key, label } choices at the right of the title, `segment` the first one picked;
---             `badge` instead shows a label and a value there, `aside` a line of text
---   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line
+--             `badge` instead shows a label and a value there, `aside` a line of text;
+--             `rangesOnChart` puts the segments at the right of the chart's legend instead
+--   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line;
+--             `back` puts a button before it that returns to the view the item came from
 --   cards     (rows) -> up to four { key, value, detail }
 --   chart     { height, spec(segment) }, see drawChart
 --   heading   a heading over the table; `side` a panel of { label, value } lines beside it
@@ -488,7 +523,7 @@ local VIEWS = {
     search = "Search items",
     chips = { "profession", "kind", "quality" },
     keep = keepItem,
-    columns = { { "Item", "name", 270 }, { "Min buyout", "min", 100 }, { "Market value", "mv", 100 }, SPARK, { "Listed", "qty", 56 }, { "Seen", "seen", 66 } },
+    columns = { { "Item", "name", 250 }, { "Min buyout", "min", 100 }, { "Market value", "mv", 100 }, SPARK, { "Listed", "qty", 56 }, { "Seen", "seen", 86 } },
     sort = { 1, false },
     rows = function(text)
       return Database.Search(ns.db, ns.RealmKey(), text)
@@ -661,10 +696,14 @@ local VIEWS = {
     end,
   },
   item = {
+    back = true,
     blocks = { "toolbar", "chart", "cards", "table" },
     search = "Search items",
     columns = { { "Day", "day", 150 }, { "Min buyout", "min", 150 }, { "Market value", "mv", 150 }, { "Listed", "qty", 100 }, { "Change", "change", 129 } },
     sort = { 1, true },
+    segments = { { 1, "1D" }, { 7, "1W" }, { 30, "1M" }, { 60, "2M" } },
+    segment = 30,
+    rangesOnChart = true,
     rows = function()
       return evolution().rows
     end,
@@ -674,7 +713,7 @@ local VIEWS = {
     end,
     head = itemHead,
     cards = itemCards,
-    chart = { height = 150, spec = itemChart },
+    chart = { height = 200, spec = itemChart },
     status = function(rows, visible)
       if #rows == 0 then
         return "No prices recorded for " .. itemText(shownItem) .. " yet. Scan the auction house."
@@ -913,8 +952,6 @@ local function layout(definition)
   if placed.chart then
     window.chart:SetPoint("TOPLEFT", window, "TOPLEFT", PAGE_LEFT, -placed.chart)
     window.chart:SetHeight(definition.chart.height)
-    window.chart.plotHeight = definition.chart.height - 2 - CHART_PAD - PLOT_TOP - AXIS_HEIGHT
-    window.chart.plot:SetHeight(window.chart.plotHeight)
   end
 
   local tableFrame, width = window.table, 2
@@ -960,6 +997,7 @@ local function layout(definition)
           cell:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + inset, 0)
           cell:SetWidth(spec[3] - 2 * CELL_PAD - inset)
           cell:SetJustifyH(column == 1 and "LEFT" or "RIGHT")
+          cell:SetFontObject(FONT[column == 1 and "body" or "number"])
         end
       end
       if spec.spark then
@@ -989,7 +1027,20 @@ local function drawHead(definition)
   head.frame:SetShown(item)
   head.link:SetShown(item)
   head.link.key = spec.icon
-  head.title:SetPoint("LEFT", window, "TOPLEFT", PAGE_LEFT + (item and 32 or 0), -(PAGE_TOP + HEAD_HEIGHT / 2))
+  head.back:SetShown(definition.back == true)
+  head.back.label:SetText("Back to " .. VIEWS[origin and origin.view or "prices"].tab)
+  head.frame:ClearAllPoints()
+  if definition.back then
+    head.frame:SetPoint("LEFT", head.back, "RIGHT", 12, 0)
+  else
+    head.frame:SetPoint("LEFT", head, "LEFT", 0, 0)
+  end
+  head.title:ClearAllPoints()
+  if item then
+    head.title:SetPoint("LEFT", head.frame, "RIGHT", 6, 0)
+  else
+    head.title:SetPoint("LEFT", window, "TOPLEFT", PAGE_LEFT, -(PAGE_TOP + HEAD_HEIGHT / 2))
+  end
   if item then
     head.icon:SetTexture(itemIcon(spec.icon))
     head.frame:SetColorTexture(hexRGB(qualityHex(spec.quality)))
@@ -1025,6 +1076,15 @@ local function drawHead(definition)
   else
     showSegments({}, 0)
   end
+  local control = window.segments
+  control:ClearAllPoints()
+  if definition.rangesOnChart then
+    control:SetParent(window.chart)
+    control:SetPoint("RIGHT", window.chart, "TOPRIGHT", -1 - CHART_PAD, -1 - LEGEND_TOP / 2)
+  else
+    control:SetParent(head)
+    control:SetPoint("RIGHT", head, "RIGHT", 0, 0)
+  end
 end
 
 local function drawCards(definition)
@@ -1055,15 +1115,26 @@ local function drawSide(definition)
   end
 end
 
-local function showMarker(shown, x, y)
-  local marker = window.chart.marker
-  marker.rule:SetShown(shown)
-  marker.ring:SetShown(shown)
-  marker.hole:SetShown(shown)
-  if shown then
-    marker.rule:SetPoint("TOPLEFT", window.chart.plot, "TOPLEFT", x, 0)
-    marker.rule:SetPoint("BOTTOMLEFT", window.chart.plot, "BOTTOMLEFT", x, 0)
-    marker.ring:SetPoint("CENTER", window.chart.plot, "BOTTOMLEFT", x, y)
+-- The hovered point: a rule down through the band, a ring on each line and
+-- its bar lit.
+local function showMarker(hit)
+  local chart = window.chart
+  local marker = chart.marker
+  marker.rule:SetShown(hit ~= nil)
+  for index, ring in ipairs(marker.rings) do
+    local y = hit and hit.ys[index]
+    ring.ring:SetShown(y ~= nil)
+    ring.hole:SetShown(y ~= nil)
+    if y then
+      ring.ring:SetPoint("CENTER", chart.plot, "BOTTOMLEFT", hit.x, y)
+    end
+  end
+  for index, bar in ipairs(chart.bars) do
+    bar:SetAlpha(hit and hit.index == index and 1 or 0.6)
+  end
+  if hit then
+    marker.rule:SetPoint("TOPLEFT", chart.plot, "TOPLEFT", hit.x, 0)
+    marker.rule:SetPoint("BOTTOMLEFT", chart.bottom, "BOTTOMLEFT", hit.x, 0)
   end
 end
 
@@ -1089,19 +1160,60 @@ local function axisMoney(copper)
   return silver > 0 and money(silver * 100):match("^(.-) ") or money(rest)
 end
 
--- spec = { days, from }, with a slot in `days` per chart day: { value, tip
--- = { line, ... } }, or false for a day without a value; `from` is the
--- first day's number. The line and the area under it break where a day
--- has no value; a day alone between gaps is a dot.
+-- A latest value right of a chart: its two largest units, enough to tell
+-- two lines close together apart.
+local function latestMoney(copper)
+  local text = money(copper)
+  return copper >= 10000 and text:match("^(.*) ") or text
+end
+
+-- The date marks between `from` and `to`, counted back from `to`'s day so
+-- that it always has one: hours for a day or so, else every 1, 2, 7 or 14 days.
+-- Days are UTC days, as the history keeps them; hours read in local time.
+local function dateMarks(from, to)
+  local marks = {}
+  if to - from <= 2 * DAY then
+    local hour = 3600 * 6
+    for at = math.floor(to / hour) * hour, from, -hour do
+      marks[#marks + 1] = { at = at, text = date("%H:%M", at) }
+    end
+    return marks
+  end
+  local days = (to - from) / DAY
+  local every = days <= 8 and 1 or days <= 16 and 2 or days <= 35 and 7 or 14
+  for day = math.floor(to / DAY), math.ceil(from / DAY), -every do
+    marks[#marks + 1] = { at = day * DAY, text = dateText(day) }
+  end
+  return marks
+end
+
+local showPointTip, hidePointTip
+
+-- spec = { from, to, points, series, band }. Times in seconds; `points`
+-- oldest first, each { at, values = { [series] = value or nil }, amount,
+-- when }; `series` = { { name, colour, area } }, a line per series joining
+-- the points that have its value, `area` filling under it; `band` = { name }
+-- draws each point's amount as a bar below the plot. A legend names them
+-- when there is more than one line or a band.
 local function drawChart(spec)
   local chart = window.chart
-  local plot, days = chart.plot, spec.days
-  local count = #days
-  local width, height = chart.plotWidth, chart.plotHeight
+  local plot, points, series, band = chart.plot, spec.points, spec.series, spec.band
+  local width = chart.plotWidth
+  local legend = #series > 1 or band ~= nil
+  local top = legend and LEGEND_TOP or PLOT_TOP
+  local height = chart:GetHeight() - 2 - CHART_PAD - top - AXIS_HEIGHT - (band and BAND_HEIGHT + BAND_GAP or 0)
+  plot:SetPoint("TOPLEFT", chart, "TOPLEFT", 1 + CHART_PAD + AXIS_WIDTH, -1 - top)
+  plot:SetHeight(height)
+  chart.band:SetShown(band ~= nil)
+  chart.bottom = band and chart.band or plot
+
   local low, high = math.huge, -math.huge
-  for _, slot in ipairs(days) do
-    if slot then
-      low, high = math.min(low, slot.value), math.max(high, slot.value)
+  for _, point in ipairs(points) do
+    for index = 1, #series do
+      local value = point.values[index]
+      if value then
+        low, high = math.min(low, value), math.max(high, value)
+      end
     end
   end
   if high < low then
@@ -1112,8 +1224,8 @@ local function drawChart(spec)
   end
   local step = math.max(1, niceStep(high - low))
   low, high = math.floor(low / step) * step, math.ceil(high / step) * step
-  local function x(index)
-    return (index - 1) / (count - 1) * width
+  local function x(at)
+    return (at - spec.from) / (spec.to - spec.from) * width
   end
   local function y(value)
     return (value - low) / (high - low) * height
@@ -1130,22 +1242,34 @@ local function drawChart(spec)
       grid.label:SetText(axisMoney(value))
     end
   end
-  local every = count <= 7 and 1 or count <= 30 and 7 or 14
+  local marks = dateMarks(spec.from, spec.to)
   for index, mark in ipairs(chart.dates) do
-    local day = count - (index - 1) * every
-    local shown = day >= 1
-    mark.rule:SetShown(shown)
-    mark.label:SetShown(shown)
-    if shown then
-      mark.rule:SetPoint("TOPLEFT", plot, "TOPLEFT", x(day), 0)
-      mark.rule:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", x(day), 0)
+    local spot = marks[index]
+    mark.rule:SetShown(spot ~= nil)
+    mark.label:SetShown(spot ~= nil)
+    if spot then
+      local at = x(spot.at)
+      mark.rule:SetPoint("TOPLEFT", plot, "TOPLEFT", at, 0)
+      mark.rule:SetPoint("BOTTOMLEFT", chart.bottom, "BOTTOMLEFT", at, 0)
       mark.label:ClearAllPoints()
-      mark.label:SetPoint(index == 1 and "TOPRIGHT" or "TOP", plot, "BOTTOMLEFT", x(day), -5)
-      mark.label:SetText(dateText(spec.from + day - 1))
+      mark.label:SetPoint(at > width - 24 and "TOPRIGHT" or at < 24 and "TOPLEFT" or "TOP", chart.bottom, "BOTTOMLEFT", at, -5)
+      mark.label:SetText(spot.text)
     end
   end
 
-  local strips = math.floor(width / STRIP)
+  -- Each line's points, and the value under the line at any spot along it.
+  local measured = {}
+  for index = 1, #series do
+    measured[index] = {}
+    for _, point in ipairs(points) do
+      if point.values[index] then
+        measured[index][#measured[index] + 1] = { x = x(point.at), y = y(point.values[index]), value = point.values[index] }
+      end
+    end
+  end
+  local area = measured[1]
+  local strips, cursor = math.floor(width / STRIP), 1
+  local r, g, b = rgb(series[1].colour)
   for index = 1, math.max(strips, #chart.strips) do
     local strip = chart.strips[index]
     if not strip and index <= strips then
@@ -1154,47 +1278,122 @@ local function drawChart(spec)
       strip:SetColorTexture(1, 1, 1, 1)
       chart.strips[index] = strip
     end
-    local value
-    if index <= strips then
-      local at = ((index - 0.5) * STRIP) / width * (count - 1) + 1
-      local from = math.floor(at)
-      local left, right = days[from], days[from + 1]
-      if left and right then
-        value = left.value + (right.value - left.value) * (at - from)
-      end
+    local at, level = (index - 0.5) * STRIP
+    while area[cursor + 1] and area[cursor + 1].x < at do
+      cursor = cursor + 1
     end
-    strip:SetShown(value ~= nil)
-    if value then
-      local top = math.max(1, y(value))
-      local r, g, b = rgb("gold")
+    local left, right = area[cursor], area[cursor + 1]
+    if series[1].area and index <= strips and left and right and left.x <= at then
+      level = left.y + (right.y - left.y) * (at - left.x) / (right.x - left.x)
+    end
+    strip:SetShown(level ~= nil)
+    if level then
+      local reach = math.max(1, level)
       strip:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", (index - 1) * STRIP, 0)
-      strip:SetHeight(top)
-      setGradient(strip, "VERTICAL", r, g, b, 0.04, r, g, b, 0.04 + 0.51 * top / height)
+      strip:SetHeight(reach)
+      setGradient(strip, "VERTICAL", r, g, b, 0.03, r, g, b, 0.03 + palette.area * reach / height)
     end
   end
 
-  local column = width / (count - 1)
-  for index, day in ipairs(chart.days) do
-    local slot, before, after = days[index], days[index - 1], days[index + 1]
-    day.hit:SetShown(slot and true or false)
-    day.dot:SetShown(slot and not before and not after and true or false)
-    if day.line then
-      day.line:SetShown(slot and before and true or false)
-      day.line:SetColorTexture(rgb("gold"))
-    end
-    if slot then
-      day.hit:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", x(index) - column / 2, 0)
-      day.hit:SetSize(column, height)
-      day.hit.tip, day.hit.x, day.hit.y = slot.tip, x(index), y(slot.value)
-      day.dot:SetPoint("CENTER", plot, "BOTTOMLEFT", x(index), y(slot.value))
-      day.dot:SetVertexColor(rgb("gold"))
-      if day.line and before then
-        day.line:SetStartPoint("BOTTOMLEFT", plot, x(index - 1), y(before.value))
-        day.line:SetEndPoint("BOTTOMLEFT", plot, x(index), y(slot.value))
+  local ends = {}
+  for index, line in ipairs(chart.lines) do
+    local spots = measured[index] or {}
+    -- A client without lines draws the area and the dots alone.
+    for segment = 1, math.max(#line.segments, #spots - 1) do
+      local from, to = spots[segment], spots[segment + 1]
+      local stroke = line.segments[segment]
+      if not stroke and to and plot.CreateLine then
+        -- The first line over the second where they meet, as the area is its.
+        stroke = plot:CreateLine(nil, "ARTWORK", nil, 3 - index)
+        stroke:SetThickness(1.8)
+        line.segments[segment] = stroke
+      end
+      if stroke then
+        stroke:SetShown(to ~= nil)
+      end
+      if stroke and to then
+        stroke:SetColorTexture(rgb(series[index].colour))
+        stroke:SetStartPoint("BOTTOMLEFT", plot, from.x, from.y)
+        stroke:SetEndPoint("BOTTOMLEFT", plot, to.x, to.y)
       end
     end
+    local last = spots[#spots]
+    line.dot:SetShown(last ~= nil)
+    line.value:SetShown(last ~= nil)
+    if last then
+      line.dot:SetPoint("CENTER", plot, "BOTTOMLEFT", last.x, last.y)
+      line.dot:SetVertexColor(rgb(series[index].colour))
+      line.value:SetText(latestMoney(last.value))
+      ends[#ends + 1] = { label = line.value, y = last.y }
+    end
   end
-  showMarker(false)
+  -- The latest values' labels, moved apart where they would overlap.
+  if ends[2] and math.abs(ends[1].y - ends[2].y) < 13 then
+    local middle, upper = (ends[1].y + ends[2].y) / 2, ends[1].y >= ends[2].y and 1 or 2
+    ends[upper].y, ends[3 - upper].y = middle + 6.5, middle - 6.5
+  end
+  for _, spot in ipairs(ends) do
+    spot.label:SetPoint("LEFT", plot, "BOTTOMLEFT", width + 8, spot.y)
+  end
+
+  local most = 0
+  for _, point in ipairs(points) do
+    most = math.max(most, point.amount or 0)
+  end
+  chart.most:SetText(band and most > 0 and tostring(most) or "")
+  local barWidth = math.max(1.5, math.min(8, width / math.max(1, #points) * 0.5))
+  for index = 1, math.max(#points, #chart.hits) do
+    local point, before, after = points[index], points[index - 1], points[index + 1]
+    local hit, bar = chart.hits[index], chart.bars[index]
+    if not hit and point then
+      -- Through the plot and the band, so that a low value is as easy to hover as a high one.
+      hit = CreateFrame("Frame", nil, plot)
+      hit:EnableMouse(true)
+      hit:SetScript("OnEnter", showPointTip)
+      hit:SetScript("OnLeave", hidePointTip)
+      chart.hits[index] = hit
+    end
+    if not bar and point then
+      bar = chart.band:CreateTexture(nil, "ARTWORK")
+      paint(function()
+        bar:SetColorTexture(rgb("gold", palette.bar))
+      end)
+      chart.bars[index] = bar
+    end
+    if hit then
+      hit:SetShown(point ~= nil)
+    end
+    if bar then
+      bar:SetShown(point ~= nil and band ~= nil and (point.amount or 0) > 0)
+    end
+    if point then
+      local at = x(point.at)
+      local left = before and (x(before.at) + at) / 2 or math.max(0, at - 6)
+      local right = after and (x(after.at) + at) / 2 or math.min(width, at + 6)
+      hit:SetPoint("TOPLEFT", plot, "TOPLEFT", left, 0)
+      hit:SetPoint("BOTTOMRIGHT", chart.bottom, "BOTTOMLEFT", right, 0)
+      hit.point, hit.series, hit.band, hit.index, hit.x, hit.ys = point, series, band, index, at, {}
+      for line = 1, #series do
+        hit.ys[line] = point.values[line] and y(point.values[line])
+      end
+    end
+    if point and band and (point.amount or 0) > 0 then
+      bar:SetPoint("BOTTOMLEFT", chart.band, "BOTTOMLEFT", x(point.at) - barWidth / 2, 0)
+      bar:SetSize(barWidth, math.max(1, point.amount / most * BAND_HEIGHT))
+    end
+  end
+
+  for index, key in ipairs(chart.legend) do
+    local entry = series[index] or (index == #series + 1 and band) or nil
+    key.swatch:SetShown(legend and entry ~= nil)
+    key.label:SetShown(legend and entry ~= nil)
+    if legend and entry then
+      key.label:SetText(entry.name)
+      key.swatch:SetSize(entry == band and 8 or 14, entry == band and 10 or 2)
+      key.swatch:SetColorTexture(rgb(entry == band and "gold" or entry.colour, entry == band and palette.bar or 1))
+    end
+  end
+  showMarker(nil)
 end
 
 -- The view's rows, filtered by the toolbar and sorted, and every part of
@@ -1293,19 +1492,31 @@ local function showItemTip(owner, key)
   end
 end
 
-local function showDayTip(self)
+-- A point's time, then each line's value in its colour and the amount
+-- listed. Tooltips are dark in either theme, so their keys take the dark
+-- palette's colours.
+function showPointTip(self)
+  local point = self.point
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  GameTooltip:AddLine(self.tip[1])
-  for index = 2, #self.tip do
-    GameTooltip:AddLine(self.tip[index], 1, 1, 1)
+  GameTooltip:AddLine(point.when)
+  for index, line in ipairs(self.series) do
+    local value = point.values[index]
+    if value then
+      local r, g, b = hexRGB(PALETTES.dark[line.colour])
+      GameTooltip:AddDoubleLine(line.name, Codec.Money(value), r, g, b, 1, 1, 1)
+    end
+  end
+  if self.band and point.amount then
+    local r, g, b = hexRGB(PALETTES.dark.gold)
+    GameTooltip:AddDoubleLine(self.band.name, tostring(point.amount), r, g, b, 1, 1, 1)
   end
   GameTooltip:Show()
-  showMarker(true, self.x, self.y)
+  showMarker(self)
 end
 
-local function hideDayTip()
+function hidePointTip()
   GameTooltip_Hide()
-  showMarker(false)
+  showMarker(nil)
 end
 
 -- A frame drawn as a panel: the panel colour inside a line.
@@ -1484,7 +1695,6 @@ local function addHead()
   head:SetSize(PAGE_WIDTH, HEAD_HEIGHT)
   head.title = label(head, "title", "text")
   head.icon, head.frame = addIcon(head, 24)
-  head.frame:SetPoint("LEFT", head, "LEFT", 0, 0)
   head.figure = label(head, "figure", "text")
   head.figure:SetPoint("BOTTOMLEFT", head.title, "BOTTOMRIGHT", 14, 1)
   head.sub = label(head, "small", "muted")
@@ -1515,6 +1725,27 @@ local function addHead()
     end
   end)
   head.link = link
+
+  -- On the link, so that it takes the clicks over the item's name.
+  local back = UI.Button(link, "", 1, 24)
+  back:SetPoint("LEFT", head, "LEFT", 0, 0)
+  back:SetPoint("RIGHT", back.label, "RIGHT", 11, 0)
+  back.label:ClearAllPoints()
+  back.label:SetPoint("LEFT", head, "LEFT", 23, 0)
+  -- A chevron pointing back, drawn as the rail's icons are.
+  if back.CreateLine then
+    for _, stroke in ipairs({ { 13, 7, 8.5, 12 }, { 8.5, 12, 13, 17 } }) do
+      local line = back:CreateLine(nil, "ARTWORK")
+      line:SetThickness(1.6)
+      line:SetStartPoint("TOPLEFT", back, stroke[1], -stroke[2])
+      line:SetEndPoint("TOPLEFT", back, stroke[3], -stroke[4])
+      UI.Fill(line, "buttonText")
+    end
+  end
+  back:SetScript("OnClick", function()
+    UI.Back()
+  end)
+  head.back = back
 
   -- The segmented control: a line around buttons that frame their text.
   local control = CreateFrame("Frame", nil, head)
@@ -1637,7 +1868,7 @@ local function addTable()
   UI.Fill(frame.rule, "edge")
   window.headers, window.headerButtons = {}, {}
   for column = 1, MAX_COLUMNS do
-    window.headers[column] = label(frame.columns, "label", "muted")
+    window.headers[column] = label(frame.columns, "header", "muted")
     local button = CreateFrame("Button", nil, frame.columns)
     button:SetScript("OnClick", function()
       sortColumn(column)
@@ -1669,7 +1900,7 @@ local function addTable()
     line:SetHeight(SIDE_ROW - 1)
     line.key = label(line, "body", "text")
     line.key:SetPoint("LEFT", 10, 0)
-    line.value = label(line, "body", "text")
+    line.value = label(line, "number", "text")
     line.value:SetPoint("RIGHT", -10, 0)
     line.rule = line:CreateTexture(nil, "BORDER")
     line.rule:SetPoint("TOPLEFT", line, "BOTTOMLEFT")
@@ -1685,17 +1916,27 @@ local function addChart()
   local chart = panel(window)
   chart:SetWidth(PAGE_WIDTH)
   local plot = CreateFrame("Frame", nil, chart)
-  chart.plotWidth = PAGE_WIDTH - 2 - 2 * CHART_PAD - AXIS_WIDTH - PLOT_RIGHT
-  plot:SetPoint("TOPLEFT", chart, "TOPLEFT", 1 + CHART_PAD + AXIS_WIDTH, -1 - CHART_PAD - PLOT_TOP)
+  chart.plotWidth = PAGE_WIDTH - 2 - 2 * CHART_PAD - AXIS_WIDTH - VALUE_WIDTH
   plot:SetWidth(chart.plotWidth)
   chart.plot = plot
+  local band = CreateFrame("Frame", nil, chart)
+  band:SetPoint("TOPLEFT", plot, "BOTTOMLEFT", 0, -BAND_GAP)
+  band:SetSize(chart.plotWidth, BAND_HEIGHT)
+  local base = band:CreateTexture(nil, "BORDER")
+  base:SetPoint("BOTTOMLEFT")
+  base:SetPoint("BOTTOMRIGHT")
+  base:SetHeight(1)
+  UI.Fill(base, "edge")
+  chart.most = label(band, "axis", "muted")
+  chart.most:SetPoint("RIGHT", band, "TOPLEFT", -6, -4)
+  chart.band, chart.bottom = band, plot
 
   chart.grid = {}
   for index = 1, MAX_GRID do
     local rule = plot:CreateTexture(nil, "BACKGROUND")
     rule:SetSize(chart.plotWidth, 1)
     UI.Fill(rule, "line")
-    local value = label(plot, "label", "muted")
+    local value = label(plot, "axis", "muted")
     value:SetJustifyH("RIGHT")
     chart.grid[index] = { rule = rule, label = value }
   end
@@ -1704,41 +1945,51 @@ local function addChart()
     local rule = plot:CreateTexture(nil, "BACKGROUND")
     rule:SetWidth(1)
     UI.Fill(rule, "line")
-    local day = label(plot, "label", "muted")
+    local day = label(plot, "axis", "muted")
     chart.dates[index] = { rule = rule, label = day }
   end
-  chart.strips = {}
+  chart.strips, chart.hits, chart.bars = {}, {}, {}
 
-  chart.days = {}
-  for index = 1, MAX_CHART_DAYS do
-    local day = {}
-    -- The segment from the day before. A client without lines draws the area and dots alone.
-    day.line = plot.CreateLine and plot:CreateLine(nil, "ARTWORK")
-    if day.line then
-      day.line:SetThickness(1.6)
-    end
-    day.dot = plot:CreateTexture(nil, "OVERLAY")
-    disc(day.dot, 5)
-    -- The day's full height, so that a low value is as easy to hover as a high one.
-    day.hit = CreateFrame("Frame", nil, plot)
-    day.hit:EnableMouse(true)
-    day.hit:SetScript("OnEnter", showDayTip)
-    day.hit:SetScript("OnLeave", hideDayTip)
-    chart.days[index] = day
+  -- Two lines at most: segments made as points need them, a dot on the
+  -- latest point and its value right of the plot.
+  chart.lines = {}
+  for index = 1, 2 do
+    local dot = plot:CreateTexture(nil, "OVERLAY")
+    disc(dot, 7)
+    local value = label(chart, "axis", "text")
+    chart.lines[index] = { segments = {}, dot = dot, value = value }
   end
 
-  -- The hovered day: a rule down to the axis and a ring on the line.
-  local marker = {}
+  chart.legend = {}
+  local previous
+  for index = 1, 3 do
+    local swatch = chart:CreateTexture(nil, "ARTWORK")
+    if previous then
+      swatch:SetPoint("LEFT", previous, "RIGHT", 16, 0)
+    else
+      swatch:SetPoint("LEFT", chart, "TOPLEFT", 1 + CHART_PAD + AXIS_WIDTH, -1 - LEGEND_TOP / 2)
+    end
+    local text = label(chart, "label", "muted")
+    text:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
+    chart.legend[index] = { swatch = swatch, label = text }
+    previous = text
+  end
+
+  local marker = { rings = {} }
   marker.rule = plot:CreateTexture(nil, "OVERLAY")
   marker.rule:SetWidth(1)
   UI.Fill(marker.rule, "muted", 0.8)
-  marker.ring = plot:CreateTexture(nil, "OVERLAY", nil, 1)
-  disc(marker.ring, 9)
-  fillDisc(marker.ring, "gold")
-  marker.hole = plot:CreateTexture(nil, "OVERLAY", nil, 2)
-  disc(marker.hole, 5)
-  marker.hole:SetPoint("CENTER", marker.ring)
-  fillDisc(marker.hole, "panel")
+  for index = 1, 2 do
+    local ring = plot:CreateTexture(nil, "OVERLAY", nil, 1)
+    disc(ring, 9)
+    local hole = plot:CreateTexture(nil, "OVERLAY", nil, 2)
+    disc(hole, 5)
+    hole:SetPoint("CENTER", ring)
+    fillDisc(hole, "panel")
+    marker.rings[index] = { ring = ring, hole = hole }
+  end
+  fillDisc(marker.rings[1].ring, "gold")
+  fillDisc(marker.rings[2].ring, "second")
   chart.marker = marker
   window.chart = chart
 end
@@ -1865,6 +2116,48 @@ function UI.TitleBar(frame, height, text)
   return bar
 end
 
+local function showThemeTip(self)
+  GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+  GameTooltip:AddLine(UI.Theme() == "dark" and "Light window" or "Dark window")
+  GameTooltip:AddLine("Click to draw Goldbook " .. (UI.Theme() == "dark" and "on light parchment." or "in dark ink."), 1, 1, 1)
+  GameTooltip:AddLine("/gb theme and the Options panel switch it too.", 1, 1, 1)
+  GameTooltip:Show()
+end
+
+-- Left of the close button, a half-filled ring: the usual sign for light and
+-- dark. Drawn from discs, as the client draws them in any size.
+local function addThemeToggle(bar)
+  local toggle = CreateFrame("Button", nil, bar, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  toggle:SetSize(24, 24)
+  toggle:SetPoint("RIGHT", bar.close, "LEFT", -8, 0)
+  UI.Box(toggle, "bg", "edge")
+  local ring = toggle:CreateTexture(nil, "ARTWORK")
+  disc(ring, 14)
+  ring:SetPoint("CENTER")
+  fillDisc(ring, "railText")
+  local hole = toggle:CreateTexture(nil, "ARTWORK", nil, 1)
+  disc(hole, 10)
+  hole:SetPoint("CENTER")
+  fillDisc(hole, "bg")
+  local half = toggle:CreateTexture(nil, "ARTWORK", nil, 2)
+  disc(half, 10)
+  half:SetWidth(5)
+  half:SetTexCoord(0, 0.5, 0, 1)
+  half:SetPoint("RIGHT", hole, "CENTER")
+  fillDisc(half, "railText")
+  local glow = toggle:CreateTexture(nil, "HIGHLIGHT")
+  glow:SetPoint("TOPLEFT", 1, -1)
+  glow:SetPoint("BOTTOMRIGHT", -1, 1)
+  UI.Fill(glow, "gold", 0.15)
+  toggle:SetScript("OnClick", function(self)
+    UI.SetTheme(UI.Theme() == "dark" and "light" or "dark")
+    showThemeTip(self)
+  end)
+  toggle:SetScript("OnEnter", showThemeTip)
+  toggle:SetScript("OnLeave", GameTooltip_Hide)
+  return toggle
+end
+
 local function addTitleBar()
   local bar = UI.TitleBar(window, TITLE_HEIGHT)
   local rim = bar:CreateTexture(nil, "ARTWORK")
@@ -1883,11 +2176,12 @@ local function addTitleBar()
   window.version:SetPoint("BOTTOMLEFT", brand, "BOTTOMRIGHT", 12, 2)
   window.version:SetText(ns.VERSION)
   window.close = bar.close
+  window.themeToggle = addThemeToggle(bar)
 
   -- The account's gold in a box sized to it.
   local purse = panel(bar, "field", "edge")
-  window.purse = label(purse, "body", "text")
-  window.purse:SetPoint("RIGHT", bar.close, "LEFT", -23, 0)
+  window.purse = label(purse, "number", "text")
+  window.purse:SetPoint("RIGHT", window.themeToggle, "LEFT", -21, 0)
   local caption = label(purse, "label", "muted")
   caption:SetPoint("RIGHT", window.purse, "LEFT", -8, 0)
   caption:SetText("ACCOUNT")
@@ -1899,6 +2193,8 @@ end
 local function createWindow()
   window = CreateFrame("Frame", "GoldbookWindow", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+  -- Before the position, which counts in the scaled window's units.
+  window:SetScale(UI.Scale())
   local saved = ns.db.settings.window
   if saved then
     window:SetPoint(saved[1], UIParent, saved[2], saved[3], saved[4])
@@ -1967,7 +2263,36 @@ function UI.ShowItem(linkOrKey)
     name, quality = infoName, infoQuality
   end
   shownItem = { key = key, name = name or ("item " .. key), quality = quality or 1 }
+  -- One item after another keeps the view the first came from.
+  if not (window and window:IsShown()) then
+    origin = nil
+  elseif view ~= "item" then
+    local sort = sorting[view]
+    origin = { view = view, search = window.search:GetText(), filters = copy(filters), sort = sort and { unpack(sort) },
+      segment = chosen[view], offset = offset }
+  end
   UI.Show("item")
+end
+
+-- From the item view to where it was opened from, as it was left; to the
+-- price list when it was opened with the window closed.
+function UI.Back()
+  local back = origin or { view = "prices" }
+  origin = nil
+  view = back.view
+  if back.filters then
+    filters = back.filters
+    chipLabels()
+  end
+  sorting[view] = back.sort or sorting[view]
+  chosen[view] = back.segment or chosen[view]
+  if back.search and back.search ~= window.search:GetText() then
+    window.search:SetText(back.search)
+  else
+    refresh()
+  end
+  offset = math.max(0, math.min(back.offset or 0, #results - visibleRows()))
+  render()
 end
 
 function UI.Toggle()
@@ -1997,6 +2322,19 @@ function UI.RefreshSoon()
   end)
 end
 
+-- Whatever shows the window's settings elsewhere, such as the Options panel,
+-- hears of each change made from the window or a command.
+local watchers = {}
+function UI.Watch(watcher)
+  watchers[#watchers + 1] = watcher
+end
+
+local function changed()
+  for _, watcher in ipairs(watchers) do
+    watcher()
+  end
+end
+
 -- Repaints every Goldbook frame in the light or dark palette and keeps the
 -- choice. Returns false for a theme it does not know.
 function UI.SetTheme(name)
@@ -2009,12 +2347,60 @@ function UI.SetTheme(name)
     apply()
   end
   UI.Refresh()
+  changed()
   return true
 end
 
 function UI.Theme()
-  return PALETTES[ns.db.settings.theme] and ns.db.settings.theme or "light"
+  return PALETTES[ns.db.settings.theme] and ns.db.settings.theme or DEFAULT_THEME
 end
+
+function UI.Scale()
+  return ns.db.settings.scale or 1
+end
+
+-- Where the window's centre may go, in its own units at `scale`: wholly on
+-- the screen, or, when it is larger than the screen, with its title bar on it.
+local function onScreen(x, y, scale)
+  local width, height = UIParent:GetWidth() / scale, UIParent:GetHeight() / scale
+  local function within(at, size, room)
+    return size >= room and room / 2 or math.max(size / 2, math.min(room - size / 2, at))
+  end
+  x = within(x, WINDOW_WIDTH, width)
+  y = WINDOW_HEIGHT >= height and height - WINDOW_HEIGHT / 2 or within(y, WINDOW_HEIGHT, height)
+  return x, y
+end
+
+-- Sizes the window, from MIN_SCALE to MAX_SCALE times, and keeps the choice.
+-- Its centre stays where it was on the screen, moved only as far as keeps it
+-- there. Returns false for a size out of range.
+function UI.SetScale(scale)
+  -- Rounded first: a slider hands back its ends as single floats, 0.7 as 0.69999998.
+  scale = type(scale) == "number" and math.floor(scale * 100 + 0.5) / 100
+  if not scale or scale < MIN_SCALE or scale > MAX_SCALE then
+    return false
+  end
+  local old = UI.Scale()
+  ns.db.settings.scale = scale
+  local x, y
+  if window then
+    x, y = window:GetCenter()
+    window:SetScale(scale)
+  end
+  if x then
+    x, y = onScreen(x * old / scale, y * old / scale, scale)
+    window:ClearAllPoints()
+    window:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+    ns.db.settings.window = { "CENTER", "BOTTOMLEFT", x, y }
+  elseif ns.db.settings.window then
+    -- A window not drawn yet opens where it was left, in the new size's units.
+    local saved = ns.db.settings.window
+    saved[3], saved[4] = saved[3] * old / scale, saved[4] * old / scale
+  end
+  changed()
+  return true
+end
+UI.MIN_SCALE, UI.MAX_SCALE = MIN_SCALE, MAX_SCALE
 
 local function createScanButton()
   scanButton = UI.Button(AuctionHouseFrame, "Goldbook scan", 150, 22, "GoldbookScanButton")

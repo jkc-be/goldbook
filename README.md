@@ -209,6 +209,15 @@ you in to the character pages with the ID and key saved by the addon. After
 your first game login, type `/reload` once so they are available. If several
 accounts are saved, choose which one to open.
 
+After a sync pass whose uploads succeed, the app also downloads the server's
+prices and history for each realm your SavedVariables name, including other
+players' scans. It writes them to `Interface/AddOns/Goldbook/ServerData.lua`
+in each game folder, at most once every 15 minutes, and **Sync now** writes
+them again. The game loads the file at login and at `/reload`, and the addon
+then takes every price newer than its own and fills the days and hours its
+history lacks. Tooltips say "from the server" for those prices. The app never writes SavedVariables. [Server data for the addon](docs/server-data.md) describes
+the endpoint, the file, and the rules for using it in the addon.
+
 The desktop app passes the login through a temporary local page. The ID and
 key are sent in a form to your chosen server and stay out of URLs and logs.
 The browser keeps its normal login session. If the game has not saved a
@@ -326,6 +335,7 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | What | Where |
 |---|---|
 | Installed addon | `<World of Warcraft>/_<flavor>_/Interface/AddOns/Goldbook` |
+| Prices downloaded from the server | `<World of Warcraft>/_<flavor>_/Interface/AddOns/Goldbook/ServerData.lua` |
 | Scans waiting for sync | `<World of Warcraft>/_<flavor>_/WTF/Account/<account>/SavedVariables/Goldbook.lua` |
 | Scans the agent has sent | `~/.config/goldbook/state.json` |
 | Scans the desktop app has sent | `~/.config/goldbook/desktop-<server hash>.json` |
@@ -353,6 +363,9 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | `/gb web` | The web page's address, and the ID and key that log you in to its character pages. See [Web login](#web-login) |
 | Right click the minimap button | Quick scan, while the auction house is open |
 | Drag the minimap button, `/gb minimap` | Moves it, hides or shows it |
+| `/gb theme dark`, `/gb theme light`, or the half-filled ring by the window's close button | Draws the window in dark ink, the default, or on light parchment |
+| `/gb scale <0.7-1.4>`, or the slider in Options > AddOns > Goldbook | Sizes the window, apart from the game's UI scale. 1 is its normal size |
+| **Back to Prices** in an item's history | Returns to the list the item was opened from, with its search, filters, sort and scroll |
 | Hover an item | The price lines below. Hold Shift over a stack to price the whole stack |
 
 ### Price sources

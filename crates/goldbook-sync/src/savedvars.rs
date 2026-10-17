@@ -193,7 +193,7 @@ fn container(v: Option<&Value>, what: &str) -> Result<Value> {
     let rows=list(c.get("rows"),&format!("{what}.rows"))?.iter().enumerate().map(|(i,row)|{let r=table(Some(row),&format!("{what}.rows[{}]",i+1))?;Ok(json!({"key":get(r,"key"),"name":get(r,"name"),"quality":get(r,"quality"),"count":get(r,"count"),"action":get(r,"action"),"post":get(r,"post"),"vendor":get(r,"vendor"),"value":get(r,"value")}))}).collect::<Result<Vec<_>>>()?;
     Ok(json!({"at":get(c,"at"),"rows":rows}))
 }
-fn normalized_realm(realm: &str) -> String {
+pub(crate) fn normalized_realm(realm: &str) -> String {
     realm
         .chars()
         .filter(|c| !(c.is_whitespace() && *c != '\u{0085}' || *c == '\u{feff}'))
