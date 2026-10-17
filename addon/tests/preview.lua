@@ -267,6 +267,8 @@ end
 
 -- The parts of the screen the stub leaves out.
 UIParent:SetSize(SCREEN_WIDTH, SCREEN_HEIGHT)
+AuctionHouseFrame:SetSize(800, 450)
+AuctionHouseFrame:SetPoint("CENTER")
 Minimap:SetSize(140, 140)
 Minimap:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -17, -22)
 GameTooltip:SetFrameStrata("TOOLTIP")
@@ -948,35 +950,77 @@ local function captureWindow(view, extra)
   capture(view, { GoldbookWindow, GoldbookMinimapButton, extra }, { GoldbookWindow, extra })
 end
 
-run("show")
-captureWindow("prices")
+-- Drawn as if the mouse were over it: its highlight shows.
+local function hover(widget, on)
+  records[widget].hover = on or nil
+end
+
+-- The chart's marker on a day, without the tooltip that comes with it.
+local function hoverDay(index)
+  local hit = GoldbookWindow.chart.days[index].hit
+  hit.scripts.OnEnter(hit)
+  GameTooltip:Hide()
+end
+
+-- Every view, the web login and its confirmation, as <name><suffix>.png.
+local function captureViews(suffix)
+  run("show")
+  local lotus = rowFor("Black Lotus")
+  hover(lotus, true)
+  captureWindow("prices" .. suffix)
+  hover(lotus, false)
+  local chip = GoldbookWindow.filters.controls.profession
+  chip.scripts.OnClick(chip)
+  captureWindow("menu" .. suffix)
+  chip.scripts.OnClick(chip)
+  run("deals")
+  hover(GoldbookWindow.rows[1].hit, true)
+  captureWindow("deals" .. suffix)
+  hover(GoldbookWindow.rows[1].hit, false)
+  for _, view in ipairs({ "sell", "movers", "trades" }) do
+    run(view)
+    captureWindow(view .. suffix)
+  end
+  run("gold")
+  hoverDay(22)
+  captureWindow("gold" .. suffix)
+  run("item Black Lotus")
+  hoverDay(28)
+  captureWindow("item" .. suffix)
+  GoldbookWindow:Hide()
+
+  run("web")
+  capture("web" .. suffix, { GoldbookWebLogin }, { GoldbookWebLogin })
+  GoldbookWebLogin.newKey.scripts.OnClick(GoldbookWebLogin.newKey)
+  capture("web-confirm" .. suffix, { GoldbookWebLogin }, { GoldbookWebLogin })
+  GoldbookWebLogin:Hide()
+
+  Stub.fire("AUCTION_HOUSE_SHOW")
+  capture("scan" .. suffix, { GoldbookScanButton }, { GoldbookScanButton })
+end
+
+captureViews("")
 -- An item tooltip goes right of the window, or left where the screen ends
 -- first. The addon asks how far right the window and the screen reach and
 -- how wide the tooltip is; the stub lays nothing out, so the preview answers.
 -- 310 is about what the page measures for this tooltip.
+run("show")
 UIParent.right, GameTooltip.width = SCREEN_WIDTH, 310
 local hovered = rowFor("Black Lotus")
+hover(hovered, true)
 for _, place in ipairs({ { "tooltip", -260 }, { "tooltip-left", 260 } }) do
   GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", place[2], 0)
   GoldbookWindow.right = (SCREEN_WIDTH + GoldbookWindow.width) / 2 + place[2]
   hovered.scripts.OnEnter(hovered)
   captureWindow(place[1], GameTooltip)
 end
+hover(hovered, false)
 GameTooltip:Hide()
 GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-for _, view in ipairs({ "deals", "sell", "movers", "gold", "trades" }) do
-  run(view)
-  captureWindow(view)
-end
-run("item Black Lotus")
-captureWindow("item")
 GoldbookWindow:Hide()
 
-run("web")
-capture("web", { GoldbookWebLogin }, { GoldbookWebLogin })
-GoldbookWebLogin.newKey.scripts.OnClick(GoldbookWebLogin.newKey)
-capture("web-confirm", { GoldbookWebLogin }, { GoldbookWebLogin })
-GoldbookWebLogin:Hide()
+ns.UI.SetTheme("dark")
+captureViews("-dark")
 
 -- Options > AddOns puts the panel in a canvas of about this size.
 local canvas = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
