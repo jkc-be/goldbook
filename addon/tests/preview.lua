@@ -5,10 +5,35 @@
 -- client would (<view>.html) and a screenshot of that page cropped to the
 -- window (<view>.png). It approximates the game; it is not pixel-exact.
 --
---   luajit addon/tests/preview.lua <outdir>
+--   luajit addon/tests/preview.lua [--client] [--dpr <n>] [--addon <folder>] <outdir>
+--
+-- --client draws every pixel the way the game client measured in client.lua
+-- does, --dpr renders at that many device pixels per point, as a Retina
+-- screen does, and --addon previews another copy of the Goldbook folder.
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
-local outdir = assert(arg[1], "usage: luajit addon/tests/preview.lua <outdir>")
+local USAGE = "usage: luajit addon/tests/preview.lua [--client] [--dpr <n>] [--addon <folder>] <outdir>"
+local flags = { dpr = 1, addon = here .. "/../Goldbook" }
+local outdir
+do
+  local index = 1
+  while arg[index] do
+    local word = arg[index]
+    if word == "--client" then
+      flags.client = true
+    elseif word == "--dpr" or word == "--addon" then
+      index = index + 1
+      flags[word:sub(3)] = assert(arg[index], USAGE)
+    else
+      assert(not outdir and word:sub(1, 2) ~= "--", USAGE)
+      outdir = word
+    end
+    index = index + 1
+  end
+end
+outdir = assert(outdir, USAGE)
+local DPR = assert(tonumber(flags.dpr), USAGE)
 local Stub = dofile(here .. "/wowstub.lua")
+local Client = dofile(here .. "/client.lua")
 
 local SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 800
 local DAY = 24 * 3600
@@ -67,6 +92,8 @@ local SETTERS = {
   SetFrameStrata = "strata",
   SetFrameLevel = "level",
   SetThickness = "thickness",
+  SetScale = "scale",
+  SetTexCoord = "texCoord",
 }
 for method, field in pairs(SETTERS) do
   recorders[method] = function(self, original, ...)
@@ -81,9 +108,9 @@ local function fontRecorder(self, original, font)
 end
 recorders.SetFontObject = fontRecorder
 recorders.SetNormalFontObject = fontRecorder
-function recorders.SetFont(self, original, file, size, flags)
-  records[self].face = { file = file, size = size }
-  return original(self, file, size, flags)
+function recorders.SetFont(self, original, file, size, outline)
+  records[self].face = { file = file, size = size, outline = outline ~= "" and outline or nil }
+  return original(self, file, size, outline)
 end
 -- Colour objects or, from older clients, plain numbers, kept as two { r, g, b, a }.
 function recorders.SetGradient(self, original, orientation, from, to, ...)
@@ -332,6 +359,8 @@ function layout(snapshot, screen) {
   const rgba = c => `rgba(${c.slice(0, 3).map(v => Math.round(v * 255)).join(",")},${c[3] ?? 1})`;
   const escape = s => s.replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]);
   const isIcon = w => typeof w.texture === "number" || /^Interface[\\/]Icons[\\/]/i.test(w.texture || "");
+  // A frame's sizes and offsets count in its own units: its scale times its parent's.
+  const scaleOf = w => (w.scale ?? 1) * (byId.has(w.parent) ? scaleOf(byId.get(w.parent)) : 1);
 
   // A template font by its name, or a font object made with CreateFont by
   // its id: that one has its own face and size, white and without a shadow.
@@ -339,14 +368,15 @@ function layout(snapshot, screen) {
     const object = typeof name === "number" ? byId.get(name) : null;
     if (object && object.face) {
       const family = /FRIZ/i.test(object.face.file) ? FACES.friz : FACES.narrow;
-      return { size: object.face.size, color: WHITE, family, flat: true };
+      return { size: object.face.size, color: WHITE, family, flat: true, outline: object.face.outline };
     }
     const size = /Small/.test(name) ? 10 : /Large/.test(name) ? 16 : 12;
     const color = /Disable/.test(name) ? GREY : /Highlight|Chat|Tooltip/.test(name) ? WHITE : GOLD;
     return { size, color };
   }
-  function setFont(el, size, color, family = FACE, flat = false) {
-    Object.assign(el.style, { font: `${size}px/${size + 2}px ${family}`, color, textShadow: flat ? "none" : "1px 1px 0 #000" });
+  function setFont(el, size, color, family = FACE, flat = false, outline = null) {
+    const shadow = outline ? "-1px 0 0 #000, 1px 0 0 #000, 0 -1px 0 #000, 0 1px 0 #000" : flat ? "none" : "1px 1px 0 #000";
+    Object.assign(el.style, { font: `${size}px/${size + 2}px ${family}`, color, textShadow: shadow });
   }
   // |T path or fileID:height[:width...]|t. A height of 0 follows the text.
   // Money icons are coins; anything else is an icon square.
@@ -372,7 +402,7 @@ function layout(snapshot, screen) {
   }
   function text(el, w, fontName, color) {
     const f = font(fontName);
-    setFont(el, f.size, color || f.color, f.family, f.flat);
+    setFont(el, f.size * scaleOf(w), color || f.color, f.family, f.flat, f.outline);
     const inner = document.createElement("div");
     inner.style.whiteSpace = "pre";
     inner.innerHTML = markup(w.text);
@@ -382,7 +412,7 @@ function layout(snapshot, screen) {
   function frame(el, w) {
     if (!w.backdrop) return;
     Object.assign(el.style, PANEL);
-    if (/WHITE8X8/i.test(w.backdrop.edgeFile || "")) Object.assign(el.style, { border: `${w.backdrop.edgeSize}px solid`, borderRadius: "0" });
+    if (/WHITE8X8/i.test(w.backdrop.edgeFile || "")) Object.assign(el.style, { border: `${w.backdrop.edgeSize * scaleOf(w)}px solid`, borderRadius: "0" });
     if (w.backdropColor) el.style.background = rgba(w.backdropColor);
     if (w.borderColor) el.style.borderColor = rgba(w.borderColor);
   }
@@ -404,6 +434,15 @@ function layout(snapshot, screen) {
       if (w.layer === "HIGHLIGHT" && !(owner && (owner.hover || owner.highlight))) { el.style.display = "none"; return; }
       const disc = /AlphaMask/i.test(w.texture || "");
       if (disc) el.style.borderRadius = "50%";
+      // Part of a disc, as SetTexCoord crops it: the whole disc inside a clipping box.
+      if (disc && w.texCoord) {
+        const [l, r, t, b] = w.texCoord, whole = document.createElement("div");
+        Object.assign(whole.style, { position: "absolute", borderRadius: "50%", background: rgba(w.vertexColor || [1, 1, 1]),
+          width: `${100 / (r - l)}%`, height: `${100 / (b - t)}%`, left: `${-100 * l / (r - l)}%`, top: `${-100 * t / (b - t)}%` });
+        Object.assign(el.style, { borderRadius: "0", overflow: "hidden" });
+        el.append(whole);
+        return;
+      }
       const g = w.gradient;
       if (g) el.style.background = `linear-gradient(${g.orientation === "HORIZONTAL" ? "to right" : "to top"}, ${rgba(g.from)}, ${rgba(g.to)})`;
       else if (disc) el.style.background = rgba(w.vertexColor || [1, 1, 1]);
@@ -461,10 +500,13 @@ function layout(snapshot, screen) {
     },
   };
 
+  // On the screen: text is measured there already.
   function ownSize(w) {
     const natural = measured.get(w.id) || [];
     const fallback = TEMPLATE_SIZE[w.template] || (w.kind === "Texture" && isIcon(w) ? [16, 16] : [0, 0]);
-    return [w.width ?? natural[0] ?? fallback[0], w.height ?? natural[1] ?? fallback[1]];
+    const scale = scaleOf(w);
+    return [w.width !== undefined ? w.width * scale : natural[0] ?? fallback[0] * scale,
+      w.height !== undefined ? w.height * scale : natural[1] ?? fallback[1] * scale];
   }
   const hFraction = p => p.includes("LEFT") ? 0 : p.includes("RIGHT") ? 1 : 0.5;
   const vFraction = p => p.startsWith("TOP") ? 1 : p.startsWith("BOTTOM") ? 0 : 0.5;
@@ -481,8 +523,9 @@ function layout(snapshot, screen) {
   function spot(p, w) {
     const target = rect(p.relativeTo ?? w.parent);
     if (!target) { warnings.push(`${describe(w)} is anchored to a widget without a place`); return null; }
-    return [target.left + (target.right - target.left) * hFraction(p.relativePoint) + p.x,
-      target.bottom + (target.top - target.bottom) * vFraction(p.relativePoint) + p.y];
+    const scale = scaleOf(w);
+    return [target.left + (target.right - target.left) * hFraction(p.relativePoint) + p.x * scale,
+      target.bottom + (target.top - target.bottom) * vFraction(p.relativePoint) + p.y * scale];
   }
   function rect(id) {
     if (id === undefined) return SCREEN_RECT;
@@ -529,7 +572,7 @@ function layout(snapshot, screen) {
     if (!w.startPoint || !w.endPoint) { warnings.push(`${describe(w)} lacks a start or end point`); return false; }
     const from = spot(w.startPoint, w), to = spot(w.endPoint, w);
     if (!from || !to) return false;
-    const [dx, dy] = [to[0] - from[0], from[1] - to[1]], thickness = w.thickness ?? 1;
+    const [dx, dy] = [to[0] - from[0], from[1] - to[1]], thickness = (w.thickness ?? 1) * scaleOf(w);
     Object.assign(el.style, {
       left: `${from[0]}px`, top: `${H - from[1] - thickness / 2}px`, width: `${Math.hypot(dx, dy)}px`, height: `${thickness}px`,
       transformOrigin: `0 ${thickness / 2}px`, transform: `rotate(${Math.atan2(dy, dx)}rad)`,
@@ -547,7 +590,7 @@ function layout(snapshot, screen) {
     screen.append(el);
     elements.set(w.id, el);
     if (w.kind === "FontString" || w.kind === "GameTooltip") {
-      if (w.width) el.style.width = `${w.width}px`;
+      if (w.width) el.style.width = `${w.width * scaleOf(w)}px`;
       const box = el.getBoundingClientRect();
       measured.set(w.id, [Math.ceil(box.width), Math.ceil(box.height)]);
     }
@@ -575,13 +618,24 @@ function layout(snapshot, screen) {
 }
 ]==]
 
+-- The client's transfer as an SVG filter over the whole screen, on sRGB
+-- values as it was measured.
+local function clientFilter()
+  local channel = ('type="linear" slope="%g" intercept="%g"'):format(Client.gain, Client.offset)
+  return table.concat({
+    '<svg width="0" height="0" style="position:absolute"><filter id="client" color-interpolation-filters="sRGB">',
+    "<feComponentTransfer><feFuncR ", channel, "/><feFuncG ", channel, "/><feFuncB ", channel, "/></feComponentTransfer>",
+    "</filter></svg>\n",
+  })
+end
+
 local function page(view, data)
   return table.concat({
     '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>Goldbook preview: ', view, "</title>\n",
     "<style>body { margin: 0; background: #777; } #screen { position: relative; overflow: hidden; width: ",
-    SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px; }</style>\n",
+    SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px;", flags.client and " filter: url(#client);" or "", " }</style>\n",
     '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=block">\n',
-    '</head><body><div id="screen"></div>\n<script>\n', LAYOUT,
+    "</head><body>", flags.client and clientFilter() or "", '<div id="screen"></div>\n<script>\n', LAYOUT,
     -- Text is measured for the layout, so the faces must have loaded first.
     '\nPromise.all([document.fonts.load(\'16px "Marcellus"\'), document.fonts.load(\'14px "Arial Narrow"\')])',
     '.catch(() => {}).then(() => layout(', (data:gsub("</", "<\\/")),
@@ -611,8 +665,8 @@ local function output(command)
   return text
 end
 
-local CHROME = ("google-chrome --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=10000 --window-size=%d,%d ")
-  :format(SCREEN_WIDTH, SCREEN_HEIGHT)
+local CHROME = ("google-chrome --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=10000 --window-size=%d,%d --force-device-scale-factor=%g ")
+  :format(SCREEN_WIDTH, SCREEN_HEIGHT, DPR)
 local root = outdir:sub(1, 1) == "/" and outdir or (output("pwd"):match("[^\n]+") .. "/" .. outdir)
 sh("mkdir -p " .. quote(root))
 
@@ -686,6 +740,7 @@ local function capture(view, roots, focus)
   local dom = output(CHROME .. "--dump-dom " .. url .. " 2>/dev/null")
   local x, y, width, height = dom:match('data%-crop="(%d+),(%d+),(%d+),(%d+)"')
   assert(x, view .. ": the page did not lay out; open " .. base .. ".html in a browser to see why")
+  x, y, width, height = x * DPR, y * DPR, width * DPR, height * DPR
   sh(CHROME .. "--screenshot=" .. quote(base .. ".png") .. " " .. url .. " >/dev/null 2>&1")
   -- Without dates in the file, two runs of an unchanged UI give identical PNGs.
   sh(("magick %s -crop %dx%d+%d+%d +repage -strip -define png:exclude-chunks=date,time %s")
@@ -699,16 +754,19 @@ end
 
 -- The addon, as run.lua loads it.
 
-local ns = Stub.loadAddon(here .. "/../Goldbook")
+local ns = Stub.loadAddon(flags.addon)
 local Codec, Database = ns.Codec, ns.Database
 
 -- A realm after four weeks of scanning. Prices in copper.
 -- { key, name, quality, vendor, price, listed } plus, optionally: base (the
 -- name GetItemInfo gives a suffixed item), trend (change per day), deal (today's
 -- lowest price as a share of the usual), absent (days since last seen),
--- vendorDeal (first seen today, listed under what a vendor pays). Items
+-- vendorDeal (first seen today, listed under what a vendor pays), seen (the
+-- days it was seen, as { days ago, lowest price, listed, market value }). Items
 -- without a price are only in the bags.
 local ITEMS = {
+  -- The four days of the in-game screenshot client.lua was measured from.
+  { "2776", "Gold Ore", 2, 500, 1024, 183, seen = { { 4, 860, 262, 860 }, { 2, 1188, 241, 1191 }, { 1, 799, 241, 800 }, { 0, 1958, 183, 1959 } } },
   { "2589", "Linen Cloth", 1, 13, 140, 400 },
   { "2592", "Wool Cloth", 1, 33, 210, 300 },
   { "4306", "Silk Cloth", 1, 150, 380, 260 },
@@ -793,6 +851,13 @@ end
 -- Per day seen: the lowest price drifting along the trend, and a market value
 -- on the days of a full scan, today's included.
 local function priceHistory(item)
+  if item.seen then
+    local entries = {}
+    for index, day in ipairs(item.seen) do
+      entries[index] = { day = TODAY - day[1], min = day[2], qty = day[3], mv = day[4] }
+    end
+    return entries
+  end
   local _, _, _, vendor, price, listed = unpack(item)
   local last = TODAY - (item.absent or 0)
   local trend = item.trend or (random() - 0.5) * 0.02
@@ -818,9 +883,10 @@ local function priceHistory(item)
   return entries
 end
 
--- Today's cheapest price levels; a deal is two cheap units below the usual price.
+-- Today's cheapest price levels; a deal is two cheap units below the usual
+-- price. Items with set days have none, so they draw no random numbers.
 local function ladder(item, newest)
-  if newest.day ~= TODAY then
+  if newest.day ~= TODAY or item.seen then
     return {}
   end
   local usual = item[5]
@@ -989,6 +1055,9 @@ local function captureViews(suffix)
   run("item Black Lotus")
   hoverDay(28)
   captureWindow("item" .. suffix)
+  run("item Gold Ore")
+  hoverDay(29)
+  captureWindow("item-sparse" .. suffix)
   GoldbookWindow:Hide()
 
   run("web")
