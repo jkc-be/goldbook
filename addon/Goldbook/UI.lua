@@ -444,7 +444,7 @@ local function itemChart(range)
         at = entry.at,
         values = { entry.min, entry.mv > 0 and entry.mv or nil },
         amount = entry.qty,
-        when = dayText(day) .. (entry.hourly and date("! %H:%M", entry.at) or ""),
+        when = entry.hourly and date("%a %d %b %H:%M", entry.at) or dayText(day),
       }
     end
   end
@@ -1168,12 +1168,13 @@ end
 
 -- The date marks between `from` and `to`, counted back from `to`'s day so
 -- that it always has one: hours for a day or so, else every 1, 2, 7 or 14 days.
+-- Days are UTC days, as the history keeps them; hours read in local time.
 local function dateMarks(from, to)
   local marks = {}
   if to - from <= 2 * DAY then
     local hour = 3600 * 6
     for at = math.floor(to / hour) * hour, from, -hour do
-      marks[#marks + 1] = { at = at, text = date("!%H:%M", at) }
+      marks[#marks + 1] = { at = at, text = date("%H:%M", at) }
     end
     return marks
   end

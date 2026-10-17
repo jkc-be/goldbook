@@ -3,9 +3,6 @@ local _, ns = ...
 local Codec = {}
 ns.Codec = Codec
 
-local HOUR = 3600
-local DAY = 24 * HOUR
-
 -- %d overflows past 2^31 on Windows clients; %.0f does not.
 local function int(n)
   return ("%.0f"):format(n)
@@ -119,81 +116,37 @@ function Codec.DecodePrice(packed)
   }
 end
 
--- An item's price history is a list of points, oldest first, joined by
--- commas. A point is "day:min:qty:mv" for a whole UTC day number or
--- "h<hour>:min:qty:mv" for one hour of unix time: the item's lowest price and
--- quantity then, and the market value a full scan measured, 0 without one.
--- A day's own point comes before the hours of that day. A scan edits the
--- history as a string, so that it does not build a table per point for every
--- item. Decoded, a point is { at, day, hourly, min, qty, mv }, `at` the unix
--- time its hour or day starts and `hourly` true for an hour.
-function Codec.HistoryPoint(point)
-  local at = point.hourly and "h" .. int(math.floor(point.at / HOUR)) or int(point.day)
-  return at .. ":" .. int(point.min) .. ":" .. int(point.qty) .. ":" .. int(point.mv)
-end
-
-function Codec.EncodeHistory(points)
-  local parts = {}
-  for index, point in ipairs(points) do
-    parts[index] = Codec.HistoryPoint(point)
-  end
-  return table.concat(parts, ",")
-end
-
-local POINT = "^(h?)(%d+):(%d+):(%d+):(%d+)"
-
-local function point(mark, number, min, qty, mv)
-  number = tonumber(number)
-  local hourly = mark == "h" or nil
-  local at = hourly and number * HOUR or number * DAY
-  return { at = at, day = math.floor(at / DAY), hourly = hourly, min = tonumber(min), qty = tonumber(qty), mv = tonumber(mv) }
+-- An item's price history is "day:min:qty:mv,...", oldest first: per UTC day
+-- number the item was seen, its lowest price, the quantity listed at it, and
+-- the market value a full scan measured that day, 0 without one. Its hours
+-- are the same with an hour of unix time in place of the day, as the
+-- server's export writes them. A scan edits both as strings, so that it does
+-- not build a table per day for every item.
+function Codec.HistoryDay(day, min, qty, mv)
+  return int(day) .. ":" .. int(min) .. ":" .. int(qty) .. ":" .. int(mv)
 end
 
 local COMMA = (","):byte()
 
--- Where the point ending at `stop` starts in a history, and the point.
--- Searched backwards by hand: a pattern ending in $ tries every position of a
--- string that runs to kilobytes, and a scan reads the newest point of each
--- item.
-function Codec.PointEndingAt(packed, stop)
-  local start = stop
+-- Where the newest day starts in a history, its day number, market value,
+-- lowest price and quantity. Searched backwards by hand: a pattern ending in
+-- $ tries every position of a string that runs to a kilobyte, and a scan
+-- reads one per item.
+function Codec.NewestDay(packed)
+  local start = #packed
   while start > 1 and packed:byte(start - 1) ~= COMMA do
     start = start - 1
   end
-  return start, point(packed:match(POINT, start))
+  local day, min, qty, mv = packed:match("^(%d+):(%d+):(%d+):(%d+)", start)
+  return start, tonumber(day), tonumber(mv), tonumber(min), tonumber(qty)
 end
 
--- A scan asks these two of every item, so they read no more than they must.
-function Codec.OldestDay(packed)
-  local mark, number = packed:match("^(h?)(%d+)")
-  return mark == "h" and math.floor(tonumber(number) / 24) or tonumber(number)
-end
-
--- Where the oldest hour starts and its day, nil without hours.
-function Codec.OldestHour(packed)
-  local at = packed:find("h", 1, true)
-  if at then
-    return at, math.floor(tonumber(packed:match("^%d+", at + 1)) / 24)
+function Codec.DecodeHistory(packed)
+  local history = {}
+  for day, min, qty, mv in packed:gmatch("(%d+):(%d+):(%d+):(%d+)") do
+    history[#history + 1] = { day = tonumber(day), min = tonumber(min), qty = tonumber(qty), mv = tonumber(mv) }
   end
-end
-
--- The points from `init` on, oldest first, up to the first one on day
--- `before` or later when given, and where the points left undecoded start.
-function Codec.DecodeHistory(packed, before, init)
-  local points, at = {}, init or 1
-  while true do
-    local _, stop, mark, number, min, qty, mv = packed:find(POINT, at)
-    if not stop then
-      break
-    end
-    local decoded = point(mark, number, min, qty, mv)
-    if before and decoded.day >= before then
-      break
-    end
-    points[#points + 1] = decoded
-    at = stop + 2
-  end
-  return points, at
+  return history
 end
 
 -- Crockford's base32 leaves out I, L, O and U, so that a code read off the

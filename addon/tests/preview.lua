@@ -913,23 +913,18 @@ local function priceHistory(item)
 end
 
 -- A day's entry as `count` scans `every` hours apart, up to that day's scan,
--- that fold back into the entry: the newest scan is the entry, and the ones
--- before it list a little either side of its price and measure no market
--- value. `wobble` is the item's own random stream, so that the other items
--- keep their numbers.
+-- as { hour, min, qty, mv }: the last scan is the entry, and the ones before
+-- it list a little dearer and measure no market value, so that the day's
+-- lowest is still the entry's. `wobble` is the item's own random stream, so
+-- that the other items keep their numbers.
 local function scansOf(entry, count, every, wobble)
   local last = math.floor(scanTime(entry.day) / 3600)
-  local points = {}
+  local hours = {}
   for hour = last, math.max(entry.day * 24, last - (count - 1) * every), -every do
-    table.insert(points, 1, hour == last and { at = hour * 3600, hourly = true, min = entry.min, qty = entry.qty, mv = entry.mv } or {
-      at = hour * 3600,
-      hourly = true,
-      min = math.floor(entry.min * (0.95 + wobble() * 0.1)),
-      qty = math.max(1, math.floor(entry.qty * (0.8 + wobble() * 0.4))),
-      mv = 0,
-    })
+    table.insert(hours, 1, hour == last and { hour, entry.min, entry.qty, entry.mv }
+      or { hour, entry.min + 1 + math.floor(entry.min * wobble() * 0.1), math.max(1, math.floor(entry.qty * (0.8 + wobble() * 0.4))), 0 })
   end
-  return points
+  return hours
 end
 
 -- Today's cheapest price levels; a deal is two cheap units below the usual
@@ -953,6 +948,7 @@ local function seededDB()
     version = 5,
     prices = { [REALM] = {} },
     history = { [REALM] = {} },
+    hours = { [REALM] = {} },
     scanned = { [REALM] = SCAN },
     items = {},
     vendor = {},
@@ -969,19 +965,22 @@ local function seededDB()
     db.vendor[itemID] = vendor
     if price then
       local entries = priceHistory(item)
-      local newest, points, recent, measured = entries[#entries], {}, {}, nil
+      local newest, daily, hours, recent, measured = entries[#entries], {}, {}, {}, nil
       local wobbleSeed = itemID
       local function wobble()
         wobbleSeed = wobbleSeed * 16807 % 2147483647
         return wobbleSeed / 2147483647
       end
+      -- The hours the addon keeps: the 168 up to the item's newest scan.
+      local firstHour = math.floor(scanTime(newest.day) / 3600) - 167
       for index, entry in ipairs(entries) do
+        daily[index] = Codec.HistoryDay(entry.day, entry.min, entry.qty, entry.mv)
         if item.scans and entry.day >= TODAY - 7 then
-          for _, point in ipairs(scansOf(entry, item.scans[1], item.scans[2], wobble)) do
-            points[#points + 1] = point
+          for _, hour in ipairs(scansOf(entry, item.scans[1], item.scans[2], wobble)) do
+            if hour[1] >= firstHour then
+              hours[#hours + 1] = Codec.HistoryDay(unpack(hour))
+            end
           end
-        else
-          points[#points + 1] = entry
         end
         if index > #entries - 14 then
           recent[#recent + 1] = entry.min
@@ -990,7 +989,8 @@ local function seededDB()
           measured = entry
         end
       end
-      db.history[REALM][key] = Codec.EncodeHistory(points)
+      db.history[REALM][key] = table.concat(daily, ",")
+      db.hours[REALM][key] = #hours > 0 and table.concat(hours, ",") or nil
       db.prices[REALM][key] = Codec.EncodePrice({
         min = newest.min,
         qty = newest.qty,

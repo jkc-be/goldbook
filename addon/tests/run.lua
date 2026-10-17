@@ -295,49 +295,46 @@ end
 local daily = Database.Init(nil)
 scanned(daily, NOW, 100, 120, 4)
 scanned(daily, NOW + 1800, 90, nil, 6)
-eq(daily.history["R-F"]["1"], "h480000:90:6:120", "a quick scan in the same hour replaces the price and quantity and keeps the hour's market value")
+eq(daily.history["R-F"]["1"] .. " / " .. daily.hours["R-F"]["1"], "20000:90:6:120 / 480000:90:6:120",
+  "a cheaper quick scan in the same hour takes the price and its quantity and keeps the market value, in the day and the hour")
 scanned(daily, NOW + 2400, 120, nil, 2)
-eq(daily.history["R-F"]["1"], "h480000:120:2:120", "a dearer scan later in the hour replaces the cheaper one, as the price record does")
+eq(daily.history["R-F"]["1"] .. " / " .. daily.hours["R-F"]["1"], "20000:90:6:120 / 480000:90:6:120", "a dearer scan later keeps the lowest price")
+scanned(daily, NOW + 2700, 90, 130, 9)
+eq(daily.hours["R-F"]["1"], "480000:90:6:130", "a tie keeps the earlier quantity and takes the newer market value")
 scanned(daily, NOW + HOUR, 95, nil, 5)
-eq(daily.history["R-F"]["1"], "h480000:120:2:120,h480001:95:5:0", "a scan in the next hour adds a point")
+eq(daily.history["R-F"]["1"] .. " / " .. daily.hours["R-F"]["1"], "20000:90:6:130 / 480000:90:6:130,480001:95:5:0", "a scan in the next hour adds an hour")
+eq(Database.Lookup(daily, "R-F", "1").days[1], 90, "the price record's day is the day's lowest price too")
 priced(daily, NOW + DAY, { ["1"] = 110, ["2"] = 50 })
 scanned(daily, NOW + 2 * DAY + 60, 130, 125, 3)
-eq(daily.history["R-F"]["1"], "h480000:120:2:120,h480001:95:5:0,h480024:110:5:0,h480048:130:3:125", "scans on three days are kept by the hour")
-eq(days(Database.History(daily, "R-F", "1")), "20000 95 5 120 / 20001 110 5 0 / 20002 130 3 125",
-  "history answers per day: the newest price and quantity and the day's market value")
-eq(Database.History(daily, "R-F", "1")[1].min .. " " .. Database.Lookup(daily, "R-F", "1").days[1], "95 95", "a day reads the same in the history and the price record")
+eq(daily.history["R-F"]["1"], "20000:90:6:130,20001:110:5:0,20002:130:3:125", "scans on three days make three dated days")
+eq(days(Database.History(daily, "R-F", "1")), "20000 90 6 130 / 20001 110 5 0 / 20002 130 3 125", "history answers per day")
 eq(points(Database.Points(daily, "R-F", "1")),
-  "1728000000 120 2 120 true / 1728003600 95 5 0 true / 1728086400 110 5 0 true / 1728172800 130 3 125 true", "points are the stored hours, oldest first")
+  "1728000000 90 6 130 true / 1728003600 95 5 0 true / 1728086400 110 5 0 true / 1728172800 130 3 125 true", "points are the hours, oldest first")
 scanned(daily, NOW + 8 * DAY, 140)
-eq(daily.history["R-F"]["1"], "20000:95:5:120,h480024:110:5:0,h480048:130:3:125,h480192:140:1:0",
-  "the hours of a day before the last 7 fold into that day")
-aged(daily, NOW + 8 * DAY + HOUR)
-eq(daily.history["R-F"]["1"], "20000:95:5:120,h480024:110:5:0,h480048:130:3:125,h480192:140:1:0", "settling again the same day changes nothing")
+eq(daily.hours["R-F"]["1"], "480048:130:3:125,480192:140:1:0", "hours more than 168 before the item's newest scan are cut off")
 eq(points(Database.Points(daily, "R-F", "1")),
-  "1728000000 95 5 120 nil / 1728086400 110 5 0 true / 1728172800 130 3 125 true / 1728691200 140 1 0 true", "a folded day is one point at the start of the day")
-aged(daily, NOW + 10 * DAY)
-eq(daily.history["R-F"]["1"], "20000:95:5:120,20001:110:5:0,20002:130:3:125,h480192:140:1:0", "hours of an item left out of the scan fold too")
+  "1728000000 90 6 130 nil / 1728086400 110 5 0 nil / 1728172800 130 3 125 true / 1728691200 140 1 0 true", "before its hours an item's points are its days")
+eq(daily.hours["R-F"]["2"], nil, "an item not listed for a week has no hours")
 scanned(daily, NOW + 61 * DAY, 140)
-eq(daily.history["R-F"]["1"], "20001:110:5:0,20002:130:3:125,20008:140:1:0,h481464:140:1:0", "days more than 60 days before the scan are cut off")
+eq(daily.history["R-F"]["1"], "20001:110:5:0,20002:130:3:125,20008:140:1:0,20061:140:1:0", "days more than 60 days before the scan are cut off")
 eq(daily.history["R-F"]["2"], "20001:50:5:0", "an item listed 60 days ago keeps its history")
 scanned(daily, NOW + 62 * DAY, 150)
 eq(daily.history["R-F"]["2"], nil, "an item not listed for more than 60 days loses its history")
 eq(#Database.History(daily, "R-F", "2") .. " " .. #Database.Points(daily, "R-F", "2"), "0 0", "an item without history has no days and no points")
+local again = Database.Init(nil)
+scanned(again, NOW, 100, 120, 4)
+local once = again.history["R-F"]["1"] .. " / " .. again.hours["R-F"]["1"]
+scanned(again, NOW, 100, 120, 4)
+eq(again.history["R-F"]["1"] .. " / " .. again.hours["R-F"]["1"], once, "the same scan twice changes nothing")
 
-local half = Database.Init(nil)
-half.history["R-F"] = { ["1"] = "20000:90:5:120,h480000:100:4:120,h480001:90:5:0,h480024:110:5:0" }
-aged(half, NOW + 8 * DAY)
-eq(half.history["R-F"]["1"], "20000:90:5:120,h480024:110:5:0", "a day kept next to the hours it was folded from folds to the same point")
+local back = Database.Init(nil)
+scanned(back, NOW + HOUR, 95)
+scanned(back, NOW, 80)
+eq(back.hours["R-F"]["1"], "480001:95:1:0", "a scan from a clock set back leaves the newer hour as it is")
 
 local fromSchema4 = Database.Init({ version = 4, history = { ["R-F"] = { ["1"] = "20369:80:2:0,20370:100:3:105" } } })
-eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"], "5 20369:80:2:0,20370:100:3:105", "schema 4 history is kept as it is")
-eq(days(Database.History(fromSchema4, "R-F", "1")), "20369 80 2 0 / 20370 100 3 105", "schema 4 history answers the same days")
-eq(points(Database.Points(fromSchema4, "R-F", "1")), "1759881600 80 2 0 nil / 1759968000 100 3 105 nil", "schema 4 days are points at the start of their day")
-scanned(fromSchema4, 20370 * DAY + 9 * HOUR, 95, nil, 2)
-eq(fromSchema4.history["R-F"]["1"], "20369:80:2:0,20370:100:3:105,h488889:95:2:0", "the first hour of a day kept as a day follows it")
-eq(days(Database.History(fromSchema4, "R-F", "1")), "20369 80 2 0 / 20370 95 2 105", "that day answers its point and its hours folded")
-eq(points(Database.Points(fromSchema4, "R-F", "1")), "1759881600 80 2 0 nil / 1760000400 95 2 0 true", "a day with hours is only its hours among the points")
-
+eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "5 20369:80:2:0,20370:100:3:105 nil",
+  "schema 4 history is kept as it is, with no hours yet")
 local trend = Advisor.Evolution({
   { day = 19960, min = 200, qty = 1, mv = 0 },
   { day = 19969, min = 250, qty = 2, mv = 0 },
@@ -545,7 +542,7 @@ Stub.ah.browse[1].minPrice = 200
 Stub.ah.keyInfo["9775:584"] = { itemName = "Bandit Cinch of the Monkey", quality = 2 }
 GoldbookScanButton.scripts.OnClick(GoldbookScanButton, "LeftButton")
 Stub.advance(5)
-eq(GoldbookDB.prices["Faramon-Horde"]["2589"], "200,42,0,1760000005,0,0;200;", "a later scan the same day replaces the price")
+eq(GoldbookDB.prices["Faramon-Horde"]["2589"], "200,42,0,1760000005,0,0;110;", "a later, dearer scan the same day takes the price and keeps the day's lowest")
 eq(GoldbookDB.items["9775:584"], "2|Bandit Cinch of the Monkey", "a quick scan names a variant by its item key, over the base name stored before")
 
 local cloth = "|cffffffff|Hitem:2589::::::::60:::::|h[Linen Cloth]|h|r"
@@ -1108,13 +1105,16 @@ GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.butto
 marks = plotted()
 eq(table.concat(marks, " ") .. " / " .. segments(), "1@51 / [1D] 1W 1M 2M", "1D charts the last day")
 local woolen = GoldbookDB.history["Faramon-Horde"]["2997"]
-GoldbookDB.history["Faramon-Horde"]["2997"] = "20369:100040:1:0,h488880:100000:2:0,h488886:99000:3:101000"
+local woolenHours = GoldbookDB.hours["Faramon-Horde"]["2997"]
+GoldbookDB.history["Faramon-Horde"]["2997"] = "20369:100040:1:0,20370:99000:3:101000"
+GoldbookDB.hours["Faramon-Horde"]["2997"] = "488880:100000:2:0,488886:99000:3:101000"
 SlashCmdList.GOLDBOOK("item woolen")
 marks = plotted()
-eq(table.concat(marks, " ") .. " / " .. hoverPoint(2), "1@51 2@0 / Thu 09 Oct 06:00 / Min buyout = 9g 90s 00c / Market value = 10g 10s 00c / Listed = 3",
-  "the last day is charted by the hour, and an hour's tooltip gives its time")
+eq(table.concat(marks, " ") .. " / " .. hoverPoint(2),
+  "1@51 2@0 / " .. os.date("%a %d %b %H:%M", 488886 * 3600) .. " / Min buyout = 9g 90s 00c / Market value = 10g 10s 00c / Listed = 3",
+  "the last day is charted by the hour, and an hour's tooltip gives its local time")
 eq(("%.0f %.0f"):format(chart.hits[1].x, chart.hits[2].x), "401 563", "hours sit on the time axis: midnight 15 hours into the last 21, the newest scan at the right edge")
-GoldbookDB.history["Faramon-Horde"]["2997"] = woolen
+GoldbookDB.history["Faramon-Horde"]["2997"], GoldbookDB.hours["Faramon-Horde"]["2997"] = woolen, woolenHours
 GoldbookWindow.segments.buttons[3].scripts.OnClick(GoldbookWindow.segments.buttons[3])
 
 -- Each palette's pairs keep their contrast plainly and as the client measured

@@ -9,7 +9,8 @@ local MAX_QUEUED_SCANS = 20
 local MAX_QUEUE_AGE = 14 * 24 * 3600
 local HISTORY_DAYS = 14
 local KEPT_DAYS = 60
-local HOURLY_DAYS = 7
+-- The hours the chart shows by the hour, as the server's export keeps them.
+local KEPT_HOURS = 168
 local HOUR = 3600
 local DAY = 24 * HOUR
 local ID_LENGTH, KEY_LENGTH = 8, 20
@@ -17,8 +18,8 @@ local PARK_MILLER = 2147483647
 
 -- GoldbookDB:
 --   prices[realmKey][itemKey]  = price record, see Codec.EncodePrice
---   history[realmKey][itemKey] = the item's prices per hour for today and the HOURLY_DAYS before, per day
---                                before that for KEPT_DAYS, see Codec.HistoryPoint
+--   history[realmKey][itemKey] = the item's prices per day for KEPT_DAYS, see Codec.HistoryDay
+--   hours[realmKey][itemKey]   = the same per hour for the KEPT_HOURS up to the item's newest scan
 --   scanned[realmKey]          = time of the newest scan
 --   items[itemKey]             = "quality|name"
 --   vendor[itemID]             = what the item's data says a vendor pays, 0 when it buys nothing
@@ -71,7 +72,7 @@ local function upgradeFromSchema2(db)
       local record = Codec.DecodePrice(packed)
       local day = math.floor(record.seen / DAY)
       local mv = math.floor(record.mvAt / DAY) == day and record.mv or 0
-      history[key] = Codec.HistoryPoint({ day = day, min = record.min, qty = record.qty, mv = mv })
+      history[key] = Codec.HistoryDay(day, record.min, record.qty, mv)
     end
     db.history[realmKey] = history
   end
@@ -138,10 +139,11 @@ function Database.Init(saved)
   if db.version == 3 then
     upgradeFromSchema3(db, time())
   end
-  -- Schema 4 histories hold only days, which schema 5 reads as they are.
   db.version = SCHEMA
   db.prices = db.prices or {}
   db.history = db.history or {}
+  -- Schema 5 adds the hours, which start empty.
+  db.hours = db.hours or {}
   db.scanned = db.scanned or {}
   db.items = db.items or {}
   db.vendor = db.vendor or {}
@@ -236,56 +238,31 @@ function Database.Lookup(db, realmKey, key)
   return packed and Codec.DecodePrice(packed)
 end
 
--- Folds a later point of the same hour or day into `into`, the way a later
--- scan replaces the day in the price record's days, so that a day reads the
--- same in both: the later price and quantity, and the later market value
--- unless that scan measured none.
-local function absorb(into, later)
-  into.min, into.qty = later.min, later.qty
-  if later.mv > 0 then
-    into.mv = later.mv
-  end
-end
-
--- The points folded to one per day, oldest first.
-local function byDay(points)
-  local days = {}
-  for _, point in ipairs(points) do
-    local last = days[#days]
-    if last and last.day == point.day then
-      absorb(last, point)
-    else
-      days[#days + 1] = { at = point.day * DAY, day = point.day, min = point.min, qty = point.qty, mv = point.mv }
-    end
-  end
-  return days
-end
-
-local function decoded(db, realmKey, key)
+-- One item's prices per day, oldest first: { { day, min, qty, mv }, ... }.
+function Database.History(db, realmKey, key)
   local history = db.history[realmKey]
   local packed = history and history[key]
   return packed and Codec.DecodeHistory(packed) or {}
 end
 
--- One item's prices per day, oldest first: { { day, min, qty, mv }, ... }, the
--- hours of a day folded into one.
-function Database.History(db, realmKey, key)
-  return byDay(decoded(db, realmKey, key))
-end
-
--- Every point stored for one item, oldest first: { { at, min, qty, mv, hourly }, ... },
--- see Codec.HistoryPoint. A day with hours is there only as its hours.
+-- Every price kept for one item, oldest first, as { at, min, qty, mv, hourly }
+-- with `at` the start of its hour or day: its hours, and before them the days
+-- before the first of them.
 function Database.Points(db, realmKey, key)
-  local points, hourly, shown = decoded(db, realmKey, key), {}, {}
-  for _, point in ipairs(points) do
-    hourly[point.day] = hourly[point.day] or point.hourly
-  end
-  for _, point in ipairs(points) do
-    if point.hourly or not hourly[point.day] then
-      shown[#shown + 1] = point
+  local hours = db.hours[realmKey]
+  local packed = hours and hours[key]
+  local hourly = packed and Codec.DecodeHistory(packed) or {}
+  local first = hourly[1] and math.floor(hourly[1].day * HOUR / DAY) or math.huge
+  local points = {}
+  for _, entry in ipairs(Database.History(db, realmKey, key)) do
+    if entry.day < first then
+      points[#points + 1] = { at = entry.day * DAY, min = entry.min, qty = entry.qty, mv = entry.mv }
     end
   end
-  return shown
+  for _, entry in ipairs(hourly) do
+    points[#points + 1] = { at = entry.day * HOUR, min = entry.min, qty = entry.qty, mv = entry.mv, hourly = true }
+  end
+  return points
 end
 
 -- The key a link is priced under on this realm. A bonus id is the suffix when
@@ -311,11 +288,11 @@ local function prune(db, now)
   db.scans = kept
 end
 
--- A later scan on the same day replaces that day's price.
+-- A day's price is its lowest, as in the history.
 local function withToday(old, min, at)
   local days = old and old.days or {}
   if old and math.floor(old.seen / DAY) == math.floor(at / DAY) then
-    days[#days] = min
+    days[#days] = math.min(days[#days] or min, min)
   else
     days[#days + 1] = min
   end
@@ -325,46 +302,42 @@ local function withToday(old, min, at)
   return days
 end
 
--- Adds the scan's hour to an item's history without decoding the rest of it.
--- Another scan in the same hour folds into that hour's point.
-local function logHour(packed, at, row)
-  local hour = { at = at - at % HOUR, day = math.floor(at / DAY), hourly = true, min = row.min, qty = row.qty, mv = row.mv }
-  if not packed then
-    return Codec.HistoryPoint(hour)
-  end
-  local start, newest = Codec.PointEndingAt(packed, #packed)
-  if newest.hourly and newest.at == hour.at then
-    absorb(newest, hour)
-    return packed:sub(1, start - 1) .. Codec.HistoryPoint(newest)
-  end
-  return packed .. "," .. Codec.HistoryPoint(hour)
-end
-
--- Ages a history to `today`: the hours of days before the hourly window fold
--- into one point per day, and days before KEPT_DAYS are cut off; nil once
--- nothing is left. A settled history comes back as it is, and one that kept a
--- day's hours next to the point they folded into folds to that point again.
-local function settle(packed, today)
-  local hourly = today - HOURLY_DAYS
-  local from, day = Codec.OldestHour(packed)
-  if day and day < hourly then
-    -- Only the expired days are decoded: the first scan of a day settles every item.
-    if from > 1 then
-      local start, before = Codec.PointEndingAt(packed, from - 2)
-      from = before.day == day and start or from
+-- Adds the scan to the entry numbered `number`, a day or an hour, of a
+-- history without decoding it, and cuts the entries before `first` off. A
+-- later scan of the same day or hour keeps the lowest price with the quantity
+-- listed at it, the earlier one's when they tie, and the newest market value
+-- a full scan measured, as the server's export folds them. A scan from a
+-- clock set back leaves a newer entry as it is.
+local function logEntry(packed, number, row, first)
+  local min, qty, mv = row.min, row.qty, row.mv
+  if packed then
+    local start, newest, newestMv, newestMin, newestQty = Codec.NewestDay(packed)
+    if newest > number then
+      return packed
+    elseif newest == number then
+      packed, mv = packed:sub(1, start - 1), mv > 0 and mv or newestMv
+      if newestMin <= min then
+        min, qty = newestMin, newestQty
+      end
+    else
+      packed = packed .. ","
     end
-    local older, rest = Codec.DecodeHistory(packed, hourly, from)
-    local tail = packed:sub(rest)
-    packed = packed:sub(1, from - 1) .. Codec.EncodeHistory(byDay(older)) .. (tail ~= "" and "," .. tail or "")
   end
-  while Codec.OldestDay(packed) < today - KEPT_DAYS do
-    local comma = packed:find(",", 1, true)
-    if not comma then
-      return nil
-    end
-    packed = packed:sub(comma + 1)
+  packed = (packed or "") .. Codec.HistoryDay(number, min, qty, mv)
+  while tonumber(packed:match("^%d+")) < first do
+    packed = packed:sub(packed:find(",", 1, true) + 1)
   end
   return packed
+end
+
+-- Leaves out the items whose newest entry is before `first`.
+local function forget(histories, first)
+  for key, packed in pairs(histories) do
+    local _, newest = Codec.NewestDay(packed)
+    if newest < first then
+      histories[key] = nil
+    end
+  end
 end
 
 -- scan = { realm, faction, region, at, mode, by, build, rows, names }
@@ -372,9 +345,9 @@ function Database.ApplyScan(db, scan)
   local realmKey = Database.RealmKey(scan.realm, scan.faction)
   local prices = db.prices[realmKey] or {}
   db.prices[realmKey] = prices
-  local history = db.history[realmKey] or {}
-  db.history[realmKey] = history
-  local today = math.floor(scan.at / DAY)
+  local history, hours = db.history[realmKey] or {}, db.hours[realmKey] or {}
+  db.history[realmKey], db.hours[realmKey] = history, hours
+  local today, hour = math.floor(scan.at / DAY), math.floor(scan.at / HOUR)
   db.scanned[realmKey] = scan.at
 
   for _, row in ipairs(scan.rows) do
@@ -391,12 +364,11 @@ function Database.ApplyScan(db, scan)
       days = withToday(old, row.min, scan.at),
       ladder = row.ladder or {},
     })
-    history[row.key] = logHour(history[row.key], scan.at, row)
+    history[row.key] = logEntry(history[row.key], today, row, today - KEPT_DAYS)
+    hours[row.key] = logEntry(hours[row.key], hour, row, hour - KEPT_HOURS + 1)
   end
-  -- Every history ages, listed in this scan or not.
-  for key, packed in pairs(history) do
-    history[key] = settle(packed, today)
-  end
+  forget(history, today - KEPT_DAYS)
+  forget(hours, hour - KEPT_HOURS + 1)
   for key, item in pairs(scan.names) do
     Database.SetItem(db, key, item.name, item.quality)
   end
