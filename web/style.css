@@ -1436,8 +1436,39 @@ td.item button {
   display: none;
 }
 
+/* One ruled strip rather than a grid of boxes; each note shows in full on hover. */
 .trades .summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
   margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel);
+}
+
+.trades .summary .stat {
+  flex: 1 1 120px;
+  padding: 6px 12px 7px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+
+.trades .summary .stat:first-child {
+  border-left: 0;
+}
+
+.trades .summary .stat dd {
+  font-size: 15px;
+}
+
+.trades .summary .stat .note {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trades h4 {

@@ -577,7 +577,7 @@ function drawItemChart(title, points) {
 function stat(label, value, note) {
   return element("div", { className: "stat" }, [
     element("dt", { textContent: label }),
-    element("dd", {}, [value, ...(note ? [element("span", { className: "note", textContent: note })] : [])]),
+    element("dd", {}, [value, ...(note ? [element("span", { className: "note", textContent: note, title: note })] : [])]),
   ]);
 }
 
