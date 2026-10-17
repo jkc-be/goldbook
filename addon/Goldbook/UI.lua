@@ -1334,11 +1334,11 @@ local function drawChart(spec)
     spot.label:SetPoint("LEFT", plot, "BOTTOMLEFT", width + 8, spot.y)
   end
 
-  local most = 1
+  local most = 0
   for _, point in ipairs(points) do
     most = math.max(most, point.amount or 0)
   end
-  chart.most:SetText(band and tostring(most) or "")
+  chart.most:SetText(band and most > 0 and tostring(most) or "")
   local barWidth = math.max(1.5, math.min(8, width / math.max(1, #points) * 0.5))
   for index = 1, math.max(#points, #chart.hits) do
     local point, before, after = points[index], points[index - 1], points[index + 1]
@@ -2373,21 +2373,27 @@ end
 -- Its centre stays where it was on the screen, moved only as far as keeps it
 -- there. Returns false for a size out of range.
 function UI.SetScale(scale)
-  if type(scale) ~= "number" or scale < MIN_SCALE or scale > MAX_SCALE then
+  -- Rounded first: a slider hands back its ends as single floats, 0.7 as 0.69999998.
+  scale = type(scale) == "number" and math.floor(scale * 100 + 0.5) / 100
+  if not scale or scale < MIN_SCALE or scale > MAX_SCALE then
     return false
   end
-  scale = math.floor(scale * 100 + 0.5) / 100
+  local old = UI.Scale()
   ns.db.settings.scale = scale
+  local x, y
   if window then
-    local old = window:GetScale()
-    local x, y = window:GetCenter()
+    x, y = window:GetCenter()
     window:SetScale(scale)
-    if x then
-      x, y = onScreen(x * old / scale, y * old / scale, scale)
-      window:ClearAllPoints()
-      window:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
-      ns.db.settings.window = { "CENTER", "BOTTOMLEFT", x, y }
-    end
+  end
+  if x then
+    x, y = onScreen(x * old / scale, y * old / scale, scale)
+    window:ClearAllPoints()
+    window:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+    ns.db.settings.window = { "CENTER", "BOTTOMLEFT", x, y }
+  elseif ns.db.settings.window then
+    -- A window not drawn yet opens where it was left, in the new size's units.
+    local saved = ns.db.settings.window
+    saved[3], saved[4] = saved[3] * old / scale, saved[4] * old / scale
   end
   changed()
   return true

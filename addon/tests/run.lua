@@ -1216,6 +1216,15 @@ eq(GoldbookDB.settings.scale, 1.4, "nor does a size that is not a number")
 GoldbookWindow.center = nil
 SlashCmdList.GOLDBOOK("scale 1")
 eq(GoldbookWindow.scale, 1, "/gb scale 1 gives the window its normal size")
+options.scale.scripts.OnValueChanged(options.scale, 0.699999988079071, true)
+eq(GoldbookDB.settings.scale, 0.7, "the slider's left end, a single float a little under 0.7, sizes the window to 0.7")
+GoldbookWindow.center = {}
+GoldbookDB.settings.window = { "TOPLEFT", "BOTTOMLEFT", 280, 560 }
+SlashCmdList.GOLDBOOK("scale 1.4")
+eq(table.concat(GoldbookDB.settings.window, " "), "TOPLEFT BOTTOMLEFT 140 280",
+  "a window not drawn yet keeps its place on the screen, its saved offsets turned into the new size's units")
+GoldbookWindow.center = nil
+SlashCmdList.GOLDBOOK("scale 1")
 
 ns.UI.ShowItem("99999")
 eq(plain(GoldbookWindow.chart.grid[1].label.text .. " " .. GoldbookWindow.chart.grid[2].label.text .. " " .. GoldbookWindow.chart.grid[5].label.text)
