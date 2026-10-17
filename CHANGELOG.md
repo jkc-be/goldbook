@@ -11,6 +11,9 @@ were released with.
 
 ### Addon
 
+- Fix a Lua error whenever a merchant opened, on clients that read merchant
+  items with `C_MerchantFrame.GetItemInfo` instead of `GetMerchantItemInfo`.
+  Goods merchants sell are now learned there, and purchases are booked.
 - Vendor prices come from the sell price the game's tooltip shows, for every
   item, so they are right before you sell one. They no longer come from the
   game's item data or the merchant's buyback list, and `/gb deals` no longer

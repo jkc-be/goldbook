@@ -98,6 +98,18 @@ Stub.fire("MERCHANT_SHOW")
 BuyMerchantItem(1, 7)
 pay(36)
 eq(booked(), "merchant Simple Flour 2678 7 36 nil", "part of a stack costs what the server asks")
+local merchantItemInfo = GetMerchantItemInfo
+GetMerchantItemInfo = nil
+C_MerchantFrame = {
+  GetItemInfo = function(index)
+    local entry = Stub.merchant[index]
+    return { name = entry[1], price = entry[2], stackCount = entry[3], numAvailable = -1, hasExtendedCost = false }
+  end,
+}
+BuyMerchantItem(2, 3)
+pay(75)
+eq(booked(), "merchant Refreshing Spring Water 159 3 75 nil", "a client with only C_MerchantFrame.GetItemInfo books the purchase too")
+GetMerchantItemInfo, C_MerchantFrame = merchantItemInfo, nil
 
 pay(4320)
 eq(booked(), "", "gold spent at a merchant without a purchase waits for what explains it")

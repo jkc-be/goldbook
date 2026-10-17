@@ -332,13 +332,13 @@ end
 -- other.
 local HOOKS = {
   BuyMerchantItem = function(index, quantity)
-    local item, _, price, stack = ask(GetMerchantItemInfo, index)
-    stack = math.max(stack or 1, 1)
-    quantity = quantity or stack
-    if item and price and price > 0 then
+    local item = ns.MerchantItem(index)
+    if item and item.price > 0 then
+      local stack = item.stack
+      quantity = quantity or stack
       -- The price is for `stack` items; a part of one costs what the server rounds it to.
-      claim({ side = "merchant", sign = -1, amount = quantity % stack == 0 and price * quantity / stack or nil,
-        stacks = { { item = item, key = keyOf(ask(GetMerchantItemLink, index)), count = quantity } } })
+      claim({ side = "merchant", sign = -1, amount = quantity % stack == 0 and item.price * quantity / stack or nil,
+        stacks = { { item = item.name, key = keyOf(item.link), count = quantity } } })
     end
   end,
   BuybackItem = function(index)
