@@ -26,11 +26,12 @@ function ns.RealmKey()
   return Database.RealmKey(identity.realm, identity.faction)
 end
 
--- "Name-Realm", as gold, the bank and the logout snapshot are filed.
+-- "Name-Realm", as gold, the bank, the logout snapshot and accounting are filed.
 local function characterKey()
   local identity = loginIdentity or Scanner.Identity()
   return identity.by .. "-" .. identity.realm
 end
+ns.CharacterKey = characterKey
 
 function ns.MinProfit()
   return ns.db.settings.minProfit or DEFAULT_MIN_PROFIT
@@ -199,8 +200,8 @@ local COMMANDS = {
   gold = function(argument)
     ns.UI.Show("gold", argument)
   end,
-  trades = function(argument)
-    ns.UI.Show("trades", argument)
+  accounting = function(argument)
+    ns.UI.Show("accounting", argument)
   end,
   movers = function(argument)
     ns.UI.Show("movers", argument)
@@ -272,6 +273,9 @@ local COMMANDS = {
   end,
 }
 
+-- The name the Accounting view had before.
+COMMANDS.trades = COMMANDS.accounting
+
 SLASH_GOLDBOOK1, SLASH_GOLDBOOK2 = "/goldbook", "/gb"
 SlashCmdList.GOLDBOOK = function(input)
   local command, argument = input:match("^(%S*)%s*(.-)%s*$")
@@ -279,7 +283,7 @@ SlashCmdList.GOLDBOOK = function(input)
   if run then
     run(argument)
   else
-    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb trades  |  /gb show [text]")
+    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb accounting  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
     ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end
@@ -304,7 +308,7 @@ local function bookTrades()
     if bought > 0 then
       parts[#parts + 1] = plural(bought, "purchase")
     end
-    ns.Print("Booked " .. table.concat(parts, " and ") .. " from the mailbox. Type /gb trades.")
+    ns.Print("Booked " .. table.concat(parts, " and ") .. " from the mailbox. Type /gb accounting.")
     ns.UI.RefreshSoon()
   end
 end
@@ -407,7 +411,7 @@ frame:SetScript("OnEvent", function(_, event, first, second)
   elseif event == "MERCHANT_CLOSED" then
     bookVendorSales(false)
     if vendorSales > 0 then
-      ns.Print("Booked " .. plural(vendorSales, "vendor sale") .. ". Type /gb trades.")
+      ns.Print("Booked " .. plural(vendorSales, "vendor sale") .. ". Type /gb accounting.")
     end
     vendorSales = 0
   elseif event == "AUCTION_HOUSE_SHOW" then

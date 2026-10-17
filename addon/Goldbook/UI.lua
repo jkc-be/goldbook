@@ -33,6 +33,7 @@ local MIN_SCALE, MAX_SCALE = 0.7, 1.4
 local DAY = 24 * 3600
 local MONTH = 30
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+local COIN = "Interface\\Icons\\INV_Misc_Coin_01"
 local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local BACKDROP = { bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 }
@@ -228,7 +229,7 @@ local GLYPHS = {
     { 1.5, 5, 1.5, 10, 5, 13, 11, 13, 14.5, 10, 14.5, 5 },
     { 1.5, 7.5, 5, 10.5, 11, 10.5, 14.5, 7.5 },
   },
-  trades = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
+  accounting = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
 
 local window, scanButton
@@ -273,6 +274,11 @@ end
 local function itemIcon(key)
   local lookup = C_Item.GetItemIconByID or GetItemIcon
   return key and lookup and lookup(Codec.BaseID(key)) or QUESTION_MARK
+end
+
+-- A row's icon: its own, as gold has, or its item's.
+local function rowIcon(row)
+  return row.icon or itemIcon(row.key)
 end
 
 local function matching(rows, text)
@@ -363,13 +369,13 @@ local function keepItem(row)
     and (filters.quality == nil or row.quality == filters.quality)
 end
 
--- Trades within the last month, and the sale that brought in the most.
-local function monthOfTrades(now)
+-- Entries within the last month, and the sale of goods that brought in the most.
+local function monthOfEntries(now)
   local rows, best = {}, nil
   for _, row in ipairs(Trades.Rows(ns.db)) do
     if row.at >= now - MONTH * DAY then
       rows[#rows + 1] = row
-      if row.side ~= "buy" and (not best or row.net > best.net) then
+      if row.revenue and row.goods and (not best or row.net > best.net) then
         best = row
       end
     end
@@ -377,14 +383,25 @@ local function monthOfTrades(now)
   return rows, best
 end
 
-local function tradeCards(rows)
+local function accountingCards(rows)
   local totals = Trades.Totals(rows)
   return {
-    { "Sold", money(totals.sold) },
-    { "Bought", money(totals.bought) },
+    { "Revenue", money(totals.revenue) },
+    { "Expenses", money(totals.expenses) },
     { "Net", change(totals.net) },
     { "Realized profit", totals.profit and change(totals.profit) or tint("muted", "–") },
   }
+end
+
+-- An entry as the Accounting view names it: the goods and how many, or what
+-- the gold was for, and who it went to or came from.
+local function entryText(row)
+  local text = itemText(row) .. (row.goods and tint("muted", " x" .. row.count) or "")
+  local party = Trades.SIDE[row.side].party
+  if party and row.party then
+    text = text .. tint("muted", " · " .. party .. " " .. row.party)
+  end
+  return text
 end
 
 -- The account as a broker would state it.
@@ -412,11 +429,11 @@ local function goldChart(span)
 end
 
 local function monthLines()
-  local rows, best = monthOfTrades(time())
+  local rows, best = monthOfEntries(time())
   local totals = Trades.Totals(rows)
   return {
-    { "Sold, after the cut", money(totals.sold) },
-    { "Bought", money(totals.bought) },
+    { "Revenue", money(totals.revenue) },
+    { "Expenses", money(totals.expenses) },
     { "Net", change(totals.net) },
     { "Realized profit", totals.profit and change(totals.profit) or tint("muted", "–") },
     { "Best sale", best and itemText(best) or tint("muted", "–") },
@@ -656,43 +673,48 @@ local VIEWS = {
     end,
     cards = goldCards,
     chart = { height = 186, spec = goldChart },
-    side = { title = "Trades this month", lines = monthLines },
+    side = { title = "Accounting this month", lines = monthLines },
   },
-  trades = {
-    tab = "Trades",
+  accounting = {
+    tab = "Accounting",
     icons = true,
     blocks = { "cards", "toolbar", "table" },
     search = "Search items or characters",
-    chips = { "character" },
+    chips = { "source", "character" },
     keep = function(row)
-      return filters.character == nil or row.character == filters.character
+      return (filters.character == nil or row.character == filters.character)
+        and (filters.source == nil or row.side == filters.source)
     end,
-    columns = { { "Item", "name", 272 }, { "Each", "each", 104 }, { "Net", "net", 113 }, { "Character", "character", 108 }, { "When", "at", 82 } },
+    columns = { { "Entry", "name", 290 }, { "Source", "source", 128 }, { "Net", "net", 108 }, { "Character", "character", 88 }, { "When", "at", 65 } },
     sort = { 5, true },
-    segments = { { "all", "All" }, { "sell", "Sales" }, { "buy", "Purchases" }, { "vendor", "Vendor" } },
+    segments = { { "all", "All" }, { "revenue", "Revenue" }, { "expenses", "Expenses" } },
     rows = function(text, segment)
       local needle, rows = text:lower(), {}
       for _, row in ipairs(Trades.Rows(ns.db)) do
-        if (segment == "all" or row.side == segment)
-          and (row.name:lower():find(needle, 1, true) or row.character:lower():find(needle, 1, true)) then
+        local found = needle == ""
+        for _, field in ipairs({ row.name, row.character, row.source, row.party or "" }) do
+          found = found or field:lower():find(needle, 1, true) ~= nil
+        end
+        if found and (segment == "all" or row.revenue == (segment == "revenue")) then
+          row.icon = not row.goods and COIN or nil
           rows[#rows + 1] = row
         end
       end
       return rows
     end,
     cells = function(row)
-      return itemText(row) .. tint("muted", " x" .. row.count .. (row.side == "vendor" and " · vendor" or "")),
-        money(row.each), change(row.net), row.character:match("^[^-]+"), tint("muted", Codec.Age(time() - row.at))
+      return entryText(row), tint("muted", row.source), change(row.net), row.character:match("^[^-]+"),
+        tint("muted", Codec.Age(time() - row.at))
     end,
     head = function(rows)
-      return { sub = #rows .. " booked" }
+      return { sub = #rows .. (#rows == 1 and " entry" or " entries") }
     end,
-    cards = tradeCards,
+    cards = accountingCards,
     status = function(rows, visible)
       if #Trades.Rows(ns.db) == 0 then
-        return "No trades booked. Open a mailbox or sell to a vendor to book them."
+        return "Nothing booked yet. Gold is booked as it moves. Open a mailbox to book auction sales and purchases."
       end
-      return joinedStatus(scrollRange(rows, visible), "Open a mailbox or sell to a vendor to book more trades")
+      return joinedStatus(scrollRange(rows, visible), "Open a mailbox to book auction sales and purchases")
     end,
   },
   item = {
@@ -723,7 +745,7 @@ local VIEWS = {
     end,
   },
 }
-local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "trades" }
+local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "accounting" }
 
 -- The chips a toolbar can show: what each offers, as { value, label }.
 local FILTERS = {
@@ -744,6 +766,19 @@ local FILTERS = {
     local options = { { nil, "All qualities" } }
     for id, name in ipairs({ "Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Artifact", "Heirloom" }) do
       options[#options + 1] = { id - 1, name }
+    end
+    return options
+  end,
+  source = function()
+    local present = {}
+    for _, row in ipairs(Trades.Rows(ns.db)) do
+      present[row.side] = true
+    end
+    local options = { { nil, "All sources" } }
+    for _, side in ipairs(Trades.SIDES) do
+      if present[side[1]] then
+        options[#options + 1] = { side[1], side[2] }
+      end
     end
     return options
   end,
@@ -832,7 +867,7 @@ local function render()
     row.icon:SetShown(item ~= nil and definition.icons == true)
     row.frame:SetShown(item ~= nil and definition.icons == true)
     if item and definition.icons then
-      row.icon:SetTexture(itemIcon(item.key))
+      row.icon:SetTexture(rowIcon(item))
       -- Common and poor items get a plain frame, better ones their quality's colour.
       row.frame:SetColorTexture(hexRGB((item.quality or 1) >= 2 and qualityHex(item.quality) or palette.edge))
     end

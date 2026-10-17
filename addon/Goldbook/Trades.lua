@@ -1,25 +1,71 @@
 local _, ns = ...
 local Database = ns.Database
 
--- Auction house sales and purchases, and sales to vendors, per character, as
--- a broker's statement lists them. The auction house mails an invoice for
--- each of its trades: "seller" with the sale price and its cut, "buyer" with
--- what was paid. The mailbox shows the same mails again each time it opens,
--- so a trade is booked once: an invoice that matches a booked trade to within
--- SAME_MAIL seconds is that trade. A sale to a vendor shows up in the
--- merchant's buyback list with what the vendor paid; see Trades.Merchant.
+-- The account's revenue and expenses, per character, as a broker's statement
+-- lists them. Each entry is { at, side, item, key, count, price, fee, party }:
+-- `side` one of SIDES, `item` the goods' name or for gold alone a short
+-- description, `count` the units of goods or the movements added up, `price`
+-- the copper moved, `fee` the auction house cut of a sale, `party` the other
+-- player. A booked entry never changes, because the server keeps every entry
+-- it receives.
+--
+-- The auction house mails an invoice for each of its trades: "seller" with
+-- the sale price and its cut, "buyer" with what was paid. The mailbox shows
+-- the same mails again each time it opens, so a trade is booked once: an
+-- invoice that matches a booked trade to within SAME_MAIL seconds is that
+-- trade. A sale to a vendor shows up in the merchant's buyback list with what
+-- the vendor paid; see Trades.Merchant. Every other entry comes from
+-- Accounting.
 local Trades = {}
 ns.Trades = Trades
 
-local DAY = 24 * 3600
+local HOUR = 3600
+local DAY = 24 * HOUR
 -- Auction house mail stays 30 days; the days it has left date it.
 local MAIL_DAYS = 30
 local SAME_MAIL = 120
 local KEPT_DAYS = 180
-local MAX_TRADES = 1000
-local SIDES = { seller = "sell", buyer = "buy" }
+-- About a month at a busy pace. Entries the mailbox can still show are kept
+-- past it, so that their invoices are not booked again.
+local MAX_TRADES = 3000
+local MAX_ITEM, MAX_PARTY = 200, 64
+local INVOICES = { seller = "sell", buyer = "buy" }
 -- A full buyback list drops its oldest entry for each sale.
 local BUYBACK_SLOTS = 12
+
+-- Every kind of entry, in the order the Accounting view offers them: its
+-- label, whether it adds to the gold, whether it moves goods, which way it
+-- went with the other player, and the `item` of an entry of gold alone.
+-- `free` goods may change hands for no gold; `accrues` gold is added up per
+-- hour, see Trades.Accrue.
+Trades.SIDES = {
+  { "sell", "Auction sale", revenue = true, goods = true },
+  { "buy", "Auction purchase", goods = true },
+  { "vendor", "Vendor sale", revenue = true, goods = true },
+  { "merchant", "Merchant purchase", goods = true },
+  { "tradeSell", "Trade sale", revenue = true, goods = true, free = true, party = "to" },
+  { "tradeBuy", "Trade purchase", goods = true, free = true, party = "from" },
+  { "tradeIn", "Trade gold in", revenue = true, party = "from", text = "Gold" },
+  { "tradeOut", "Trade gold out", party = "to", text = "Gold" },
+  { "mailIn", "Mail gold in", revenue = true, party = "from", text = "Gold" },
+  { "mailOut", "Mail gold out", party = "to", text = "Gold" },
+  { "cod", "Cash on delivery", goods = true, party = "from" },
+  { "quest", "Quest reward", revenue = true, text = "Quest" },
+  { "loot", "Looted gold", revenue = true, accrues = true, text = "Looted gold" },
+  { "repair", "Repairs", text = "Repairs" },
+  { "postage", "Postage", text = "Postage" },
+  { "deposit", "Auction deposit", text = "Auction" },
+  { "travel", "Flight", text = "Flight" },
+  { "training", "Training", text = "Training" },
+  { "respec", "Talent reset", text = "Talent reset" },
+  { "otherIn", "Other income", revenue = true, accrues = true, text = "Other" },
+  { "otherOut", "Other expense", accrues = true, text = "Other" },
+}
+local SIDE = {}
+for _, side in ipairs(Trades.SIDES) do
+  SIDE[side[1]] = side
+end
+Trades.SIDE = SIDE
 
 -- The key an item name is priced under: the one named exactly that, the
 -- shortest when several are, so that a base item wins over a variant still
@@ -44,7 +90,7 @@ function Trades.FromInbox(db, realmKey, now)
   local invoices, keys = {}, nil
   for index = 1, GetInboxNumItems() do
     local invoiceType, item, _, bid, _, _, consignment, _, _, _, count = GetInboxInvoiceInfo(index)
-    local side = SIDES[invoiceType]
+    local side = INVOICES[invoiceType]
     local daysLeft = select(7, GetInboxHeaderInfo(index))
     if side and item and item ~= "" and bid and bid > 0 and daysLeft then
       local link = side == "buy" and GetInboxItemLink and GetInboxItemLink(index, 1)
@@ -67,13 +113,14 @@ function Trades.FromInbox(db, realmKey, now)
   return invoices
 end
 
--- Oldest first, KEPT_DAYS and at most MAX_TRADES.
+-- Oldest first, KEPT_DAYS and at most MAX_TRADES, but never what the
+-- mailbox may still show.
 local function prune(booked, now)
   table.sort(booked, function(a, b)
     return a.at < b.at
   end)
-  local oldest = now - KEPT_DAYS * DAY
-  while booked[1] and (booked[1].at < oldest or #booked > MAX_TRADES) do
+  local oldest, mailed = now - KEPT_DAYS * DAY, now - MAIL_DAYS * DAY
+  while booked[1] and (booked[1].at < oldest or (#booked > MAX_TRADES and booked[1].at < mailed)) do
     table.remove(booked, 1)
   end
 end
@@ -119,6 +166,60 @@ function Trades.Book(db, character, invoices, now)
   end
   prune(booked, now)
   return sold, bought
+end
+
+-- Books `entries` for `character` as they are, leaving out any the contract
+-- with the server refuses: no gold where gold must move, or no item.
+function Trades.Add(db, character, entries, now)
+  local booked = db.trades[character] or {}
+  db.trades[character] = booked
+  for _, entry in ipairs(entries) do
+    local side = SIDE[entry.side]
+    if side and entry.item and entry.item ~= "" and (entry.price >= 1 or (side.free and entry.price == 0)) then
+      booked[#booked + 1] = {
+        at = entry.at,
+        side = entry.side,
+        item = entry.item:sub(1, MAX_ITEM),
+        key = entry.key,
+        count = math.max(entry.count or 1, 1),
+        price = entry.price,
+        fee = entry.fee or 0,
+        party = entry.party and entry.party ~= "" and entry.party:sub(1, MAX_PARTY) or nil,
+      }
+    end
+  end
+  prune(booked, now)
+end
+
+-- Books the hours of accrued gold that have ended, of every character.
+function Trades.Close(db, now)
+  local hour = now - now % HOUR
+  for character, open in pairs(db.accruing) do
+    for name, entry in pairs(open) do
+      if entry.at < hour then
+        Trades.Add(db, character, { entry }, now)
+        open[name] = nil
+      end
+    end
+    if next(open) == nil then
+      db.accruing[character] = nil
+    end
+  end
+end
+
+-- Gold that comes in many small amounts, as looted gold does, is added up per
+-- character, side and hour in db.accruing, dated the start of the hour, and
+-- booked once the hour has ended: a booked entry never changes.
+function Trades.Accrue(db, character, side, copper, now)
+  Trades.Close(db, now)
+  local open = db.accruing[character] or {}
+  db.accruing[character] = open
+  local entry = open[side]
+  if not entry then
+    entry = { at = now - now % HOUR, side = side, item = SIDE[side].text, count = 0, price = 0, fee = 0 }
+    open[side] = entry
+  end
+  entry.count, entry.price = entry.count + 1, entry.price + copper
 end
 
 -- The merchant's buyback list as { item, key, count, price, id }, price
@@ -232,61 +333,82 @@ function Trades.Merchant(db, character, realmKey, now, money, opened)
   return sold, undone
 end
 
--- Every booked trade, newest first, as the Trades view lists them: { name,
--- key, quality, character, side, count, each, price, fee, net, at }, where
--- `net` is what it added to the gold: the sale less the cut, what the vendor
--- paid, or minus the price paid.
+-- Every entry, booked or still accruing, newest first, as the Accounting
+-- view lists them: { name, key, quality, character, side, source, revenue,
+-- goods, party, count, price, fee, net, at }, where `net` is what it
+-- did to the gold: a revenue less the auction house cut, or minus an expense.
 function Trades.Rows(db)
   local rows = {}
+  local function add(character, entry)
+    local side = SIDE[entry.side]
+    local quality
+    if entry.key then
+      quality = select(2, Database.Item(db, entry.key))
+    end
+    rows[#rows + 1] = {
+      name = entry.item,
+      key = entry.key,
+      quality = quality or 1,
+      character = character,
+      side = entry.side,
+      source = side[2],
+      revenue = side.revenue == true,
+      goods = side.goods == true,
+      party = entry.party,
+      count = entry.count,
+      price = entry.price,
+      fee = entry.fee,
+      net = side.revenue and entry.price - entry.fee or -entry.price,
+      at = entry.at,
+    }
+  end
   for character, booked in pairs(db.trades) do
-    for _, trade in ipairs(booked) do
-      local quality
-      if trade.key then
-        quality = select(2, Database.Item(db, trade.key))
+    for _, entry in ipairs(booked) do
+      if SIDE[entry.side] then
+        add(character, entry)
       end
-      rows[#rows + 1] = {
-        name = trade.item,
-        key = trade.key,
-        quality = quality or 1,
-        character = character,
-        side = trade.side,
-        count = trade.count,
-        each = math.floor(trade.price / trade.count + 0.5),
-        price = trade.price,
-        fee = trade.fee,
-        net = trade.side == "buy" and -trade.price or trade.price - trade.fee,
-        at = trade.at,
-      }
+    end
+  end
+  for character, open in pairs(db.accruing) do
+    for _, entry in pairs(open) do
+      add(character, entry)
     end
   end
   table.sort(rows, function(a, b)
     if a.at ~= b.at then
       return a.at > b.at
     end
-    return a.name < b.name
+    if a.name ~= b.name then
+      return a.name < b.name
+    end
+    return a.side < b.side
   end)
   return rows
 end
 
--- What `rows` add up to: `sold` is what the sales brought in after the cut,
--- at auction and to vendors, `bought` what the purchases cost, and `net` the
--- two together. `profit` is the profit or loss realized per item on the units
--- both bought and sold, at the average sale less the average cost, nil when
--- no item was both bought and sold.
+-- What `rows` add up to: `revenue` after the auction house cut, `expenses`,
+-- and `net` the two together. `profit` is the profit or loss realized per
+-- item on the goods both bought and sold, however they were bought and sold,
+-- at the average sale less the average cost, nil when no item was both.
 function Trades.Totals(rows)
-  local totals = { sold = 0, bought = 0, net = 0 }
+  local totals = { revenue = 0, expenses = 0, net = 0 }
   local items = {}
   for _, row in ipairs(rows) do
-    local item = items[row.name] or { bought = 0, cost = 0, sold = 0, proceeds = 0 }
-    items[row.name] = item
-    if row.side == "buy" then
-      totals.bought = totals.bought + row.price
-      item.bought, item.cost = item.bought + row.count, item.cost + row.price
+    if row.revenue then
+      totals.revenue = totals.revenue + row.net
     else
-      totals.sold = totals.sold + row.net
-      item.sold, item.proceeds = item.sold + row.count, item.proceeds + row.net
+      totals.expenses = totals.expenses - row.net
     end
     totals.net = totals.net + row.net
+    if row.goods then
+      local item = items[row.name] or { bought = 0, cost = 0, sold = 0, proceeds = 0 }
+      items[row.name] = item
+      if row.revenue then
+        item.sold, item.proceeds = item.sold + row.count, item.proceeds + row.net
+      else
+        item.bought, item.cost = item.bought + row.count, item.cost - row.net
+      end
+    end
   end
   for _, item in pairs(items) do
     local matched = math.min(item.bought, item.sold)
