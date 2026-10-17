@@ -97,7 +97,7 @@ The file does not hold the table as one constructor. It fills the table in funct
 
 ## How the app writes the file
 
-The app writes `ServerData.lua` after a sync pass that uploaded without errors. In the background it does this at most once per sync interval for each game flavor. **Sync now** writes it every time.
+The app writes `ServerData.lua` after a sync pass that uploaded without errors. In the background it does this at most once per sync interval for each game flavor. **Sync now** and `goldbook-sync --once` write it after every pass whose uploads did not fail, whatever the interval.
 
 For each flavor folder, the app does the following:
 
