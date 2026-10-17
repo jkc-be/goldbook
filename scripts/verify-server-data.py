@@ -106,6 +106,8 @@ def main():
             assert api.request("GET", "/api/export?realm=Nowhere&faction=Horde")[0]["status"] == 404
 
             written = addon / "ServerData.lua"
+            mode = written.stat().st_mode & 0o777
+            assert mode == (addon / "Goldbook.toc").stat().st_mode & 0o777, oct(mode)
             lines = dump(directory, written)
             assert lines == expected_lines(url, exports), "\n".join(
                 sorted(set(lines) ^ set(expected_lines(url, exports))))

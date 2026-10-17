@@ -233,6 +233,10 @@ async fn refresh(flavor: &Path, api: &str, log: &Logger) -> Result<ServerData> {
         return Ok(ServerData::Unchanged { realms: names });
     }
     let mut temp = tempfile::NamedTempFile::new_in(&addon)?;
+    // A temporary file is private to its owner; the addon's own files are not.
+    if let Ok(toc) = fs::metadata(addon.join("Goldbook.toc")) {
+        temp.as_file().set_permissions(toc.permissions())?;
+    }
     temp.write_all(content.as_bytes())?;
     temp.flush()?;
     temp.as_file().sync_all()?;
