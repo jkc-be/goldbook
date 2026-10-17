@@ -941,8 +941,10 @@ followed by `make install-addon`, which copies this checkout's addon into every
 game in the World of Warcraft folder and keeps each one's `ServerData.lua`
 (`make install-addon WOW=/path` for another folder).
 `make app` builds only the app without an installer, which is faster and needs
-no `rpmbuild` on Linux. `make run`, `make test` and `make clean` do what they
-say. `make clean` removes `target/release/bundle`.
+no `rpmbuild` on Linux. `make run` starts the local server stack with `make dev`,
+rebuilt from this checkout when it changed, and then the desktop app in
+development mode. `make test` and `make clean` do what they say. `make clean`
+removes `target/release/bundle`.
 
 The default Cargo workspace builds the protocol, sync CLI, and server. The
 Tauri app is a separate workspace member so server builds need no desktop

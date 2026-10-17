@@ -44,6 +44,8 @@ were released with.
   and no longer installs a published addon update over it.
 - `make build` also installs this checkout's addon into the World of Warcraft
   folder; `make install-addon` does only that.
+- `make run` starts the local server stack first, rebuilt from this checkout
+  when it changed, so the development app uploads to a matching server.
 
 ### Server
 

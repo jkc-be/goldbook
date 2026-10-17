@@ -34,7 +34,10 @@ else
 	npm run desktop:pack -- --no-bundle
 endif
 
+# Starts the local server stack, rebuilt from this checkout when it changed, then
+# the desktop app in development mode.
 run: node_modules
+	$(MAKE) dev
 	npm run desktop
 
 # Full local suite, including local Traefik. Needs Docker Compose CLI, not its daemon.
