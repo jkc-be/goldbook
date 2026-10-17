@@ -1155,22 +1155,35 @@ td.item button {
 }
 
 .depth-chart {
-  max-width: 560px;
-  margin-block: 16px;
-}
-
-.depth-area {
-  fill: color-mix(in srgb, var(--gold) 16%, transparent);
-}
-
-.depth-line {
-  fill: none;
-  stroke: var(--gold);
-  stroke-width: 1.8;
+  margin-bottom: 16px;
 }
 
 .depth-point {
   fill: var(--gold);
+}
+
+.line.earlier {
+  stroke: var(--muted);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 3;
+}
+
+.dot.earlier {
+  fill: var(--muted);
+}
+
+.key.earlier-key {
+  height: 0;
+  border-top: 2px dashed var(--muted);
+  border-radius: 0;
+}
+
+.order-book tbody tr.active td {
+  background-color: var(--tint-strong);
+}
+
+.order-book tbody tr.active td:first-child {
+  box-shadow: inset 3px 0 0 var(--gold);
 }
 
 .order-book {
@@ -1190,11 +1203,6 @@ td.item button {
 
 .order-book th {
   white-space: normal;
-}
-
-.order-book td:last-child {
-  color: var(--muted);
-  overflow-wrap: anywhere;
 }
 
 .seller-table td:first-child {

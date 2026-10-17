@@ -629,32 +629,199 @@ function drawScans(points) {
   };
 }
 
-function orderBookDepth(levels) {
-  const root = svg("svg", { viewBox: "0 0 520 210", role: "img",
-    "aria-label": "Sell-side depth: cumulative units available at or below each buyout price." });
-  const left = 55, right = 500, top = 18, bottom = 165;
-  const first = levels[0].unitPrice, last = levels.at(-1).unitPrice;
+const unitsUpTo = (levels, price) => levels.findLast((level) => level.unitPrice <= price)?.cumulativeQuantity ?? 0;
+
+// Price ticks inside the range, every other one dropped until their labels fit.
+function priceLabels(low, high, width) {
+  let ticks = niceTicks(low, high).filter((tick) => tick >= low && tick <= high);
+  while (ticks.length > Math.max(2, labelRoom(width))) {
+    ticks = ticks.filter((_, index) => index % 2 === 0);
+  }
+  const step = ticks.length > 1 ? ticks[1] - ticks[0] : Infinity;
+  return ticks.map((tick) => [tick, compactMoney(tick, step)]);
+}
+
+// The units for sale up to each price, stepping up at every level of the
+// book, with an earlier book faintly behind it on the same scales.
+function drawDepthChart(chart, levels, earlier, highlight) {
+  const books = [levels, ...(earlier ? [earlier.orderBook] : [])].flat();
+  const prices = books.map((level) => level.unitPrice);
+  const [low, high] = [Math.min(...prices), Math.max(...prices)];
+  const ticks = niceTicks(0, Math.max(...books.map((level) => level.cumulativeQuantity)));
+  const [top, bottom] = [CHART.price[0], CHART.supply[1]];
+  const width = chartWidth(chart);
+  const right = width - CHART.right;
+  const x = (price) => CHART.left + ((price - low) / (high - low)) * (right - CHART.left);
+  const y = (units) => bottom - (units / ticks.at(-1)) * (bottom - top);
+  const steps = (book) =>
+    `M${CHART.left} ${bottom} ${book.map((level) => `H${x(level.unitPrice)} V${y(level.cumulativeQuantity)}`).join(" ")} H${right}`;
+
+  const root = svg("svg", { viewBox: `0 0 ${width} ${CHART.height}` });
+  for (const tick of ticks) {
+    root.append(
+      svg("line", { class: "grid", x1: CHART.left, x2: right, y1: y(tick), y2: y(tick) }),
+      svg("text", { x: CHART.left - 8, y: y(tick), dy: "0.32em", "text-anchor": "end" }, tick.toLocaleString("en")),
+    );
+  }
+  root.append(svg("line", { class: "axis", x1: CHART.left, x2: right, y1: bottom, y2: bottom }));
+  for (const [price, text] of priceLabels(low, high, right - CHART.left)) {
+    root.append(
+      svg("line", { class: "axis", x1: x(price), x2: x(price), y1: CHART.dates - 18, y2: CHART.dates - 14 }),
+      svg("text", { x: x(price), y: CHART.dates, "text-anchor": "middle" }, text),
+    );
+  }
+
+  const line = steps(levels);
   const total = levels.at(-1).cumulativeQuantity;
-  const x = (price) => last === first ? (left + right) / 2 : left + (price - first) / (last - first) * (right - left);
-  const y = (quantity) => bottom - quantity / total * (bottom - top);
-  for (const quantity of [...new Set([0, Math.round(total / 2), total])]) {
-    root.append(svg("line", { class: "grid", x1: left, x2: right, y1: y(quantity), y2: y(quantity) }),
-      svg("text", { x: left - 8, y: y(quantity), dy: ".32em", "text-anchor": "end" }, quantity.toLocaleString("en")));
+  root.append(svg("path", { class: "area", d: `${line} V${bottom} Z`, fill: areaFill(root, "var(--series-1)") }));
+  if (earlier) {
+    root.append(svg("path", { class: "line earlier", d: steps(earlier.orderBook) }));
   }
-  const path = levels.map((level, index) =>
-    index === 0 ? `M${x(level.unitPrice)} ${y(level.cumulativeQuantity)}` : `H${x(level.unitPrice)} V${y(level.cumulativeQuantity)}`).join(" ");
-  root.append(svg("path", { d: `M${x(first)} ${bottom} ${path.replace(/^M/, "L")} L${x(last)} ${bottom} Z`, class: "depth-area" }),
-    svg("path", { d: path, class: "depth-line" }));
-  for (const level of levels) {
-    const dot = svg("circle", { cx: x(level.unitPrice), cy: y(level.cumulativeQuantity), r: 2, class: "depth-point" });
-    dot.append(svg("title", {}, `${moneyText(level.unitPrice)} per unit: ${level.cumulativeQuantity.toLocaleString("en")} cumulative units`));
-    root.append(dot);
+  root.append(
+    svg("path", { class: "line", d: line, stroke: "var(--series-1)" }),
+    ...levels.map((level) => svg("circle", { class: "depth-point", cx: x(level.unitPrice), cy: y(level.cumulativeQuantity), r: 2 })),
+    svg("text", { class: "value", x: right + 10, y: y(total), dy: "0.32em" }, total.toLocaleString("en")),
+  );
+
+  const crosshair = svg("line", { class: "crosshair", y1: top, y2: bottom, visibility: "hidden" });
+  const marker = svg("circle", { class: "dot", r: 4, fill: "var(--series-1)", visibility: "hidden" });
+  const earlierMarker = svg("circle", { class: "dot earlier", r: 3.5, visibility: "hidden" });
+  const overlay = svg("rect", { x: CHART.left, y: top, width: right - CHART.left, height: bottom - top, fill: "transparent" });
+  root.append(crosshair, ...(earlier ? [earlierMarker] : []), marker, overlay);
+
+  const tooltip = element("div", { className: "tooltip depth-tooltip", hidden: true });
+  const row = (value, name, key) =>
+    element("div", { className: "row" }, [
+      ...(key ? [key] : []),
+      element("strong", {}, [value]),
+      element("span", { className: "name", textContent: name }),
+    ]);
+  const show = (index) => {
+    const level = levels[index];
+    const left = x(level.unitPrice);
+    crosshair.setAttribute("x1", left);
+    crosshair.setAttribute("x2", left);
+    crosshair.setAttribute("visibility", "visible");
+    marker.setAttribute("cx", left);
+    marker.setAttribute("cy", y(level.cumulativeQuantity));
+    marker.setAttribute("visibility", "visible");
+    const key = element("span", { className: "key" });
+    key.style.background = "var(--series-1)";
+    const rows = [
+      element("div", { className: "when", textContent: `Level ${index + 1} of ${levels.length}` }),
+      row(money(level.unitPrice), "per unit"),
+      row(level.quantity.toLocaleString("en"), "at this price"),
+      row(level.cumulativeQuantity.toLocaleString("en"), "up to this price", key),
+      row(money(level.cumulativeCost), "buys them all"),
+    ];
+    if (earlier) {
+      const before = unitsUpTo(earlier.orderBook, level.unitPrice);
+      earlierMarker.setAttribute("cx", left);
+      earlierMarker.setAttribute("cy", y(before));
+      earlierMarker.setAttribute("visibility", "visible");
+      rows.push(row(before.toLocaleString("en"), "earlier", element("span", { className: "key earlier-key" })));
+    }
+    tooltip.replaceChildren(...rows);
+    placeTooltip(tooltip, left, width);
+    highlight(index);
+  };
+  const hide = () => {
+    for (const node of [crosshair, marker, earlierMarker]) {
+      node.setAttribute("visibility", "hidden");
+    }
+    tooltip.hidden = true;
+    highlight(null);
+  };
+  const at = inspect(chart, root, overlay, {
+    count: levels.length,
+    x: (index) => x(levels[index].unitPrice),
+    width,
+    start: 0,
+    show,
+    hide,
+  });
+
+  chart.setAttribute(
+    "aria-label",
+    `Units for sale up to each price: ${total.toLocaleString("en")} over ${levels.length} price levels from ${moneyText(levels[0].unitPrice)} to ${moneyText(levels.at(-1).unitPrice)}${earlier ? `, drawn over the observation of ${when(earlier.scannedAt)}` : ""}. Use the arrow keys to read each level.`,
+  );
+  chart.replaceChildren(root, tooltip);
+  drawn.set(chart, { width, draw: () => drawDepthChart(chart, levels, earlier, highlight), show: at, hide });
+  resized.observe(chart);
+}
+
+function describeLevel(level) {
+  return `${moneyText(level.unitPrice)} per unit: ${level.quantity.toLocaleString("en")} at this price, ${level.cumulativeQuantity.toLocaleString("en")} up to it for ${moneyText(level.cumulativeCost)}.`;
+}
+
+// Drawn into `container` after it is on the page, so that the chart can measure itself.
+function drawBook(container, { scannedAt, summary, orderBook }, earlier) {
+  const { totalQuantity } = summary;
+  const children = [
+    element("dl", { className: "summary book-summary" }, [
+      stat("Best ask", orderBook.length ? money(orderBook[0].unitPrice) : "No listings"),
+      stat("Listed units", totalQuantity.toLocaleString("en")),
+      stat("Price levels", orderBook.length.toLocaleString("en")),
+      stat("Observed", age(scannedAt), new Date(scannedAt * 1000).toLocaleString()),
+    ]),
+  ];
+  const chart = orderBook.length > 1 ? element("div", { className: "chart depth-chart", tabIndex: 0 }) : null;
+  const live = element("p", { className: "visually-hidden" });
+  if (chart) {
+    chart.setAttribute("role", "img");
+    live.setAttribute("aria-live", "polite");
+    const key = element("span", { className: "key" });
+    key.style.background = "var(--series-1)";
+    children.push(
+      element("div", { className: "legend" }, [
+        element("span", {}, [key, "Units for sale up to each price"]),
+        ...(earlier ? [element("span", {}, [element("span", { className: "key earlier-key" }), `Earlier, ${when(earlier.scannedAt)}`])] : []),
+      ]),
+      chart,
+      live,
+    );
+  } else if (orderBook.length === 1) {
+    children.push(element("p", { className: "muted", textContent: "All of it is listed at one price, so there is no depth to chart." }));
   }
-  root.append(svg("text", { x: left, y: 12 }, "Cumulative units"),
-    svg("text", { x: x(first), y: 185, "text-anchor": last === first ? "middle" : "start" }, compactMoney(first)));
-  if (last !== first) root.append(svg("text", { x: right, y: 185, "text-anchor": "end" }, compactMoney(last)));
-  root.append(svg("text", { x: (left + right) / 2, y: 205, "text-anchor": "middle" }, "Unit buyout"));
-  return element("div", { className: "chart depth-chart" }, [root]);
+  const rows = orderBook.map((level, index) => {
+    const cumulative = element("td", { className: "number depth-cell", textContent: level.cumulativeQuantity.toLocaleString("en") });
+    cumulative.style.setProperty("--depth", `${(level.cumulativeQuantity / totalQuantity) * 100}%`);
+    const row = element("tr", {}, [
+      element("td", { className: "number ask-price" }, [money(level.unitPrice)]),
+      element("td", { className: "number", textContent: level.quantity.toLocaleString("en") }),
+      cumulative,
+    ]);
+    if (chart) {
+      row.onpointerenter = () => drawn.get(chart).show(index);
+      row.onpointerleave = () => drawn.get(chart).hide();
+    }
+    return row;
+  });
+  children.push(
+    element("table", { className: "seller-table order-book" }, [
+      element("caption", { textContent: "Sell orders · lowest ask first" }),
+      element("thead", {}, [
+        element("tr", {}, ["Ask / unit", "Units", "Cumulative"].map((text) =>
+          element("th", { scope: "col", className: "number", textContent: text }))),
+      ]),
+      element("tbody", {}, rows),
+    ]),
+    element("p", {
+      className: "muted",
+      textContent: orderBook.length
+        ? "Cumulative units include all stock up to that unit price. Completed searches and full scans are recorded; changes between observations are not tracked."
+        : "No buyout stock was listed in this observation.",
+    }),
+  );
+  container.replaceChildren(...children);
+  if (chart) {
+    drawDepthChart(chart, orderBook, earlier, (index) => {
+      rows.forEach((row, position) => row.classList.toggle("active", position === index));
+      if (index !== null) {
+        live.textContent = describeLevel(orderBook[index]);
+      }
+    });
+  }
 }
 
 function drawSellers(data) {
@@ -665,56 +832,35 @@ function drawSellers(data) {
       "No order book has been uploaded for this item. With the updated addon, run /gb scan full at the auction house, then /reload with the desktop app open. A complete search for this item also records its book." }));
     return;
   }
-  const { scannedAt, summary, orderBook, itemKey, id } = data.snapshot;
-  const { totalQuantity } = summary;
-  const captured = new Date(scannedAt * 1000).toLocaleString();
+  const { realm, faction } = state.realm;
+  const { itemKey, id } = data.snapshot;
+  const history = data.history ?? [];
+  const book = element("div");
+  const fetchBook = (snapshot) =>
+    latestOnly("sellers", api("/api/sellers", { realm, faction, itemKey, snapshot })).then((result) => result.snapshot);
+  // Each observation is drawn at once, and again over the one before it once that arrives.
+  const show = (snapshot) => {
+    drawBook(book, snapshot, null);
+    const shown = history.findIndex((entry) => entry.id === snapshot.id);
+    const before = shown === -1 ? undefined : history[shown + 1];
+    if (before) {
+      run(async () => drawBook(book, snapshot, await fetchBook(before.id)));
+    }
+  };
   const children = [title,
     element("p", { className: "muted", textContent: "Sell listings only. WoW does not expose a standing buy-order book. These are recorded snapshots, not a live market feed." }),
-    element("dl", { className: "summary book-summary" }, [
-      stat("Best ask", orderBook.length ? money(orderBook[0].unitPrice) : "No listings"),
-      stat("Listed units", totalQuantity.toLocaleString("en")),
-      stat("Price levels", orderBook.length.toLocaleString("en")),
-      stat("Observed", age(scannedAt), captured),
-    ]),
   ];
-  if (data.history?.length) {
-    const historyTurn = latest.history;
-    const { realm, faction } = state.realm;
-    const select = element("select", { id: "order-book-snapshot" }, data.history.map((snapshot, index) =>
+  if (history.length > 1) {
+    const select = element("select", { id: "order-book-snapshot" }, history.map((snapshot, index) =>
       element("option", { value: snapshot.id, selected: snapshot.id === id,
-        textContent: `${index === 0 ? "Latest: " : ""}${new Date(snapshot.scannedAt * 1000).toLocaleString()} · #${data.history.length - index}` })));
-    select.onchange = () => run(async () => {
-      const result = await latestOnly("sellers", api("/api/sellers", {
-        realm, faction, itemKey, history: 1, snapshot: select.value,
-      }));
-      if (historyTurn !== latest.history) throw STALE;
-      drawSellers(result);
-    });
-    children.push(element("label", { className: "order-book-history", htmlFor: select.id }, [
-      `Observation (${data.history.length.toLocaleString("en")} saved) `, select,
+        textContent: `#${history.length - index} · ${when(snapshot.scannedAt)}${index === 0 ? " · latest" : ""}` })));
+    select.onchange = () => run(async () => show(await fetchBook(select.value)));
+    children.push(element("label", { className: "order-book-history" }, [
+      `Observation (${history.length.toLocaleString("en")} saved)`, element("span", { className: "chip" }, [select]),
     ]));
   }
-  if (orderBook.length) children.push(orderBookDepth(orderBook));
-  children.push(element("table", { className: "seller-table order-book" }, [
-    element("caption", { textContent: "Sell orders · lowest ask first" }),
-    element("thead", {}, [element("tr", {}, ["Ask / unit", "Units", "Cumulative", "Known sellers"].map((text, i) =>
-      element("th", { scope: "col", className: i < 3 ? "number" : "", textContent: text })))]),
-    element("tbody", {}, orderBook.map((level) => {
-      const cumulative = element("td", { className: "number depth-cell", textContent: level.cumulativeQuantity.toLocaleString("en") });
-      cumulative.style.setProperty("--depth", `${level.cumulativeQuantity / totalQuantity * 100}%`);
-      return element("tr", {}, [
-        element("td", { className: "number ask-price" }, [money(level.unitPrice)]),
-        element("td", { className: "number", textContent: level.quantity.toLocaleString("en") }),
-        cumulative,
-        element("td", { textContent: level.owners.length
-          ? `${level.owners.join(", ")}${level.hasUnnamedOwners ? " + unnamed sellers" : ""}` : "Unknown" }),
-      ]);
-    })),
-  ]));
-  children.push(element("p", { className: "muted", textContent: orderBook.length
-    ? "Cumulative units include all stock up to that unit price. Completed searches and full scans are recorded; changes between observations are not tracked."
-    : "No buyout stock was listed in this observation." }));
-  panel.replaceChildren(...children);
+  panel.replaceChildren(...children, book);
+  show(data.snapshot);
 }
 
 async function loadHistory(itemKey) {
