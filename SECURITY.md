@@ -48,7 +48,8 @@ dropping its previous value, as permitted by Rust's
 termination, and reuse of the same allocation after truncation. This finding is
 a false positive; the upstream collection implementation is unchanged.
 
-Remove the vendored copy, Cargo patch, and test profile override when Tauri's
-supported dependency chain can use a patched registry release. Do not replace
-the copy with unpatched 0.18.5 or suppress the advisory without verifying the
-resolved source.
+Whenever Tauri or its GTK dependencies are updated, check for a compatible,
+patched GLib release from crates.io. When one is supported, use that upstream
+release and remove the vendored copy, Cargo patch, and test profile override.
+Do not replace the copy with unpatched 0.18.5 or suppress the advisory without
+verifying the resolved source.
