@@ -162,9 +162,12 @@ field("site").addEventListener("click", async () => {
   }
 });
 
-window.goldbook.onStatus((status) => {
+function showStatus(status) {
   field("live").textContent = status.message;
-});
+  field("live").classList.toggle("watching", status.files > 0);
+}
+
+window.goldbook.onStatus(showStatus);
 
 window.goldbook.onBattlenetCode((code) => {
   field("battlenet-code").textContent = `Enter code ${code} in your browser to connect Battle.net.`;
@@ -191,7 +194,7 @@ async function fill() {
   field("auto").checked = initial.settings.autoSync;
   field("minutes").value = String(initial.settings.syncMinutes);
   field("minutes").disabled = !initial.settings.autoSync;
-  field("live").textContent = initial.status.message;
+  showStatus(initial.status);
   if (!initial.configured || initial.status.files === 0) {
     field("settings-toggle").click();
   }
@@ -215,6 +218,7 @@ function showUpdates(status) {
     failed: update.message,
   };
   field("client-update").textContent = text[update.phase];
+  field("client-update").dataset.phase = update.phase;
   field("install-update").hidden = update.phase !== "ready";
   field("update-alert").hidden = update.phase !== "ready" && update.phase !== "failed";
   field("update-alert").textContent = update.phase === "ready" ? "Update ready" : "Update needs attention";
