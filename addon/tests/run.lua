@@ -955,7 +955,7 @@ for _ = 1, 10 do
   Stub.fire("PLAYER_MONEY")
 end
 eq(cells(1), "Sultan | 125g 00s 00c | +25g 00s 00c | today", "the window is not redrawn on the spot for each gold change")
-eq(#Stub.timers - timers, 1, "ten gold changes in a row queue one redraw")
+eq(#Stub.timers - timers, 2, "ten gold changes in a row queue one redraw, and one wait for what explains the change")
 Stub.advance(0.2)
 eq(cells(1), "Sultan | 126g 00s 00c | +26g 00s 00c | today", "the redraw a moment later shows the new balance")
 eq(plain(GoldbookWindow.purse.text), "126g 00s 00c", "the title bar shows the account's gold")

@@ -113,12 +113,17 @@ function Trades.FromInbox(db, realmKey, now)
   return invoices
 end
 
--- Oldest first, KEPT_DAYS and at most MAX_TRADES, but never what the
--- mailbox may still show.
+-- Keeps `booked` oldest first, an entry after those of the same time.
+local function insert(booked, entry)
+  local index = #booked
+  while index > 0 and booked[index].at > entry.at do
+    index = index - 1
+  end
+  table.insert(booked, index + 1, entry)
+end
+
+-- KEPT_DAYS and at most MAX_TRADES, but never what the mailbox may still show.
 local function prune(booked, now)
-  table.sort(booked, function(a, b)
-    return a.at < b.at
-  end)
   local oldest, mailed = now - KEPT_DAYS * DAY, now - MAIL_DAYS * DAY
   while booked[1] and (booked[1].at < oldest or (#booked > MAX_TRADES and booked[1].at < mailed)) do
     table.remove(booked, 1)
@@ -155,7 +160,7 @@ function Trades.Book(db, character, invoices, now)
         price = invoice.price,
         fee = invoice.fee,
       }
-      booked[#booked + 1] = match
+      insert(booked, match)
       if invoice.side == "sell" then
         sold = sold + 1
       else
@@ -176,7 +181,7 @@ function Trades.Add(db, character, entries, now)
   for _, entry in ipairs(entries) do
     local side = SIDE[entry.side]
     if side and entry.item and entry.item ~= "" and (entry.price >= 1 or (side.free and entry.price == 0)) then
-      booked[#booked + 1] = {
+      insert(booked, {
         at = entry.at,
         side = entry.side,
         item = entry.item:sub(1, MAX_ITEM),
@@ -185,7 +190,7 @@ function Trades.Add(db, character, entries, now)
         price = entry.price,
         fee = entry.fee or 0,
         party = entry.party and entry.party ~= "" and entry.party:sub(1, MAX_PARTY) or nil,
-      }
+      })
     end
   end
   prune(booked, now)
@@ -195,10 +200,11 @@ end
 function Trades.Close(db, now)
   local hour = now - now % HOUR
   for character, open in pairs(db.accruing) do
-    for name, entry in pairs(open) do
-      if entry.at < hour then
+    for _, side in ipairs(Trades.SIDES) do
+      local entry = open[side[1]]
+      if entry and entry.at < hour then
         Trades.Add(db, character, { entry }, now)
-        open[name] = nil
+        open[side[1]] = nil
       end
     end
     if next(open) == nil then
@@ -295,7 +301,7 @@ function Trades.Merchant(db, character, realmKey, now, money, opened)
   for _, entry in ipairs(entries) do
     seen[entry.id] = (seen[entry.id] or 0) + 1
     if seen[entry.id] > (before[entry.id] or 0) then
-      booked[#booked + 1] = vendorSale(entry, now)
+      insert(booked, vendorSale(entry, now))
       sold = sold + 1
     end
   end
@@ -308,7 +314,7 @@ function Trades.Merchant(db, character, realmKey, now, money, opened)
     for index = #entries, 1, -1 do
       local entry = entries[index]
       if entry.price == gained then
-        booked[#booked + 1] = vendorSale(entry, now)
+        insert(booked, vendorSale(entry, now))
         sold = 1
         break
       end

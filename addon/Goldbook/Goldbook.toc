@@ -20,6 +20,7 @@ Trades.lua
 Scanner.lua
 Sellers.lua
 Core.lua
+Accounting.lua
 Tooltip.lua
 UI.lua
 WebLogin.lua
