@@ -112,17 +112,21 @@ function moneyText(copper) {
   return shown.length === 0 ? "0c" : shown.map(({ unit, amount }) => `${amount.toLocaleString("en")}${unit}`).join(" ");
 }
 
-// Zero units are left out. In a column every unit keeps its slot, so that a
-// lone "12g" cannot line up with the copper of the rows around it.
+// Zero units are left out. In a column every unit keeps its slot, and the
+// units below the largest one show as two digits, as in the addon, so that a
+// lone "12g" reads "12g 00s 00c" and ends where the rows around it end.
 function money(copper, { aligned = false } = {}) {
-  const parts = coins(copper).flatMap(({ unit, amount }, index) => {
-    const shown = amount > 0 || (copper === 0 && index === COINS.length - 1);
+  const amounts = coins(copper);
+  const largest = copper === 0 ? COINS.length - 1 : amounts.findIndex(({ amount }) => amount > 0);
+  const parts = amounts.flatMap(({ unit, amount }, index) => {
+    const shown = aligned ? index >= largest : amount > 0 || (copper === 0 && index === COINS.length - 1);
     if (!shown && !aligned) {
       return [];
     }
     const part = element("span", { className: `coin ${unit}` });
     if (shown) {
-      part.append(amount.toLocaleString("en"), element("span", { className: "unit", textContent: unit }));
+      const digits = aligned && index > largest ? String(amount).padStart(2, "0") : amount.toLocaleString("en");
+      part.append(digits, element("span", { className: "unit", textContent: unit }));
     }
     return [part, " "];
   });
