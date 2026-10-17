@@ -14,5 +14,5 @@ pub use savedvars::{
     QueuedScan, WebLogin, extract_account, extract_login, extract_scans, extract_seller_snapshots,
 };
 pub use serverdata::{ServerData, write_server_data};
-pub use sync::{Logger, SyncOptions, SyncResult, api_url, sync_file};
+pub use sync::{Logger, SyncOptions, SyncResult, api_client, api_url, sync_file};
 pub use watch::{WatchFile, WatchHandle, WatchOptions, is_goldbook_write, watch_files};

@@ -1443,7 +1443,6 @@ function refresh()
   end
   local scanned = ns.db.scanned[ns.RealmKey()]
   window.lastScan:SetText(scanned and ("Last scan " .. tint("text", Codec.Age(time() - scanned))) or "No scan yet")
-  window.queued:SetText(#ns.db.scans == 0 and "Nothing waiting to sync" or (plural(#ns.db.scans, "scan") .. " waiting to sync"))
   window.purse:SetText(money(Ledger.History(ns.db, time(), 1)[1] or 0))
   render()
 end
@@ -2055,8 +2054,6 @@ local function addRail()
   UI.Fill(rule, "line")
   window.lastScan = label(rail, "status", "muted")
   window.lastScan:SetPoint("TOPLEFT", rule, "BOTTOMLEFT", 14, -12)
-  window.queued = label(rail, "status", "muted")
-  window.queued:SetPoint("TOPLEFT", window.lastScan, "BOTTOMLEFT", 0, -3)
 
   window.reload = UI.Button(rail, "Reload", RAIL_WIDTH - 28, 26)
   window.reload:SetPoint("BOTTOMLEFT", 14, 13)

@@ -1642,8 +1642,6 @@ dependencies = [
 [[package]]
 name = "glib"
 version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5"
 dependencies = [
  "bitflags 2.13.2",
  "futures-channel",
@@ -1705,7 +1703,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "hex",
  "serde",
@@ -1715,7 +1713,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-desktop"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -1748,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-server"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -1771,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-sync"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -1787,6 +1785,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]

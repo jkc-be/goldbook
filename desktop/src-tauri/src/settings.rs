@@ -76,6 +76,7 @@ pub fn normalize_api(input: &str) -> Result<String> {
         .map_err(|()| anyhow::anyhow!("Invalid server address"))?;
     url.set_query(None);
     url.set_fragment(None);
+    goldbook_sync::api_url(url.as_str(), "")?;
     Ok(url.to_string().trim_end_matches('/').to_owned())
 }
 
@@ -185,6 +186,11 @@ mod tests {
         );
         assert!(normalize_api("file:///tmp").is_err());
         assert!(normalize_api("").is_err());
+        assert!(normalize_api("http://example.com/goldbook").is_err());
+        assert_eq!(
+            normalize_api("http://[::1]:8787/goldbook").unwrap(),
+            "http://[::1]:8787/goldbook"
+        );
         assert_ne!(
             state_path("localhost:8787").unwrap(),
             state_path("localhost:8788").unwrap()
