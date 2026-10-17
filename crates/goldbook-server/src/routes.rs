@@ -815,9 +815,29 @@ fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     )?;
     Ok(Reply::json(json!({"trades": rows})))
 }
-const ASSETS: [(&str, &[u8], &str); 2] = [
+const ASSETS: [(&str, &[u8], &str); 6] = [
     ("app.js", include_bytes!("../../../web/app.js"), "js"),
     ("style.css", include_bytes!("../../../web/style.css"), "css"),
+    (
+        "fonts/marcellus-latin-400-normal.woff2",
+        include_bytes!("../../../web/fonts/marcellus-latin-400-normal.woff2"),
+        "woff2",
+    ),
+    (
+        "fonts/roboto-condensed-latin-400-normal.woff2",
+        include_bytes!("../../../web/fonts/roboto-condensed-latin-400-normal.woff2"),
+        "woff2",
+    ),
+    (
+        "fonts/roboto-condensed-latin-500-normal.woff2",
+        include_bytes!("../../../web/fonts/roboto-condensed-latin-500-normal.woff2"),
+        "woff2",
+    ),
+    (
+        "fonts/roboto-condensed-latin-700-normal.woff2",
+        include_bytes!("../../../web/fonts/roboto-condensed-latin-700-normal.woff2"),
+        "woff2",
+    ),
 ];
 // Cloudflare overrides the origin's cache headers for js and css, so a changed asset needs a new URL.
 static INDEX: LazyLock<Vec<u8>> = LazyLock::new(|| {
@@ -865,6 +885,7 @@ fn static_file(web: Option<&Path>, path: &str) -> Option<Reply> {
         "svg" => "image/svg+xml",
         "png" => "image/png",
         "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
         "json" => "application/json",
         _ => "application/octet-stream",
     };

@@ -900,6 +900,27 @@ async fn explicit_web_directory_confines_files_and_overrides_embedded_assets() {
 }
 
 #[tokio::test]
+async fn embedded_fonts_are_served_as_woff2() {
+    let f = Fixture::new();
+    let fonts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/fonts");
+    let mut served = 0;
+    for entry in std::fs::read_dir(fonts).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("woff2") {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_str().unwrap();
+        let (status, headers, body) =
+            raw(&f.app, "GET", &format!("/fonts/{name}"), vec![], &[]).await;
+        assert_eq!(status, 200, "{name}");
+        assert_eq!(headers["content-type"], "font/woff2", "{name}");
+        assert_eq!(body, std::fs::read(&path).unwrap(), "{name}");
+        served += 1;
+    }
+    assert_eq!(served, 4);
+}
+
+#[tokio::test]
 async fn embedded_index_references_assets_by_content_version() {
     let f = Fixture::new();
     let (status, _, index) = raw(&f.app, "GET", "/", vec![], &[]).await;
