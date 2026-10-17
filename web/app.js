@@ -332,12 +332,71 @@ const drawn = new Map();
 let areas = 0;
 const resized = new ResizeObserver((entries) => {
   for (const { target } of entries) {
-    const { width, options } = drawn.get(target);
+    const { width, draw } = drawn.get(target);
     if (target.getBoundingClientRect().width > 0 && chartWidth(target) !== width) {
-      drawChart(target, options);
+      draw();
     }
   }
 });
+
+function areaFill(root, color) {
+  const id = `area-${++areas}`;
+  const defs = root.querySelector("defs") ?? root.appendChild(svg("defs"));
+  defs.append(svg("linearGradient", { id, x1: 0, x2: 0, y1: 0, y2: 1 }, undefined, [
+    svg("stop", { offset: 0, "stop-color": color, "stop-opacity": 0.42 }),
+    svg("stop", { offset: 1, "stop-color": color, "stop-opacity": 0.03 }),
+  ]));
+  return `url(#${id})`;
+}
+
+function placeTooltip(tooltip, left, width) {
+  tooltip.hidden = false;
+  tooltip.style.left = `${(left / width) * 100}%`;
+  tooltip.style.transform = left < width / 2 ? "translateX(12px)" : "translateX(calc(-100% - 12px))";
+}
+
+// The pointer, a tap or the arrow keys rest on one of `count` points, found by
+// its x position, and Escape clears it. Returns a way to rest on one from outside.
+function inspect(chart, root, overlay, { count, x, width, start, show, hide }) {
+  let active = start;
+  const at = (index) => {
+    active = index;
+    show(index);
+  };
+  const nearest = (event) => {
+    const box = root.getBoundingClientRect();
+    const pointer = ((event.clientX - box.left) / box.width) * width;
+    let closest = 0;
+    for (let index = 1; index < count; index++) {
+      if (Math.abs(x(index) - pointer) < Math.abs(x(closest) - pointer)) {
+        closest = index;
+      }
+    }
+    at(closest);
+  };
+  overlay.addEventListener("pointermove", nearest);
+  overlay.addEventListener("pointerdown", nearest);
+  // A finger leaves as it lifts, so what it tapped stays until focus moves on.
+  overlay.addEventListener("pointerleave", (event) => {
+    if (event.pointerType !== "touch") {
+      hide();
+    }
+  });
+  chart.onfocus = () => at(active);
+  chart.onblur = hide;
+  chart.onkeydown = (event) => {
+    if (event.key === "Escape") {
+      hide();
+      return;
+    }
+    const move = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
+    if (move) {
+      event.preventDefault();
+      at(Math.min(count - 1, Math.max(0, active + move)));
+    }
+  };
+  return at;
+}
 
 // Times in seconds, values per time with null where nothing was measured, and
 // an optional band of amounts below that shares the time axis. With `steps`
@@ -395,7 +454,6 @@ function drawChart(chart, options) {
   // A line runs from one measured value to the next and passes over the
   // times in between that measured nothing.
   const ends = [];
-  let defs = null;
   for (const line of series) {
     const measured = times.flatMap((time, index) => {
       const value = line.values[index];
@@ -406,13 +464,7 @@ function drawChart(chart, options) {
       .join(" ");
     const last = measured.at(-1);
     if (line.area) {
-      const id = `area-${++areas}`;
-      defs ??= root.appendChild(svg("defs"));
-      defs.append(svg("linearGradient", { id, x1: 0, x2: 0, y1: 0, y2: 1 }, undefined, [
-        svg("stop", { offset: 0, "stop-color": line.color, "stop-opacity": 0.42 }),
-        svg("stop", { offset: 1, "stop-color": line.color, "stop-opacity": 0.03 }),
-      ]));
-      root.append(svg("path", { class: "area", d: `${path} V${bottom} H${measured[0].x} Z`, fill: `url(#${id})` }));
+      root.append(svg("path", { class: "area", d: `${path} V${bottom} H${measured[0].x} Z`, fill: areaFill(root, line.color) }));
     }
     root.append(
       svg("path", { class: "line", d: path, stroke: line.color }),
@@ -439,10 +491,8 @@ function drawChart(chart, options) {
   root.append(crosshair, ...markers, overlay);
 
   const tooltip = element("div", { className: "tooltip", hidden: true });
-  let active = times.length - 1;
 
   const show = (index) => {
-    active = index;
     const left = x(times[index]);
     crosshair.setAttribute("x1", left);
     crosshair.setAttribute("x2", left);
@@ -477,10 +527,7 @@ function drawChart(chart, options) {
       );
     }
     tooltip.replaceChildren(...rows);
-    tooltip.hidden = false;
-    const onLeftHalf = left < width / 2;
-    tooltip.style.left = `${(left / width) * 100}%`;
-    tooltip.style.transform = onLeftHalf ? "translateX(12px)" : "translateX(calc(-100% - 12px))";
+    placeTooltip(tooltip, left, width);
   };
   const hide = () => {
     crosshair.setAttribute("visibility", "hidden");
@@ -488,32 +535,18 @@ function drawChart(chart, options) {
     bars.forEach((bar) => bar.classList.remove("active"));
     tooltip.hidden = true;
   };
-
-  overlay.addEventListener("pointermove", (event) => {
-    const box = root.getBoundingClientRect();
-    const pointer = ((event.clientX - box.left) / box.width) * width;
-    let nearest = 0;
-    times.forEach((time, index) => {
-      if (Math.abs(x(time) - pointer) < Math.abs(x(times[nearest]) - pointer)) {
-        nearest = index;
-      }
-    });
-    show(nearest);
+  const at = inspect(chart, root, overlay, {
+    count: times.length,
+    x: (index) => x(times[index]),
+    width,
+    start: times.length - 1,
+    show,
+    hide,
   });
-  overlay.addEventListener("pointerleave", hide);
-  chart.onfocus = () => show(active);
-  chart.onblur = hide;
-  chart.onkeydown = (event) => {
-    const move = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
-    if (move) {
-      event.preventDefault();
-      show(Math.min(times.length - 1, Math.max(0, active + move)));
-    }
-  };
 
   chart.setAttribute("aria-label", label);
   chart.replaceChildren(root, tooltip);
-  drawn.set(chart, { width, options });
+  drawn.set(chart, { width, draw: () => drawChart(chart, options), show: at, hide });
   resized.observe(chart);
 }
 
