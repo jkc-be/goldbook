@@ -1007,3 +1007,50 @@ async fn watcher_refreshes_server_data_once_per_flavor_and_on_request() {
     handle.close();
     task.abort();
 }
+#[tokio::test]
+async fn watcher_downloads_server_data_at_most_every_15_minutes_unless_asked() {
+    let (api, mock, task) = export_server(HashMap::from([(
+        "Faramon-Horde".to_owned(),
+        faramon_export(),
+    )]))
+    .await;
+    let temp = tempfile::tempdir().unwrap();
+    let flavor = temp.path().join("_classic_");
+    let addon = flavor.join("Interface/AddOns/Goldbook");
+    std::fs::create_dir_all(&addon).unwrap();
+    let text = "GoldbookDB = { [\"items\"] = {}, [\"scans\"] = {}, [\"scanned\"] = { [\"Faramon-Horde\"] = 1 } }";
+    let (log, lines) = recording_logger();
+    let handle = watch_files(WatchOptions {
+        files: vec![WatchFile {
+            file: write_account(&flavor, "ONE", text),
+            token: "test".into(),
+        }],
+        api,
+        state_path: temp.path().join("state.json"),
+        interval: Some(Duration::from_secs(1)),
+        log,
+    })
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(3500)).await;
+    let passes = |lines: &Mutex<Vec<String>>| {
+        lines
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|line| line.starts_with("server prices for Faramon-Horde"))
+            .count()
+    };
+    assert_eq!(
+        (mock.requests.lock().unwrap().len(), passes(&lines)),
+        (1, 1),
+        "four one-second sync passes download once"
+    );
+    handle.refresh_server_data().await;
+    assert_eq!(
+        (mock.requests.lock().unwrap().len(), passes(&lines)),
+        (2, 2),
+        "Sync now downloads again"
+    );
+    handle.close();
+    task.abort();
+}

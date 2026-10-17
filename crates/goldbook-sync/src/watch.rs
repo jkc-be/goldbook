@@ -29,6 +29,8 @@ pub struct WatchOptions {
     pub log: Logger,
 }
 const RETRY: Duration = Duration::from_secs(15);
+// A download is several megabytes, so a short sync interval does not repeat it sooner.
+const SERVER_DATA_INTERVAL: Duration = Duration::from_secs(15 * 60);
 type Refreshed = Arc<Mutex<HashMap<PathBuf, Instant>>>;
 pub struct WatchHandle {
     options: WatchOptions,
@@ -169,7 +171,7 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
                     }
                 };
                 if let Some(flavor) = flavor.as_deref().filter(|_| healthy) {
-                    if claim_refresh(&refreshed, flavor, interval) {
+                    if claim_refresh(&refreshed, flavor, interval.max(SERVER_DATA_INTERVAL)) {
                         let _ = write_server_data(flavor, &options.api, &options.log).await;
                     }
                 }
