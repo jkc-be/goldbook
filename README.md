@@ -209,6 +209,14 @@ you in to the character pages with the ID and key saved by the addon. After
 your first game login, type `/reload` once so they are available. If several
 accounts are saved, choose which one to open.
 
+After a sync pass whose uploads succeed, the app also downloads the server's
+prices and history for each realm your SavedVariables name, including other
+players' scans. It writes them to `Interface/AddOns/Goldbook/ServerData.lua`
+in each game folder, at most once per sync interval, and **Sync now** writes
+them again. The game loads the file at login and at `/reload`. The addon
+does not show these prices yet. The app never writes SavedVariables. [Server data for the addon](docs/server-data.md) describes
+the endpoint, the file, and the rules for using it in the addon.
+
 The desktop app passes the login through a temporary local page. The ID and
 key are sent in a form to your chosen server and stay out of URLs and logs.
 The browser keeps its normal login session. If the game has not saved a
@@ -326,6 +334,7 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | What | Where |
 |---|---|
 | Installed addon | `<World of Warcraft>/_<flavor>_/Interface/AddOns/Goldbook` |
+| Prices downloaded from the server | `<World of Warcraft>/_<flavor>_/Interface/AddOns/Goldbook/ServerData.lua` |
 | Scans waiting for sync | `<World of Warcraft>/_<flavor>_/WTF/Account/<account>/SavedVariables/Goldbook.lua` |
 | Scans the agent has sent | `~/.config/goldbook/state.json` |
 | Scans the desktop app has sent | `~/.config/goldbook/desktop-<server hash>.json` |
