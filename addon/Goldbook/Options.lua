@@ -13,12 +13,14 @@ local HELP = {
   "/gb scan and /gb scan full do the same from chat.",
   "/gb deals lists what is listed below its resale or vendor value.",
   "/gb sell says what to auction and what to vendor from your bags.",
-  "/gb movers lists the prices that rose and fell most since the day before.",
-  "/gb gold shows your account: gold per character, gains, a 30 day chart and net worth.",
+  "/gb movers lists the prices that rose most since the day before, and under Fallers those that fell.",
+  "/gb gold shows your account: gold per character, gains, net worth, a chart and this month's trades.",
   "/gb show [text] opens the price list.",
   "/gb item <link or name>, or Alt+click any item, shows how its price moved day by day.",
   "/gb status shows what is priced and what is waiting for sync.",
   "/gb web shows the Goldbook site's address, and the ID and key to log in there.",
+  "/gb theme dark or /gb theme light draws the window in dark ink, the default, or on light parchment, as does the button by its close button.",
+  "/gb scale 0.7 to /gb scale 1.4 sizes the window, apart from the game's UI scale; so does the slider below.",
   "",
   "Type /reload or log out after a scan so Goldbook can upload it.",
 }
@@ -58,6 +60,16 @@ local CHECKS = {
     end,
   },
   {
+    name = "light",
+    label = "Draw the Goldbook window light, on parchment, instead of dark",
+    get = function()
+      return ns.UI.Theme() == "light"
+    end,
+    set = function(checked)
+      ns.UI.SetTheme(checked and "light" or "dark")
+    end,
+  },
+  {
     name = "altClick",
     label = "Alt+click an item to show its price history",
     get = function()
@@ -83,9 +95,36 @@ for _, definition in ipairs(CHECKS) do
   anchor, offset = check, -4
 end
 
+-- The window's size, apart from the game's own UI scale.
+local scaleLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+scaleLabel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 4, -14)
+local scale = CreateFrame("Slider", "GoldbookScaleSlider", panel, "OptionsSliderTemplate")
+scale:SetPoint("TOPLEFT", scaleLabel, "BOTTOMLEFT", 4, -10)
+scale:SetWidth(220)
+scale:SetMinMaxValues(ns.UI.MIN_SCALE, ns.UI.MAX_SCALE)
+scale:SetValueStep(0.05)
+scale:SetObeyStepOnDrag(true)
+-- The template's end labels, by global name in older clients and as fields in newer ones.
+for _, part in ipairs({ { "Low", ns.UI.MIN_SCALE }, { "High", ns.UI.MAX_SCALE }, { "Text" } }) do
+  local text = _G["GoldbookScaleSlider" .. part[1]] or scale[part[1]]
+  if type(text) == "table" then
+    text:SetText(part[2] and ("%d%%"):format(part[2] * 100) or "")
+  end
+end
+local function showScale(value)
+  scaleLabel:SetText(("Window size: %d%%, apart from the game's UI scale"):format(math.floor(value * 100 + 0.5)))
+end
+scale:SetScript("OnValueChanged", function(_, value, userInput)
+  if userInput then
+    ns.UI.SetScale(value)
+  end
+  showScale(value)
+end)
+panel.scale = scale
+
 local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 open:SetSize(160, 22)
-open:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 2, -12)
+open:SetPoint("TOPLEFT", scale, "BOTTOMLEFT", -6, -24)
 open:SetText("Open Goldbook")
 open:SetScript("OnClick", function()
   ns.UI.Show("prices", "")
@@ -107,10 +146,14 @@ panel.webLogin:SetScript("OnClick", function()
   ns.WebLogin.Show()
 end)
 
-panel:SetScript("OnShow", function()
+local function showSettings()
   for _, definition in ipairs(CHECKS) do
     panel.checks[definition.name]:SetChecked(definition.get())
   end
-end)
+  scale:SetValue(ns.UI.Scale())
+  showScale(ns.UI.Scale())
+end
+panel:SetScript("OnShow", showSettings)
+ns.UI.Watch(showSettings)
 
 Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(panel, "Goldbook"))

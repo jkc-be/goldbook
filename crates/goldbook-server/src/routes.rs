@@ -1,10 +1,12 @@
-use crate::{App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, now};
+use crate::{App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header, now};
 use axum::http::Method;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use flate2::{Compression, write::GzEncoder};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, path::Path, sync::LazyLock};
+use std::{collections::BTreeMap, io::Write, path::Path, sync::LazyLock};
 use subtle::ConstantTimeEq;
 
 const SCANS: &str = "SELECT id, scanned_at AS scannedAt, mode, item_count AS itemCount, scanner FROM scans WHERE realm=?1 AND faction=?2";
@@ -41,6 +43,7 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                 | "/api/prices"
                 | "/api/history"
                 | "/api/trends"
+                | "/api/export"
                 | "/api/account"
                 | "/api/character"
                 | "/api/trades"
@@ -100,6 +103,7 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
         ("GET", "/api/prices") => prices(&input, &db),
         ("GET", "/api/history") => history(&input, &db),
         ("GET", "/api/trends") => trends(&input, &db),
+        ("GET", "/api/export") => export(&input, &db),
         ("GET", "/api/account") => characters(&input, &db),
         ("GET", "/api/character") => character(&input, &db),
         ("GET", "/api/trades") => trades(&input, &db),
@@ -494,6 +498,116 @@ fn trends(input: &Input, db: &Connection) -> Result<Reply> {
         json!({"days":(0..14).map(|i|first+i*86400).collect::<Vec<_>>(),"items":items}),
     ))
 }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Export<'a> {
+    realm: &'a str,
+    faction: &'a str,
+    scanned_at: i64,
+    items: BTreeMap<String, ExportItem>,
+}
+#[derive(Serialize, Default)]
+struct ExportItem {
+    name: Option<String>,
+    quality: Option<i64>,
+    price: [i64; 6],
+    hours: Vec<[i64; 4]>,
+    days: Vec<[i64; 4]>,
+}
+fn export(input: &Input, db: &Connection) -> Result<Reply> {
+    let realm = required(input, "realm")?;
+    let faction = required(input, "faction")?;
+    let newest: Option<i64> = db.query_row(
+        "SELECT MAX(scanned_at) FROM scans WHERE realm=?1 AND faction=?2",
+        [realm, faction],
+        |r| r.get(0),
+    )?;
+    let newest = newest.ok_or_else(|| Error::new(404, "no scans for this realm and faction"))?;
+    let first_day = newest / 86400 - 60;
+    let first_hour = newest / 3600 - 167;
+    let mut items: BTreeMap<String, ExportItem> = BTreeMap::new();
+    let mut statement = db.prepare(
+        "SELECT p.item_key,s.scanned_at,p.min_buyout,p.quantity,p.num_auctions,p.market_value FROM scans s JOIN prices p ON p.scan_id=s.id WHERE s.realm=?1 AND s.faction=?2 AND s.scanned_at>=?3 ORDER BY s.scanned_at,s.id",
+    )?;
+    let mut rows = statement.query(params![realm, faction, first_day * 86400])?;
+    while let Some(row) = rows.next()? {
+        let item = items.entry(row.get(0)?).or_default();
+        let (at, min, qty, n, mv): (i64, i64, i64, i64, i64) = (
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+        );
+        let (price_mv, price_mv_at) = if mv > 0 {
+            (mv, at)
+        } else {
+            (item.price[4], item.price[5])
+        };
+        item.price = [min, qty, n, at, price_mv, price_mv_at];
+        if at / 3600 >= first_hour {
+            add_to_bucket(&mut item.hours, at / 3600, min, qty, mv);
+        }
+        add_to_bucket(&mut item.days, at / 86400, min, qty, mv);
+    }
+    let keys = serde_json::to_string(&items.keys().collect::<Vec<_>>()).unwrap();
+    let mut names = db.prepare(
+        "SELECT i.item_key,i.name,i.quality FROM json_each(?1) k JOIN items i ON i.item_key=k.value",
+    )?;
+    let mut rows = names.query([keys])?;
+    while let Some(row) = rows.next()? {
+        if let Some(item) = items.get_mut(&row.get::<_, String>(0)?) {
+            item.name = Some(row.get(1)?);
+            item.quality = Some(row.get(2)?);
+        }
+    }
+    let mut reply = Reply::json(Export {
+        realm,
+        faction,
+        scanned_at: newest,
+        items,
+    });
+    reply.headers.push(("vary", "accept-encoding".into()));
+    if accepts_gzip(header(&input.headers, "accept-encoding")) {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(&reply.body)
+            .map_err(anyhow::Error::from)?;
+        reply.body = encoder.finish().map_err(anyhow::Error::from)?;
+        reply.headers.push(("content-encoding", "gzip".into()));
+    }
+    Ok(reply)
+}
+// Only an explicit gzip counts, so "gzip;q=0" refuses it.
+fn accepts_gzip(accept: &str) -> bool {
+    accept.split(',').any(|coding| {
+        let mut parts = coding.split(';');
+        parts
+            .next()
+            .is_some_and(|name| name.trim().eq_ignore_ascii_case("gzip"))
+            && !parts.any(|parameter| {
+                parameter
+                    .trim()
+                    .strip_prefix("q=")
+                    .and_then(|q| q.trim().parse::<f64>().ok())
+                    == Some(0.0)
+            })
+    })
+}
+// Rows arrive oldest first, so a row belongs to the last bucket or starts a new one.
+fn add_to_bucket(buckets: &mut Vec<[i64; 4]>, period: i64, min: i64, qty: i64, mv: i64) {
+    match buckets.last_mut() {
+        Some(last) if last[0] == period => {
+            if min < last[1] {
+                (last[1], last[2]) = (min, qty);
+            }
+            if mv > 0 {
+                last[3] = mv;
+            }
+        }
+        _ => buckets.push([period, min, qty, mv]),
+    }
+}
 fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
     let account = input.upload(goldbook_core::parse_account_upload)?;
     let mut characters = BTreeMap::new();
@@ -815,9 +929,30 @@ fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     )?;
     Ok(Reply::json(json!({"trades": rows})))
 }
-const ASSETS: [(&str, &[u8], &str); 2] = [
+const ASSETS: [(&str, &[u8], &str); 7] = [
     ("app.js", include_bytes!("../../../web/app.js"), "js"),
+    ("theme.js", include_bytes!("../../../web/theme.js"), "js"),
     ("style.css", include_bytes!("../../../web/style.css"), "css"),
+    (
+        "fonts/marcellus-latin-400-normal.woff2",
+        include_bytes!("../../../web/fonts/marcellus-latin-400-normal.woff2"),
+        "woff2",
+    ),
+    (
+        "fonts/roboto-condensed-latin-400-normal.woff2",
+        include_bytes!("../../../web/fonts/roboto-condensed-latin-400-normal.woff2"),
+        "woff2",
+    ),
+    (
+        "fonts/roboto-condensed-latin-500-normal.woff2",
+        include_bytes!("../../../web/fonts/roboto-condensed-latin-500-normal.woff2"),
+        "woff2",
+    ),
+    (
+        "fonts/roboto-condensed-latin-700-normal.woff2",
+        include_bytes!("../../../web/fonts/roboto-condensed-latin-700-normal.woff2"),
+        "woff2",
+    ),
 ];
 // Cloudflare overrides the origin's cache headers for js and css, so a changed asset needs a new URL.
 static INDEX: LazyLock<Vec<u8>> = LazyLock::new(|| {
@@ -865,6 +1000,7 @@ fn static_file(web: Option<&Path>, path: &str) -> Option<Reply> {
         "svg" => "image/svg+xml",
         "png" => "image/png",
         "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
         "json" => "application/json",
         _ => "application/octet-stream",
     };

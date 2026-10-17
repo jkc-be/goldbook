@@ -5,10 +5,35 @@
 -- client would (<view>.html) and a screenshot of that page cropped to the
 -- window (<view>.png). It approximates the game; it is not pixel-exact.
 --
---   luajit addon/tests/preview.lua <outdir>
+--   luajit addon/tests/preview.lua [--client] [--dpr <n>] [--addon <folder>] <outdir>
+--
+-- --client draws every pixel the way the game client measured in client.lua
+-- does, --dpr renders at that many device pixels per point, as a Retina
+-- screen does, and --addon previews another copy of the Goldbook folder.
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
-local outdir = assert(arg[1], "usage: luajit addon/tests/preview.lua <outdir>")
+local USAGE = "usage: luajit addon/tests/preview.lua [--client] [--dpr <n>] [--addon <folder>] <outdir>"
+local flags = { dpr = 1, addon = here .. "/../Goldbook" }
+local outdir
+do
+  local index = 1
+  while arg[index] do
+    local word = arg[index]
+    if word == "--client" then
+      flags.client = true
+    elseif word == "--dpr" or word == "--addon" then
+      index = index + 1
+      flags[word:sub(3)] = assert(arg[index], USAGE)
+    else
+      assert(not outdir and word:sub(1, 2) ~= "--", USAGE)
+      outdir = word
+    end
+    index = index + 1
+  end
+end
+outdir = assert(outdir, USAGE)
+local DPR = assert(tonumber(flags.dpr), USAGE)
 local Stub = dofile(here .. "/wowstub.lua")
+local Client = dofile(here .. "/client.lua")
 
 local SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 800
 local DAY = 24 * 3600
@@ -55,10 +80,8 @@ local SETTERS = {
   SetHeight = "height",
   SetJustifyH = "justifyH",
   SetWordWrap = "wordWrap",
-  SetFontObject = "font",
-  SetNormalFontObject = "font",
   SetTextColor = "textColor",
-  SetColorTexture = "color",
+  SetTextInsets = "insets",
   SetVertexColor = "vertexColor",
   SetTexture = "texture",
   SetDrawLayer = "layer",
@@ -69,12 +92,44 @@ local SETTERS = {
   SetFrameStrata = "strata",
   SetFrameLevel = "level",
   SetThickness = "thickness",
+  SetScale = "scale",
+  SetTexCoord = "texCoord",
+  SetMinMaxValues = "range",
+  SetValue = "value",
 }
 for method, field in pairs(SETTERS) do
   recorders[method] = function(self, original, ...)
     records[self][field] = select("#", ...) > 1 and { ... } or (...)
     return original(self, ...)
   end
+end
+-- A font object is kept as its widget's id, a template font as its name.
+local function fontRecorder(self, original, font)
+  records[self].font = idOf(font) or font
+  return original(self, font)
+end
+recorders.SetFontObject = fontRecorder
+recorders.SetNormalFontObject = fontRecorder
+function recorders.SetFont(self, original, file, size, outline)
+  records[self].face = { file = file, size = size, outline = outline ~= "" and outline or nil }
+  return original(self, file, size, outline)
+end
+-- Colour objects or, from older clients, plain numbers, kept as two { r, g, b, a }.
+function recorders.SetGradient(self, original, orientation, from, to, ...)
+  local function rgba(color)
+    return { color.r, color.g, color.b, color.a or 1 }
+  end
+  records[self].gradient = { orientation = orientation, from = rgba(from), to = rgba(to) }
+  return original(self, orientation, from, to, ...)
+end
+function recorders.SetGradientAlpha(self, original, orientation, ...)
+  local r1, g1, b1, a1, r2, g2, b2, a2 = ...
+  records[self].gradient = { orientation = orientation, from = { r1, g1, b1, a1 }, to = { r2, g2, b2, a2 } }
+  return original(self, orientation, ...)
+end
+function recorders.SetColorTexture(self, original, ...)
+  records[self].color, records[self].gradient = { ... }, nil
+  return original(self, ...)
 end
 function recorders.SetParent(self, original, parent)
   records[self].parent = idOf(parent)
@@ -144,10 +199,10 @@ end
 
 -- The stub may not make a kind of region yet (lines); the preview then makes it.
 local function region(kind)
-  return function(self, original, name, layer, template)
-    local widget = original(self, name, layer, template) or Stub.widget()
+  return function(self, original, name, layer, template, sublevel)
+    local widget = original(self, name, layer, template, sublevel) or Stub.widget()
     local rec = records[widget]
-    rec.kind, rec.parent, rec.layer, rec.template = kind, records[self].id, layer, template
+    rec.kind, rec.parent, rec.layer, rec.template, rec.sublevel = kind, records[self].id, layer, template, sublevel
     return widget
   end
 end
@@ -240,6 +295,8 @@ end
 
 -- The parts of the screen the stub leaves out.
 UIParent:SetSize(SCREEN_WIDTH, SCREEN_HEIGHT)
+AuctionHouseFrame:SetSize(800, 450)
+AuctionHouseFrame:SetPoint("CENTER")
 Minimap:SetSize(140, 140)
 Minimap:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -17, -22)
 GameTooltip:SetFrameStrata("TOOLTIP")
@@ -292,6 +349,10 @@ function layout(snapshot, screen) {
   const STRATA = ["BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP"];
   const GOLD = "rgb(255,209,0)", WHITE = "rgb(255,255,255)", GREY = "rgb(128,128,128)";
   const FACE = '"Friz Quadrata TT", Georgia, serif';
+  // Marcellus stands in for Friz Quadrata, which a browser does not have,
+  // with Optima's digits, as Friz has lining figures and Marcellus has not.
+  const FACES = { friz: '"Friz digits", "Marcellus", "Friz Quadrata TT", Georgia, serif', narrow: '"Arial Narrow", "Roboto Condensed", sans-serif' };
+  const LAYERS = ["BACKGROUND", "BORDER", "ARTWORK", "OVERLAY", "HIGHLIGHT"];
   const PANEL = { background: "rgba(0,0,0,0.85)", border: "2px solid rgb(150,135,100)", borderRadius: "4px" };
   const TEMPLATE_SIZE = { UIPanelCloseButton: [24, 24], UICheckButtonTemplate: [20, 20] };
   const SCREEN_RECT = { left: 0, bottom: 0, right: W, top: H };
@@ -301,14 +362,24 @@ function layout(snapshot, screen) {
   const rgba = c => `rgba(${c.slice(0, 3).map(v => Math.round(v * 255)).join(",")},${c[3] ?? 1})`;
   const escape = s => s.replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]);
   const isIcon = w => typeof w.texture === "number" || /^Interface[\\/]Icons[\\/]/i.test(w.texture || "");
+  // A frame's sizes and offsets count in its own units: its scale times its parent's.
+  const scaleOf = w => (w.scale ?? 1) * (byId.has(w.parent) ? scaleOf(byId.get(w.parent)) : 1);
 
+  // A template font by its name, or a font object made with CreateFont by
+  // its id: that one has its own face and size, white and without a shadow.
   function font(name = "GameFontNormal") {
+    const object = typeof name === "number" ? byId.get(name) : null;
+    if (object && object.face) {
+      const family = /FRIZ/i.test(object.face.file) ? FACES.friz : FACES.narrow;
+      return { size: object.face.size, color: WHITE, family, flat: true, outline: object.face.outline };
+    }
     const size = /Small/.test(name) ? 10 : /Large/.test(name) ? 16 : 12;
     const color = /Disable/.test(name) ? GREY : /Highlight|Chat|Tooltip/.test(name) ? WHITE : GOLD;
     return { size, color };
   }
-  function setFont(el, size, color) {
-    Object.assign(el.style, { font: `${size}px/${size + 2}px ${FACE}`, color, textShadow: "1px 1px 0 #000" });
+  function setFont(el, size, color, family = FACE, flat = false, outline = null) {
+    const shadow = outline ? "-1px 0 0 #000, 1px 0 0 #000, 0 -1px 0 #000, 0 1px 0 #000" : flat ? "none" : "1px 1px 0 #000";
+    Object.assign(el.style, { font: `${size}px/${size + 2}px ${family}`, color, textShadow: shadow });
   }
   // |T path or fileID:height[:width...]|t. A height of 0 follows the text.
   // Money icons are coins; anything else is an icon square.
@@ -334,7 +405,7 @@ function layout(snapshot, screen) {
   }
   function text(el, w, fontName, color) {
     const f = font(fontName);
-    setFont(el, f.size, color || f.color);
+    setFont(el, f.size * scaleOf(w), color || f.color, f.family, f.flat, f.outline);
     const inner = document.createElement("div");
     inner.style.whiteSpace = "pre";
     inner.innerHTML = markup(w.text);
@@ -344,6 +415,7 @@ function layout(snapshot, screen) {
   function frame(el, w) {
     if (!w.backdrop) return;
     Object.assign(el.style, PANEL);
+    if (/WHITE8X8/i.test(w.backdrop.edgeFile || "")) Object.assign(el.style, { border: `${w.backdrop.edgeSize * scaleOf(w)}px solid`, borderRadius: "0" });
     if (w.backdropColor) el.style.background = rgba(w.backdropColor);
     if (w.borderColor) el.style.borderColor = rgba(w.borderColor);
   }
@@ -358,8 +430,26 @@ function layout(snapshot, screen) {
         Object.assign(inner.style, { overflow: "hidden", textOverflow: "ellipsis" });
       }
     },
+    // A highlight shows only on the frame the preview hovers. The portrait
+    // mask is a white disc, tinted by its vertex colour or gradient.
     Texture(el, w) {
-      if (w.color) el.style.background = rgba(w.color);
+      const owner = byId.get(w.parent);
+      if (w.layer === "HIGHLIGHT" && !(owner && (owner.hover || owner.highlight))) { el.style.display = "none"; return; }
+      const disc = /AlphaMask/i.test(w.texture || "");
+      if (disc) el.style.borderRadius = "50%";
+      // Part of a disc, as SetTexCoord crops it: the whole disc inside a clipping box.
+      if (disc && w.texCoord) {
+        const [l, r, t, b] = w.texCoord, whole = document.createElement("div");
+        Object.assign(whole.style, { position: "absolute", borderRadius: "50%", background: rgba(w.vertexColor || [1, 1, 1]),
+          width: `${100 / (r - l)}%`, height: `${100 / (b - t)}%`, left: `${-100 * l / (r - l)}%`, top: `${-100 * t / (b - t)}%` });
+        Object.assign(el.style, { borderRadius: "0", overflow: "hidden" });
+        el.append(whole);
+        return;
+      }
+      const g = w.gradient;
+      if (g) el.style.background = `linear-gradient(${g.orientation === "HORIZONTAL" ? "to right" : "to top"}, ${rgba(g.from)}, ${rgba(g.to)})`;
+      else if (disc) el.style.background = rgba(w.vertexColor || [1, 1, 1]);
+      else if (w.color) el.style.background = rgba(w.color);
       else if (isIcon(w)) Object.assign(el.style, { background: "linear-gradient(135deg,#7a6440,#2b2116)", border: `1px solid ${w.vertexColor ? rgba(w.vertexColor) : GREY}` });
       else if (w.texture) Object.assign(el.style, { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.35)" });
     },
@@ -393,6 +483,12 @@ function layout(snapshot, screen) {
       setFont(el, 14, WHITE);
       el.textContent = "X";
     },
+    // An edit box without a template: its backdrop, and its text past the insets.
+    EditBox(el, w) {
+      frame(el, w);
+      Object.assign(el.style, { display: "flex", alignItems: "center", paddingLeft: `${(w.insets || [0])[0]}px` });
+      text(el, w, w.font, w.textColor && rgba(w.textColor));
+    },
     // The template's border reaches 5px left of the box; its text starts at the box's edge.
     InputBoxTemplate(el, w) {
       const border = document.createElement("div");
@@ -401,16 +497,27 @@ function layout(snapshot, screen) {
       Object.assign(el.style, { display: "flex", alignItems: "center" });
       text(el, w, w.font || "ChatFontNormal").style.position = "relative";
     },
+    // A track with its thumb at the value.
+    OptionsSliderTemplate(el, w) {
+      const [low, high] = w.range || [0, 1], share = ((w.value ?? low) - low) / (high - low || 1);
+      const track = document.createElement("div"), thumb = document.createElement("div");
+      Object.assign(track.style, { position: "absolute", left: "0", right: "0", top: "50%", height: "6px", marginTop: "-3px", background: "rgba(0,0,0,0.6)", border: "1px solid rgb(120,120,120)", borderRadius: "3px" });
+      Object.assign(thumb.style, { position: "absolute", top: "50%", width: "10px", height: "18px", marginTop: "-9px", left: `calc(${share * 100}% - 5px)`, background: "linear-gradient(#d8d8d8,#8a8a8a)", borderRadius: "2px" });
+      el.append(track, thumb);
+    },
     UICheckButtonTemplate(el, w) {
       Object.assign(el.style, centred, { background: "rgba(0,0,0,0.6)", border: "1px solid rgb(170,170,170)", borderRadius: "3px" });
       if (w.checked) { setFont(el, 16, GOLD); el.textContent = "✓"; }
     },
   };
 
+  // On the screen: text is measured there already.
   function ownSize(w) {
     const natural = measured.get(w.id) || [];
     const fallback = TEMPLATE_SIZE[w.template] || (w.kind === "Texture" && isIcon(w) ? [16, 16] : [0, 0]);
-    return [w.width ?? natural[0] ?? fallback[0], w.height ?? natural[1] ?? fallback[1]];
+    const scale = scaleOf(w);
+    return [w.width !== undefined ? w.width * scale : natural[0] ?? fallback[0] * scale,
+      w.height !== undefined ? w.height * scale : natural[1] ?? fallback[1] * scale];
   }
   const hFraction = p => p.includes("LEFT") ? 0 : p.includes("RIGHT") ? 1 : 0.5;
   const vFraction = p => p.startsWith("TOP") ? 1 : p.startsWith("BOTTOM") ? 0 : 0.5;
@@ -427,8 +534,9 @@ function layout(snapshot, screen) {
   function spot(p, w) {
     const target = rect(p.relativeTo ?? w.parent);
     if (!target) { warnings.push(`${describe(w)} is anchored to a widget without a place`); return null; }
-    return [target.left + (target.right - target.left) * hFraction(p.relativePoint) + p.x,
-      target.bottom + (target.top - target.bottom) * vFraction(p.relativePoint) + p.y];
+    const scale = scaleOf(w);
+    return [target.left + (target.right - target.left) * hFraction(p.relativePoint) + p.x * scale,
+      target.bottom + (target.top - target.bottom) * vFraction(p.relativePoint) + p.y * scale];
   }
   function rect(id) {
     if (id === undefined) return SCREEN_RECT;
@@ -475,7 +583,7 @@ function layout(snapshot, screen) {
     if (!w.startPoint || !w.endPoint) { warnings.push(`${describe(w)} lacks a start or end point`); return false; }
     const from = spot(w.startPoint, w), to = spot(w.endPoint, w);
     if (!from || !to) return false;
-    const [dx, dy] = [to[0] - from[0], from[1] - to[1]], thickness = w.thickness ?? 1;
+    const [dx, dy] = [to[0] - from[0], from[1] - to[1]], thickness = (w.thickness ?? 1) * scaleOf(w);
     Object.assign(el.style, {
       left: `${from[0]}px`, top: `${H - from[1] - thickness / 2}px`, width: `${Math.hypot(dx, dy)}px`, height: `${thickness}px`,
       transformOrigin: `0 ${thickness / 2}px`, transform: `rotate(${Math.atan2(dy, dx)}rad)`,
@@ -488,20 +596,22 @@ function layout(snapshot, screen) {
     const el = document.createElement("div");
     el.title = describe(w);
     Object.assign(el.style, { position: "absolute", boxSizing: "border-box", visibility: "hidden" });
-    (DRAW[w.kind] || DRAW[w.template] || frame)(el, w);
+    (DRAW[w.template] || DRAW[w.kind] || frame)(el, w);
     if (w.alpha !== undefined) el.style.opacity = w.alpha;
     screen.append(el);
     elements.set(w.id, el);
     if (w.kind === "FontString" || w.kind === "GameTooltip") {
-      if (w.width) el.style.width = `${w.width}px`;
+      if (w.width) el.style.width = `${w.width * scaleOf(w)}px`;
       const box = el.getBoundingClientRect();
       measured.set(w.id, [Math.ceil(box.width), Math.ceil(box.height)]);
     }
   }
-  const stacking = w => [STRATA.indexOf(strata(w)), level(w), w.id];
+  // Regions draw over their frame's backdrop, by layer and sublevel.
+  const layer = w => ["Texture", "FontString", "Line"].includes(w.kind) ? LAYERS.indexOf(w.layer || "ARTWORK") : -1;
+  const stacking = w => [STRATA.indexOf(strata(w)), level(w), layer(w), w.sublevel ?? 0, w.id];
   const below = (a, b) => {
     const [x, y] = [stacking(a), stacking(b)];
-    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || x[3] - y[3] || x[4] - y[4];
   };
   [...drawn].sort(below).forEach((w, index) => {
     const el = elements.get(w.id);
@@ -519,13 +629,29 @@ function layout(snapshot, screen) {
 }
 ]==]
 
+-- The client's transfer as an SVG filter over the whole screen, on sRGB
+-- values as it was measured.
+local function clientFilter()
+  local channel = ('type="linear" slope="%g" intercept="%g"'):format(Client.gain, Client.offset)
+  return table.concat({
+    '<svg width="0" height="0" style="position:absolute"><filter id="client" color-interpolation-filters="sRGB">',
+    "<feComponentTransfer><feFuncR ", channel, "/><feFuncG ", channel, "/><feFuncB ", channel, "/></feComponentTransfer>",
+    "</filter></svg>\n",
+  })
+end
+
 local function page(view, data)
   return table.concat({
     '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>Goldbook preview: ', view, "</title>\n",
     "<style>body { margin: 0; background: #777; } #screen { position: relative; overflow: hidden; width: ",
-    SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px; }</style>\n",
-    '</head><body><div id="screen"></div>\n<script>\n', LAYOUT, "\nlayout(", (data:gsub("</", "<\\/")),
-    ', document.getElementById("screen"));\n</script></body></html>\n',
+    SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px;", flags.client and " filter: url(#client);" or "", " }\n",
+    '@font-face { font-family: "Friz digits"; src: local("Optima Regular"), local("Optima"); unicode-range: U+0030-0039; }</style>\n',
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=block">\n',
+    "</head><body>", flags.client and clientFilter() or "", '<div id="screen"></div>\n<script>\n', LAYOUT,
+    -- Text is measured for the layout, so the faces must have loaded first.
+    '\nPromise.all([document.fonts.load(\'16px "Marcellus"\'), document.fonts.load(\'14px "Arial Narrow"\'), document.fonts.load(\'14px "Friz digits"\', "0")])',
+    '.catch(() => {}).then(() => layout(', (data:gsub("</", "<\\/")),
+    ', document.getElementById("screen")));\n</script></body></html>\n',
   })
 end
 
@@ -551,7 +677,8 @@ local function output(command)
   return text
 end
 
-local CHROME = ("google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=%d,%d "):format(SCREEN_WIDTH, SCREEN_HEIGHT)
+local CHROME = ("google-chrome --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=10000 --window-size=%d,%d --force-device-scale-factor=%g ")
+  :format(SCREEN_WIDTH, SCREEN_HEIGHT, DPR)
 local root = outdir:sub(1, 1) == "/" and outdir or (output("pwd"):match("[^\n]+") .. "/" .. outdir)
 sh("mkdir -p " .. quote(root))
 
@@ -577,6 +704,9 @@ local function snapshot(roots, focus)
     local rec = records[widget]
     if rec.parent then
       include(order[rec.parent])
+    end
+    if type(rec.font) == "number" then
+      include(order[rec.font])
     end
     for _, point in pairs({ rec.startPoint, rec.endPoint, unpack(rec.points) }) do
       if point.relativeTo then
@@ -619,10 +749,26 @@ local function capture(view, roots, focus)
   write(base .. ".html", page(view, encoded))
 
   local url = quote("file://" .. base .. ".html")
-  local dom = output(CHROME .. "--dump-dom " .. url .. " 2>/dev/null")
-  local x, y, width, height = dom:match('data%-crop="(%d+),(%d+),(%d+),(%d+)"')
+  -- Chrome is sometimes killed when memory runs short, so each step gets three tries.
+  local dom, x, y, width, height
+  for _ = 1, 3 do
+    dom = output(CHROME .. "--dump-dom " .. url .. " 2>/dev/null")
+    x, y, width, height = dom:match('data%-crop="(%d+),(%d+),(%d+),(%d+)"')
+    if x then
+      break
+    end
+  end
   assert(x, view .. ": the page did not lay out; open " .. base .. ".html in a browser to see why")
-  sh(CHROME .. "--screenshot=" .. quote(base .. ".png") .. " " .. url .. " >/dev/null 2>&1")
+  x, y, width, height = x * DPR, y * DPR, width * DPR, height * DPR
+  local shot = CHROME .. "--screenshot=" .. quote(base .. ".png") .. " " .. url .. " >/dev/null 2>&1"
+  local status = os.execute(shot)
+  for _ = 2, 3 do
+    if status == 0 or status == true then
+      break
+    end
+    status = os.execute(shot)
+  end
+  assert(status == 0 or status == true, "failed: " .. shot)
   -- Without dates in the file, two runs of an unchanged UI give identical PNGs.
   sh(("magick %s -crop %dx%d+%d+%d +repage -strip -define png:exclude-chunks=date,time %s")
     :format(quote(base .. ".png"), width, height, x, y, quote(base .. ".png")))
@@ -635,16 +781,21 @@ end
 
 -- The addon, as run.lua loads it.
 
-local ns = Stub.loadAddon(here .. "/../Goldbook")
+local ns = Stub.loadAddon(flags.addon)
 local Codec, Database = ns.Codec, ns.Database
 
 -- A realm after four weeks of scanning. Prices in copper.
 -- { key, name, quality, vendor, price, listed } plus, optionally: base (the
 -- name GetItemInfo gives a suffixed item), trend (change per day), deal (today's
 -- lowest price as a share of the usual), absent (days since last seen),
--- vendorDeal (first seen today, listed under what a vendor pays). Items
--- without a price are only in the bags.
+-- vendorDeal (first seen today, listed under what a vendor pays), seen (the
+-- days it was seen, as { days ago, lowest price, listed, market value }),
+-- scans (each day seen in the last week as that many scans, so many hours
+-- apart: { count, every }). Items without a price are only in the bags.
 local ITEMS = {
+  -- The four days of the in-game screenshot client.lua was measured from.
+  { "2776", "Gold Ore", 2, 500, 1024, 183, seen = { { 4, 860, 262, 860 }, { 2, 1188, 241, 1191 }, { 1, 799, 241, 800 }, { 0, 1958, 183, 1959 } },
+    scans = { 3, 3 } },
   { "2589", "Linen Cloth", 1, 13, 140, 400 },
   { "2592", "Wool Cloth", 1, 33, 210, 300 },
   { "4306", "Silk Cloth", 1, 150, 380, 260 },
@@ -670,7 +821,7 @@ local ITEMS = {
   { "13465", "Mountain Silversage", 1, 60, 3200, 75 },
   { "13467", "Icecap", 1, 60, 2600, 40, absent = 3 },
   { "8846", "Gromsblood", 1, 30, 850, 95 },
-  { "13468", "Black Lotus", 2, 1000, 860000, 4, deal = 0.58, trend = 0.01 },
+  { "13468", "Black Lotus", 2, 1000, 860000, 4, deal = 0.58, trend = 0.01, scans = { 14, 1 } },
   { "13446", "Major Healing Potion", 1, 250, 2600, 60 },
   { "13444", "Major Mana Potion", 1, 300, 3100, 45 },
   { "3928", "Superior Healing Potion", 1, 250, 820, 70 },
@@ -729,6 +880,13 @@ end
 -- Per day seen: the lowest price drifting along the trend, and a market value
 -- on the days of a full scan, today's included.
 local function priceHistory(item)
+  if item.seen then
+    local entries = {}
+    for index, day in ipairs(item.seen) do
+      entries[index] = { day = TODAY - day[1], min = day[2], qty = day[3], mv = day[4] }
+    end
+    return entries
+  end
   local _, _, _, vendor, price, listed = unpack(item)
   local last = TODAY - (item.absent or 0)
   local trend = item.trend or (random() - 0.5) * 0.02
@@ -754,9 +912,25 @@ local function priceHistory(item)
   return entries
 end
 
--- Today's cheapest price levels; a deal is two cheap units below the usual price.
+-- A day's entry as `count` scans `every` hours apart, up to that day's scan,
+-- as { hour, min, qty, mv }: the last scan is the entry, and the ones before
+-- it list a little dearer and measure no market value, so that the day's
+-- lowest is still the entry's. `wobble` is the item's own random stream, so
+-- that the other items keep their numbers.
+local function scansOf(entry, count, every, wobble)
+  local last = math.floor(scanTime(entry.day) / 3600)
+  local hours = {}
+  for hour = last, math.max(entry.day * 24, last - (count - 1) * every), -every do
+    table.insert(hours, 1, hour == last and { hour, entry.min, entry.qty, entry.mv }
+      or { hour, entry.min + 1 + math.floor(entry.min * wobble() * 0.1), math.max(1, math.floor(entry.qty * (0.8 + wobble() * 0.4))), 0 })
+  end
+  return hours
+end
+
+-- Today's cheapest price levels; a deal is two cheap units below the usual
+-- price. Items with set days have none, so they draw no random numbers.
 local function ladder(item, newest)
-  if newest.day ~= TODAY then
+  if newest.day ~= TODAY or item.seen then
     return {}
   end
   local usual = item[5]
@@ -771,9 +945,10 @@ end
 
 local function seededDB()
   local db = {
-    version = 4,
+    version = 5,
     prices = { [REALM] = {} },
     history = { [REALM] = {} },
+    hours = { [REALM] = {} },
     scanned = { [REALM] = SCAN },
     items = {},
     vendor = {},
@@ -790,9 +965,23 @@ local function seededDB()
     db.vendor[itemID] = vendor
     if price then
       local entries = priceHistory(item)
-      local newest, daily, recent, measured = entries[#entries], {}, {}, nil
+      local newest, daily, hours, recent, measured = entries[#entries], {}, {}, {}, nil
+      local wobbleSeed = itemID
+      local function wobble()
+        wobbleSeed = wobbleSeed * 16807 % 2147483647
+        return wobbleSeed / 2147483647
+      end
+      -- The hours the addon keeps: the 168 up to the item's newest scan.
+      local firstHour = math.floor(scanTime(newest.day) / 3600) - 167
       for index, entry in ipairs(entries) do
         daily[index] = Codec.HistoryDay(entry.day, entry.min, entry.qty, entry.mv)
+        if item.scans and entry.day >= TODAY - 7 then
+          for _, hour in ipairs(scansOf(entry, item.scans[1], item.scans[2], wobble)) do
+            if hour[1] >= firstHour then
+              hours[#hours + 1] = Codec.HistoryDay(unpack(hour))
+            end
+          end
+        end
         if index > #entries - 14 then
           recent[#recent + 1] = entry.min
         end
@@ -801,6 +990,7 @@ local function seededDB()
         end
       end
       db.history[REALM][key] = table.concat(daily, ",")
+      db.hours[REALM][key] = #hours > 0 and table.concat(hours, ",") or nil
       db.prices[REALM][key] = Codec.EncodePrice({
         min = newest.min,
         qty = newest.qty,
@@ -888,35 +1078,113 @@ local function captureWindow(view, extra)
   capture(view, { GoldbookWindow, GoldbookMinimapButton, extra }, { GoldbookWindow, extra })
 end
 
+-- Drawn as if the mouse were over it: its highlight shows.
+local function hover(widget, on)
+  records[widget].hover = on or nil
+end
+
+-- The chart's marker on a point, counted from the newest when negative,
+-- and the tooltip that comes with it, which `capture` then draws.
+local function hoverPoint(index)
+  local shown = 0
+  for _, hit in ipairs(GoldbookWindow.chart.hits) do
+    shown = shown + (rawget(hit, "shown") and 1 or 0)
+  end
+  local hit = GoldbookWindow.chart.hits[index < 0 and shown + 1 + index or index]
+  hit.scripts.OnEnter(hit)
+end
+
+-- Every view, the web login and its confirmation, as <name><suffix>.png.
+local function captureViews(suffix)
+  run("show")
+  local lotus = rowFor("Black Lotus")
+  hover(lotus, true)
+  captureWindow("prices" .. suffix)
+  hover(lotus, false)
+  local chip = GoldbookWindow.filters.controls.profession
+  chip.scripts.OnClick(chip)
+  captureWindow("menu" .. suffix)
+  chip.scripts.OnClick(chip)
+  run("deals")
+  hover(GoldbookWindow.rows[1].hit, true)
+  captureWindow("deals" .. suffix)
+  hover(GoldbookWindow.rows[1].hit, false)
+  for _, view in ipairs({ "sell", "movers", "trades" }) do
+    run(view)
+    captureWindow(view .. suffix)
+  end
+  run("gold")
+  hoverPoint(22)
+  captureWindow("gold" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  run("item Black Lotus")
+  hoverPoint(-4)
+  captureWindow("item" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  -- The last week, by the hour.
+  local ranges = GoldbookWindow.segments.buttons
+  ranges[2].scripts.OnClick(ranges[2])
+  hoverPoint(-6)
+  captureWindow("item-week" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  ranges[3].scripts.OnClick(ranges[3])
+  run("item Gold Ore")
+  hoverPoint(-2)
+  captureWindow("item-sparse" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  local toggle = GoldbookWindow.themeToggle
+  hover(toggle, true)
+  toggle.scripts.OnEnter(toggle)
+  captureWindow("toggle" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  hover(toggle, false)
+  GoldbookWindow:Hide()
+
+  run("web")
+  capture("web" .. suffix, { GoldbookWebLogin }, { GoldbookWebLogin })
+  GoldbookWebLogin.newKey.scripts.OnClick(GoldbookWebLogin.newKey)
+  capture("web-confirm" .. suffix, { GoldbookWebLogin }, { GoldbookWebLogin })
+  GoldbookWebLogin:Hide()
+
+  Stub.fire("AUCTION_HOUSE_SHOW")
+  capture("scan" .. suffix, { GoldbookScanButton }, { GoldbookScanButton })
+end
+
+captureViews("")
+-- The window at other sizes, its centre where it was: the middle of the screen.
 run("show")
-captureWindow("prices")
+local function centred()
+  GoldbookWindow.center = { SCREEN_WIDTH / 2 / GoldbookWindow:GetScale(), SCREEN_HEIGHT / 2 / GoldbookWindow:GetScale() }
+end
+for _, scale in ipairs({ 0.8, 1.2 }) do
+  centred()
+  ns.UI.SetScale(scale)
+  captureWindow(("scale-%.1f"):format(scale))
+end
+centred()
+ns.UI.SetScale(1)
+GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 -- An item tooltip goes right of the window, or left where the screen ends
 -- first. The addon asks how far right the window and the screen reach and
 -- how wide the tooltip is; the stub lays nothing out, so the preview answers.
 -- 310 is about what the page measures for this tooltip.
+run("show")
 UIParent.right, GameTooltip.width = SCREEN_WIDTH, 310
 local hovered = rowFor("Black Lotus")
+hover(hovered, true)
 for _, place in ipairs({ { "tooltip", -260 }, { "tooltip-left", 260 } }) do
   GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", place[2], 0)
   GoldbookWindow.right = (SCREEN_WIDTH + GoldbookWindow.width) / 2 + place[2]
   hovered.scripts.OnEnter(hovered)
   captureWindow(place[1], GameTooltip)
 end
+hover(hovered, false)
 GameTooltip:Hide()
 GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-for _, view in ipairs({ "deals", "sell", "movers", "gold", "trades" }) do
-  run(view)
-  captureWindow(view)
-end
-run("item Black Lotus")
-captureWindow("item")
 GoldbookWindow:Hide()
 
-run("web")
-capture("web", { GoldbookWebLogin }, { GoldbookWebLogin })
-GoldbookWebLogin.newKey.scripts.OnClick(GoldbookWebLogin.newKey)
-capture("web-confirm", { GoldbookWebLogin }, { GoldbookWebLogin })
-GoldbookWebLogin:Hide()
+ns.UI.SetTheme(ns.UI.Theme() == "dark" and "light" or "dark")
+captureViews("-" .. ns.UI.Theme())
 
 -- Options > AddOns puts the panel in a canvas of about this size.
 local canvas = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")

@@ -87,14 +87,19 @@ end
 function methods:GetName()
   return self.name
 end
+local function child(parent)
+  local widget = Stub.widget()
+  widget.stubParent = parent
+  return widget
+end
 function methods:CreateFontString()
-  return Stub.widget()
+  return child(self)
 end
 function methods:CreateTexture()
-  return Stub.widget()
+  return child(self)
 end
 function methods:CreateLine()
-  return Stub.widget()
+  return child(self)
 end
 function methods:SetStartPoint(...)
   self.startPoint = { ... }
@@ -104,6 +109,12 @@ function methods:SetEndPoint(...)
 end
 function methods:SetThickness(thickness)
   self.thickness = thickness
+end
+function methods:SetTexture(texture)
+  self.texture = texture
+end
+function methods:SetTextColor(r, g, b)
+  self.textColor = { r, g, b }
 end
 function methods:LockHighlight()
   self.highlighted = true
@@ -120,8 +131,53 @@ end
 function methods:SetHeight(height)
   self.height = height
 end
-function methods:SetPoint(...)
-  self.point = { ... }
+-- The client refuses an anchor that would make a region depend on itself,
+-- and so does the stub: anchors[point] is the region each point hangs on.
+local function dependsOn(region, target, seen)
+  if region == target then
+    return true
+  end
+  seen = seen or {}
+  if seen[region] then
+    return false
+  end
+  seen[region] = true
+  for _, relative in pairs(rawget(region, "anchors") or {}) do
+    if dependsOn(relative, target, seen) then
+      return true
+    end
+  end
+  return false
+end
+
+local function anchor(self, point, relative)
+  if type(relative) == "string" then
+    relative = _G[relative]
+  end
+  if type(relative) == "table" then
+    if dependsOn(relative, self) then
+      error("Action[SetPoint] failed because[Cannot anchor to a region dependent on it]", 3)
+    end
+    local anchors = rawget(self, "anchors") or {}
+    anchors[point] = relative
+    self.anchors = anchors
+  end
+end
+
+-- Without a region to hang on, a point hangs on the parent.
+function methods:SetPoint(point, relative, ...)
+  if relative == nil or type(relative) == "number" then
+    anchor(self, point, rawget(self, "stubParent"))
+  else
+    anchor(self, point, relative)
+  end
+  self.point = { point, relative, ... }
+end
+function methods:SetAllPoints(relative)
+  anchor(self, "ALL", relative or rawget(self, "stubParent"))
+end
+function methods:ClearAllPoints()
+  self.anchors = nil
 end
 function methods:GetPoint()
   return unpack(self.point)
@@ -137,11 +193,28 @@ end
 function methods:GetWidth()
   return rawget(self, "width") or 0
 end
+function methods:GetHeight()
+  return rawget(self, "height") or 0
+end
 function methods:GetRight()
   return rawget(self, "right") or 0
 end
+-- A test places a frame by setting its centre.
 function methods:GetCenter()
-  return 0, 0
+  local center = rawget(self, "center") or { 0, 0 }
+  return center[1], center[2]
+end
+function methods:SetScale(scale)
+  self.scale = scale
+end
+function methods:GetScale()
+  return rawget(self, "scale") or 1
+end
+function methods:SetValue(value)
+  self.value = value
+end
+function methods:GetValue()
+  return self.value
 end
 function methods:GetEffectiveScale()
   return 1
@@ -218,8 +291,16 @@ function Stub.advance(seconds)
   Stub.clock = target
 end
 
-function CreateFrame(_, name)
+function CreateFrame(_, name, parent)
+  local widget = Stub.widget(name)
+  widget.stubParent = parent
+  return widget
+end
+function CreateFont(name)
   return Stub.widget(name)
+end
+function CreateColor(r, g, b, a)
+  return { r = r, g = g, b = b, a = a or 1 }
 end
 
 -- Loads the addon in `folder` as the client does: the files its .toc lists,
@@ -435,6 +516,11 @@ SlashCmdList = {}
 UISpecialFrames = {}
 tinsert = table.insert
 GameTooltip_Hide = noop
+STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+NumberFontNormal = Stub.widget("NumberFontNormal")
+function NumberFontNormal.GetFont()
+  return "Fonts\\ARIALN.TTF", 14, "OUTLINE"
+end
 UIParent = Stub.widget("UIParent")
 AuctionHouseFrame = Stub.widget("AuctionHouseFrame")
 AuctionHouseFrame.SearchBar = Stub.widget()

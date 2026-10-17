@@ -2,23 +2,25 @@
 publish = false
 license-file = "../../LICENSE"
 name = "goldbook-server"
-version = "0.1.13"
-edition = "2024"
+version = "0.2.1"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-anyhow = "1"
-axum = "0.8"
-base64 = "0.22"
-goldbook-core = { path = "../goldbook-core" }
-hex = "0.4"
-rand = "0.9"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+anyhow.workspace = true
+axum.workspace = true
+base64.workspace = true
+flate2.workspace = true
+goldbook-core.workspace = true
+hex.workspace = true
+rand.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json", "form"] }
 rusqlite = { version = "0.38", features = ["bundled", "functions"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 subtle = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "signal"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["fs"] }
-url = "2"
+url.workspace = true

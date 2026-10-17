@@ -117,25 +117,28 @@ function Codec.DecodePrice(packed)
 end
 
 -- An item's price history is "day:min:qty:mv,...", oldest first: per UTC day
--- number the item was seen, its lowest price and quantity, and the market
--- value a full scan measured that day, 0 without one. A scan edits it as a
--- string, so that it does not build a table per day for every item.
+-- number the item was seen, its lowest price, the quantity listed at it, and
+-- the market value a full scan measured that day, 0 without one. Its hours
+-- are the same with an hour of unix time in place of the day, as the
+-- server's export writes them. A scan edits both as strings, so that it does
+-- not build a table per day for every item.
 function Codec.HistoryDay(day, min, qty, mv)
   return int(day) .. ":" .. int(min) .. ":" .. int(qty) .. ":" .. int(mv)
 end
 
 local COMMA = (","):byte()
 
--- Where the newest day starts in a history, its day number and market value.
--- Searched backwards by hand: a pattern ending in $ tries every position of a
--- string that runs to a kilobyte, and a scan reads one per item.
+-- Where the newest day starts in a history, its day number, market value,
+-- lowest price and quantity. Searched backwards by hand: a pattern ending in
+-- $ tries every position of a string that runs to a kilobyte, and a scan
+-- reads one per item.
 function Codec.NewestDay(packed)
   local start = #packed
   while start > 1 and packed:byte(start - 1) ~= COMMA do
     start = start - 1
   end
-  local day, mv = packed:match("^(%d+):%d+:%d+:(%d+)", start)
-  return start, tonumber(day), tonumber(mv)
+  local day, min, qty, mv = packed:match("^(%d+):(%d+):(%d+):(%d+)", start)
+  return start, tonumber(day), tonumber(mv), tonumber(min), tonumber(qty)
 end
 
 function Codec.DecodeHistory(packed)
@@ -166,17 +169,24 @@ function Codec.Grouped(code, size)
   return (code:gsub(("."):rep(size), "%0-"):gsub("-$", ""))
 end
 
-function Codec.Money(copper)
+-- The colours of the coin letters, as chat and tooltips show them.
+local COINS = { gold = "ffd700", silver = "c7c7cf", copper = "eda55f" }
+
+-- "1,763g 05s 00c": a unit after a larger one has two digits. `coins`
+-- recolours the letters, for a window drawn on another background.
+function Codec.Money(copper, coins)
+  coins = coins or COINS
   local gold = math.floor(copper / 10000)
   local silver = math.floor(copper / 100) % 100
   local parts = {}
   if gold > 0 then
-    parts[#parts + 1] = int(gold) .. "|cffffd700g|r"
+    local digits = int(gold):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+    parts[#parts + 1] = digits .. "|cff" .. coins.gold .. "g|r"
   end
   if gold > 0 or silver > 0 then
-    parts[#parts + 1] = silver .. "|cffc7c7cfs|r"
+    parts[#parts + 1] = (gold > 0 and ("%02d"):format(silver) or silver) .. "|cff" .. coins.silver .. "s|r"
   end
-  parts[#parts + 1] = (copper % 100) .. "|cffeda55fc|r"
+  parts[#parts + 1] = (#parts > 0 and ("%02d"):format(copper % 100) or (copper % 100)) .. "|cff" .. coins.copper .. "c|r"
   return table.concat(parts, " ")
 end
 

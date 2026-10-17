@@ -36,7 +36,33 @@ const layoutObserver = new ResizeObserver(() => {
   window.goldbook.layoutSite().catch(() => notify("Goldbook could not resize that view."));
 });
 layoutObserver.observe(document.documentElement);
-layoutObserver.observe(document.querySelector(".masthead"));
+layoutObserver.observe(document.querySelector(".rail"));
+
+function drawTheme() {
+  for (const button of document.querySelectorAll("[data-theme-choice]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.themeChoice === document.documentElement.dataset.theme));
+  }
+}
+
+function shareTheme() {
+  window.goldbook.setTheme(document.documentElement.dataset.theme)
+    .catch(() => notify("Goldbook could not change the theme of the website view."));
+}
+
+for (const button of document.querySelectorAll("[data-theme-choice]")) {
+  button.addEventListener("click", () => {
+    document.documentElement.dataset.theme = button.dataset.themeChoice;
+    try {
+      localStorage.setItem("goldbook-theme", button.dataset.themeChoice);
+    } catch {
+      // Without storage the choice lasts until the app restarts.
+    }
+    drawTheme();
+    shareTheme();
+  });
+}
+drawTheme();
+shareTheme();
 
 field("settings-toggle").addEventListener("click", () => {
   const form = field("settings");
@@ -162,9 +188,12 @@ field("site").addEventListener("click", async () => {
   }
 });
 
-window.goldbook.onStatus((status) => {
+function showStatus(status) {
   field("live").textContent = status.message;
-});
+  field("live").classList.toggle("watching", status.files > 0);
+}
+
+window.goldbook.onStatus(showStatus);
 
 window.goldbook.onBattlenetCode((code) => {
   field("battlenet-code").textContent = `Enter code ${code} in your browser to connect Battle.net.`;
@@ -191,7 +220,7 @@ async function fill() {
   field("auto").checked = initial.settings.autoSync;
   field("minutes").value = String(initial.settings.syncMinutes);
   field("minutes").disabled = !initial.settings.autoSync;
-  field("live").textContent = initial.status.message;
+  showStatus(initial.status);
   if (!initial.configured || initial.status.files === 0) {
     field("settings-toggle").click();
   }
@@ -203,6 +232,7 @@ fill().catch(() => {
 
 function showUpdates(status) {
   field("client-version").textContent = `Goldbook ${status.version}`;
+  field("topbar-version").textContent = status.version;
   field("addon-update").textContent = status.addon;
   const update = status.client;
   const text = {
@@ -215,6 +245,7 @@ function showUpdates(status) {
     failed: update.message,
   };
   field("client-update").textContent = text[update.phase];
+  field("client-update").dataset.phase = update.phase;
   field("install-update").hidden = update.phase !== "ready";
   field("update-alert").hidden = update.phase !== "ready" && update.phase !== "failed";
   field("update-alert").textContent = update.phase === "ready" ? "Update ready" : "Update needs attention";

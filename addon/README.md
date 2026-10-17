@@ -86,16 +86,18 @@ These are recorded sell listings, not a live feed or standing buy orders.
 | Right click **Goldbook scan**, or `/gb scan full` | Full scan: every auction, adds market values and order books |
 | `/gb deals` | What is listed right now below its resale or vendor value |
 | `/gb sell` | Your bags: what to auction, at what price, and what to vendor instead |
-| `/gb movers` | The prices that rose and fell most since the day before |
-| `/gb gold` | Gold per character, gains, a 30 day chart and net worth |
-| `/gb trades` | Your auction house sales and purchases and your sales to vendors |
-| Alt+click an item, or `/gb item <link or name>` | The item's price history |
+| `/gb movers` | The prices that rose most since the day before; **Fallers** lists those that fell |
+| `/gb gold` | Gold per character, gains, net worth, a chart over a week, a month or two months, and this month's trades |
+| `/gb trades` | Your auction house sales and purchases and your sales to vendors, with their totals |
+| Alt+click an item, or `/gb item <link or name>` | The item's price history. **Back to Prices** returns to the list it was opened from |
 | `/gb show [text]`, or left click the minimap button | Price list, filtered by item name |
 | `/gb autoscan` | A quick scan each time the auction house opens, at most every 15 minutes |
 | `/gb minprofit <gold>` | The profit a resale deal must make |
 | `/gb status` | The addon's version, items priced and scans waiting for sync |
 | `/gb web` | The website's address, and the ID and key that log you in to its character pages |
 | `/gb minimap` | Hides or shows the minimap button |
+| `/gb theme dark`, `/gb theme light`, or the half-filled ring by the window's close button | Draws the window in dark ink, the default, or on light parchment |
+| `/gb scale <0.7-1.4>`, or the slider in Options > AddOns > Goldbook | Sizes the window, apart from the game's UI scale. 1 is its normal size |
 
 ## Build a release ZIP
 

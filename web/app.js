@@ -32,19 +32,20 @@ const TRENDS = {
   flat: { arrow: "→", word: "flat" },
 };
 const SERIES = [
-  { field: "minBuyout", name: "Min buyout", color: "var(--series-1)" },
+  { field: "minBuyout", name: "Min buyout", color: "var(--series-1)", area: true },
   { field: "marketValue", name: "Market value", color: "var(--series-2)" },
 ];
 // Prices on top, the quantity listed in a band below that shares the time axis.
 const CHART = { height: 300, left: 56, right: 64, price: [16, 192], supply: [214, 262], dates: 282 };
 const LABEL_HEIGHT = 14;
-const SPARK = { width: 72, height: 22, pad: 3 };
+const SPARK = { width: 56, height: 20, pad: 3, floor: 0.05 };
+const WEEK = 7;
 const NEWEST_SCANS = 5;
 const WOWHEAD_ITEM = "https://www.wowhead.com/forever/item=";
-const WIDE = matchMedia("(min-width: 1000px)");
+const WIDE = matchMedia("(min-width: 1240px)");
 
 const state = { realms: [], realm: null, q: "", profession: "", kind: "all", quality: "", sort: "name", order: "asc", offset: 0, selected: null };
-const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0 };
+const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0, session: 0 };
 const STALE = Symbol("stale");
 const $ = (id) => document.getElementById(id);
 
@@ -56,7 +57,7 @@ function element(tag, properties = {}, children = []) {
   return node;
 }
 
-function svg(tag, attributes = {}, text) {
+function svg(tag, attributes = {}, text, children = []) {
   const node = document.createElementNS(SVG, tag);
   for (const [name, value] of Object.entries(attributes)) {
     node.setAttribute(name, value);
@@ -64,6 +65,7 @@ function svg(tag, attributes = {}, text) {
   if (text !== undefined) {
     node.textContent = text;
   }
+  node.append(...children);
   return node;
 }
 
@@ -110,17 +112,21 @@ function moneyText(copper) {
   return shown.length === 0 ? "0c" : shown.map(({ unit, amount }) => `${amount.toLocaleString("en")}${unit}`).join(" ");
 }
 
-// Zero units are left out. In a column every unit keeps its slot, so that a
-// lone "12g" cannot line up with the copper of the rows around it.
+// Zero units are left out. In a column every unit keeps its slot, and the
+// units below the largest one show as two digits, as in the addon, so that a
+// lone "12g" reads "12g 00s 00c" and ends where the rows around it end.
 function money(copper, { aligned = false } = {}) {
-  const parts = coins(copper).flatMap(({ unit, amount }, index) => {
-    const shown = amount > 0 || (copper === 0 && index === COINS.length - 1);
+  const amounts = coins(copper);
+  const largest = copper === 0 ? COINS.length - 1 : amounts.findIndex(({ amount }) => amount > 0);
+  const parts = amounts.flatMap(({ unit, amount }, index) => {
+    const shown = aligned ? index >= largest : amount > 0 || (copper === 0 && index === COINS.length - 1);
     if (!shown && !aligned) {
       return [];
     }
     const part = element("span", { className: `coin ${unit}` });
     if (shown) {
-      part.append(amount.toLocaleString("en"), element("span", { className: "unit", textContent: unit }));
+      const digits = aligned && index > largest ? String(amount).padStart(2, "0") : amount.toLocaleString("en");
+      part.append(digits, element("span", { className: "unit", textContent: unit }));
     }
     return [part, " "];
   });
@@ -231,17 +237,31 @@ function trend(change, span) {
   });
 }
 
-// One line per run of consecutive days with a price; a day without one leaves a gap.
-function sparkline(lows) {
+// The days the 7-day change spans, the last at the price the row shows, so
+// that the line ends where the change is measured.
+function weekLows(lows, current) {
+  const week = lows.slice(-(WEEK + 1));
+  week[week.length - 1] = current;
+  return week;
+}
+
+// One line per run of consecutive days with a price; a day without one leaves
+// a gap. `kind` is the direction of the change beside it, so both read alike.
+// The scale spans at least SPARK.floor of the price either way, so that a move
+// of a few percent stays a small move, and a dashed rule marks the first price.
+function sparkline(lows, kind) {
   const values = lows.filter((low) => low !== null);
-  const root = svg("svg", { class: "spark", viewBox: `0 0 ${SPARK.width} ${SPARK.height}`, "aria-hidden": "true" });
+  const root = svg("svg", { class: `spark ${kind}`, viewBox: `0 0 ${SPARK.width} ${SPARK.height}`, "aria-hidden": "true" });
   if (values.length === 0) {
     return root;
   }
   const [low, high] = [Math.min(...values), Math.max(...values)];
+  const middle = (low + high) / 2;
+  const reach = Math.max((high - low) / 2, middle * SPARK.floor);
   const x = (index) => SPARK.pad + (index / (lows.length - 1)) * (SPARK.width - 2 * SPARK.pad);
-  const y = (value) =>
-    high === low ? SPARK.height / 2 : SPARK.height - SPARK.pad - ((value - low) / (high - low)) * (SPARK.height - 2 * SPARK.pad);
+  const y = (value) => SPARK.height / 2 - ((value - middle) / reach) * (SPARK.height / 2 - SPARK.pad);
+  const base = y(values[0]).toFixed(1);
+  root.append(svg("path", { class: "spark-base", d: `M${SPARK.pad} ${base}H${SPARK.width - SPARK.pad}` }));
   let path = "";
   lows.forEach((value, index) => {
     if (value === null) {
@@ -312,14 +332,75 @@ function scanDates(start, end) {
 const chartWidth = (chart) => Math.max(300, Math.round(chart.getBoundingClientRect().width));
 
 const drawn = new Map();
+// Gradient ids are page-wide, so each area gets its own.
+let areas = 0;
 const resized = new ResizeObserver((entries) => {
   for (const { target } of entries) {
-    const { width, options } = drawn.get(target);
+    const { width, draw } = drawn.get(target);
     if (target.getBoundingClientRect().width > 0 && chartWidth(target) !== width) {
-      drawChart(target, options);
+      draw();
     }
   }
 });
+
+function areaFill(root, color) {
+  const id = `area-${++areas}`;
+  const defs = root.querySelector("defs") ?? root.appendChild(svg("defs"));
+  defs.append(svg("linearGradient", { id, x1: 0, x2: 0, y1: 0, y2: 1 }, undefined, [
+    svg("stop", { offset: 0, "stop-color": color, "stop-opacity": 0.42 }),
+    svg("stop", { offset: 1, "stop-color": color, "stop-opacity": 0.03 }),
+  ]));
+  return `url(#${id})`;
+}
+
+function placeTooltip(tooltip, left, width) {
+  tooltip.hidden = false;
+  tooltip.style.left = `${(left / width) * 100}%`;
+  tooltip.style.transform = left < width / 2 ? "translateX(12px)" : "translateX(calc(-100% - 12px))";
+}
+
+// The pointer, a tap or the arrow keys rest on one of `count` points, found by
+// its x position, and Escape clears it. Returns a way to rest on one from outside.
+function inspect(chart, root, overlay, { count, x, width, start, show, hide }) {
+  let active = start;
+  const at = (index) => {
+    active = index;
+    show(index);
+  };
+  const nearest = (event) => {
+    const box = root.getBoundingClientRect();
+    const pointer = ((event.clientX - box.left) / box.width) * width;
+    let closest = 0;
+    for (let index = 1; index < count; index++) {
+      if (Math.abs(x(index) - pointer) < Math.abs(x(closest) - pointer)) {
+        closest = index;
+      }
+    }
+    at(closest);
+  };
+  overlay.addEventListener("pointermove", nearest);
+  overlay.addEventListener("pointerdown", nearest);
+  // A finger leaves as it lifts, so what it tapped stays until focus moves on.
+  overlay.addEventListener("pointerleave", (event) => {
+    if (event.pointerType !== "touch") {
+      hide();
+    }
+  });
+  chart.onfocus = () => at(active);
+  chart.onblur = hide;
+  chart.onkeydown = (event) => {
+    if (event.key === "Escape") {
+      hide();
+      return;
+    }
+    const move = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
+    if (move) {
+      event.preventDefault();
+      at(Math.min(count - 1, Math.max(0, active + move)));
+    }
+  };
+  return at;
+}
 
 // Times in seconds, values per time with null where nothing was measured, and
 // an optional band of amounts below that shares the time axis. With `steps`
@@ -386,6 +467,9 @@ function drawChart(chart, options) {
       .map((point, index) => (index === 0 ? `M${point.x} ${point.y}` : `${steps ? `H${point.x} V` : `L${point.x} `}${point.y}`))
       .join(" ");
     const last = measured.at(-1);
+    if (line.area) {
+      root.append(svg("path", { class: "area", d: `${path} V${bottom} H${measured[0].x} Z`, fill: areaFill(root, line.color) }));
+    }
     root.append(
       svg("path", { class: "line", d: path, stroke: line.color }),
       svg("circle", { class: "dot", cx: last.x, cy: last.y, r: 4, fill: line.color }),
@@ -411,10 +495,8 @@ function drawChart(chart, options) {
   root.append(crosshair, ...markers, overlay);
 
   const tooltip = element("div", { className: "tooltip", hidden: true });
-  let active = times.length - 1;
 
   const show = (index) => {
-    active = index;
     const left = x(times[index]);
     crosshair.setAttribute("x1", left);
     crosshair.setAttribute("x2", left);
@@ -449,10 +531,7 @@ function drawChart(chart, options) {
       );
     }
     tooltip.replaceChildren(...rows);
-    tooltip.hidden = false;
-    const onLeftHalf = left < width / 2;
-    tooltip.style.left = `${(left / width) * 100}%`;
-    tooltip.style.transform = onLeftHalf ? "translateX(12px)" : "translateX(calc(-100% - 12px))";
+    placeTooltip(tooltip, left, width);
   };
   const hide = () => {
     crosshair.setAttribute("visibility", "hidden");
@@ -460,40 +539,25 @@ function drawChart(chart, options) {
     bars.forEach((bar) => bar.classList.remove("active"));
     tooltip.hidden = true;
   };
-
-  overlay.addEventListener("pointermove", (event) => {
-    const box = root.getBoundingClientRect();
-    const pointer = ((event.clientX - box.left) / box.width) * width;
-    let nearest = 0;
-    times.forEach((time, index) => {
-      if (Math.abs(x(time) - pointer) < Math.abs(x(times[nearest]) - pointer)) {
-        nearest = index;
-      }
-    });
-    show(nearest);
+  const at = inspect(chart, root, overlay, {
+    count: times.length,
+    x: (index) => x(times[index]),
+    width,
+    start: times.length - 1,
+    show,
+    hide,
   });
-  overlay.addEventListener("pointerleave", hide);
-  chart.onfocus = () => show(active);
-  chart.onblur = hide;
-  chart.onkeydown = (event) => {
-    const move = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
-    if (move) {
-      event.preventDefault();
-      show(Math.min(times.length - 1, Math.max(0, active + move)));
-    }
-  };
 
   chart.setAttribute("aria-label", label);
   chart.replaceChildren(root, tooltip);
-  drawn.set(chart, { width, options });
+  drawn.set(chart, { width, draw: () => drawChart(chart, options), show: at, hide });
   resized.observe(chart);
 }
 
 // Only a full scan measures a market value; quick scans leave it at 0.
 function drawItemChart(title, points) {
-  const series = SERIES.map(({ field, name, color }) => ({
-    name,
-    color,
+  const series = SERIES.map(({ field, ...line }) => ({
+    ...line,
     values: points.map((point) => (point[field] > 0 ? point[field] : null)),
   })).filter(({ values }) => values.some((value) => value !== null));
   drawChart($("chart"), {
@@ -517,7 +581,7 @@ function drawItemChart(title, points) {
 function stat(label, value, note) {
   return element("div", { className: "stat" }, [
     element("dt", { textContent: label }),
-    element("dd", {}, [value, ...(note ? [element("span", { className: "note", textContent: note })] : [])]),
+    element("dd", {}, [value, ...(note ? [element("span", { className: "note", textContent: note, title: note })] : [])]),
   ]);
 }
 
@@ -569,32 +633,199 @@ function drawScans(points) {
   };
 }
 
-function orderBookDepth(levels) {
-  const root = svg("svg", { viewBox: "0 0 520 210", role: "img",
-    "aria-label": "Sell-side depth: cumulative units available at or below each buyout price." });
-  const left = 55, right = 500, top = 18, bottom = 165;
-  const first = levels[0].unitPrice, last = levels.at(-1).unitPrice;
+const unitsUpTo = (levels, price) => levels.findLast((level) => level.unitPrice <= price)?.cumulativeQuantity ?? 0;
+
+// Price ticks inside the range, every other one dropped until their labels fit.
+function priceLabels(low, high, width) {
+  let ticks = niceTicks(low, high).filter((tick) => tick >= low && tick <= high);
+  while (ticks.length > Math.max(2, labelRoom(width))) {
+    ticks = ticks.filter((_, index) => index % 2 === 0);
+  }
+  const step = ticks.length > 1 ? ticks[1] - ticks[0] : Infinity;
+  return ticks.map((tick) => [tick, compactMoney(tick, step)]);
+}
+
+// The units for sale up to each price, stepping up at every level of the
+// book, with an earlier book faintly behind it on the same scales.
+function drawDepthChart(chart, levels, earlier, highlight) {
+  const books = [levels, ...(earlier ? [earlier.orderBook] : [])].flat();
+  const prices = books.map((level) => level.unitPrice);
+  const [low, high] = [Math.min(...prices), Math.max(...prices)];
+  const ticks = niceTicks(0, Math.max(...books.map((level) => level.cumulativeQuantity)));
+  const [top, bottom] = [CHART.price[0], CHART.supply[1]];
+  const width = chartWidth(chart);
+  const right = width - CHART.right;
+  const x = (price) => CHART.left + ((price - low) / (high - low)) * (right - CHART.left);
+  const y = (units) => bottom - (units / ticks.at(-1)) * (bottom - top);
+  const steps = (book) =>
+    `M${CHART.left} ${bottom} ${book.map((level) => `H${x(level.unitPrice)} V${y(level.cumulativeQuantity)}`).join(" ")} H${right}`;
+
+  const root = svg("svg", { viewBox: `0 0 ${width} ${CHART.height}` });
+  for (const tick of ticks) {
+    root.append(
+      svg("line", { class: "grid", x1: CHART.left, x2: right, y1: y(tick), y2: y(tick) }),
+      svg("text", { x: CHART.left - 8, y: y(tick), dy: "0.32em", "text-anchor": "end" }, tick.toLocaleString("en")),
+    );
+  }
+  root.append(svg("line", { class: "axis", x1: CHART.left, x2: right, y1: bottom, y2: bottom }));
+  for (const [price, text] of priceLabels(low, high, right - CHART.left)) {
+    root.append(
+      svg("line", { class: "axis", x1: x(price), x2: x(price), y1: CHART.dates - 18, y2: CHART.dates - 14 }),
+      svg("text", { x: x(price), y: CHART.dates, "text-anchor": "middle" }, text),
+    );
+  }
+
+  const line = steps(levels);
   const total = levels.at(-1).cumulativeQuantity;
-  const x = (price) => last === first ? (left + right) / 2 : left + (price - first) / (last - first) * (right - left);
-  const y = (quantity) => bottom - quantity / total * (bottom - top);
-  for (const quantity of [...new Set([0, Math.round(total / 2), total])]) {
-    root.append(svg("line", { class: "grid", x1: left, x2: right, y1: y(quantity), y2: y(quantity) }),
-      svg("text", { x: left - 8, y: y(quantity), dy: ".32em", "text-anchor": "end" }, quantity.toLocaleString("en")));
+  root.append(svg("path", { class: "area", d: `${line} V${bottom} Z`, fill: areaFill(root, "var(--series-1)") }));
+  if (earlier) {
+    root.append(svg("path", { class: "line earlier", d: steps(earlier.orderBook) }));
   }
-  const path = levels.map((level, index) =>
-    index === 0 ? `M${x(level.unitPrice)} ${y(level.cumulativeQuantity)}` : `H${x(level.unitPrice)} V${y(level.cumulativeQuantity)}`).join(" ");
-  root.append(svg("path", { d: `M${x(first)} ${bottom} ${path.replace(/^M/, "L")} L${x(last)} ${bottom} Z`, class: "depth-area" }),
-    svg("path", { d: path, class: "depth-line" }));
-  for (const level of levels) {
-    const dot = svg("circle", { cx: x(level.unitPrice), cy: y(level.cumulativeQuantity), r: 2, class: "depth-point" });
-    dot.append(svg("title", {}, `${moneyText(level.unitPrice)} per unit: ${level.cumulativeQuantity.toLocaleString("en")} cumulative units`));
-    root.append(dot);
+  root.append(
+    svg("path", { class: "line", d: line, stroke: "var(--series-1)" }),
+    ...levels.map((level) => svg("circle", { class: "depth-point", cx: x(level.unitPrice), cy: y(level.cumulativeQuantity), r: 2 })),
+    svg("text", { class: "value", x: right + 10, y: y(total), dy: "0.32em" }, total.toLocaleString("en")),
+  );
+
+  const crosshair = svg("line", { class: "crosshair", y1: top, y2: bottom, visibility: "hidden" });
+  const marker = svg("circle", { class: "dot", r: 4, fill: "var(--series-1)", visibility: "hidden" });
+  const earlierMarker = svg("circle", { class: "dot earlier", r: 3.5, visibility: "hidden" });
+  const overlay = svg("rect", { x: CHART.left, y: top, width: right - CHART.left, height: bottom - top, fill: "transparent" });
+  root.append(crosshair, ...(earlier ? [earlierMarker] : []), marker, overlay);
+
+  const tooltip = element("div", { className: "tooltip depth-tooltip", hidden: true });
+  const row = (value, name, key) =>
+    element("div", { className: "row" }, [
+      ...(key ? [key] : []),
+      element("strong", {}, [value]),
+      element("span", { className: "name", textContent: name }),
+    ]);
+  const show = (index) => {
+    const level = levels[index];
+    const left = x(level.unitPrice);
+    crosshair.setAttribute("x1", left);
+    crosshair.setAttribute("x2", left);
+    crosshair.setAttribute("visibility", "visible");
+    marker.setAttribute("cx", left);
+    marker.setAttribute("cy", y(level.cumulativeQuantity));
+    marker.setAttribute("visibility", "visible");
+    const key = element("span", { className: "key" });
+    key.style.background = "var(--series-1)";
+    const rows = [
+      element("div", { className: "when", textContent: `Level ${index + 1} of ${levels.length}` }),
+      row(money(level.unitPrice), "per unit"),
+      row(level.quantity.toLocaleString("en"), "at this price"),
+      row(level.cumulativeQuantity.toLocaleString("en"), "up to this price", key),
+      row(money(level.cumulativeCost), "buys them all"),
+    ];
+    if (earlier) {
+      const before = unitsUpTo(earlier.orderBook, level.unitPrice);
+      earlierMarker.setAttribute("cx", left);
+      earlierMarker.setAttribute("cy", y(before));
+      earlierMarker.setAttribute("visibility", "visible");
+      rows.push(row(before.toLocaleString("en"), "earlier", element("span", { className: "key earlier-key" })));
+    }
+    tooltip.replaceChildren(...rows);
+    placeTooltip(tooltip, left, width);
+    highlight(index);
+  };
+  const hide = () => {
+    for (const node of [crosshair, marker, earlierMarker]) {
+      node.setAttribute("visibility", "hidden");
+    }
+    tooltip.hidden = true;
+    highlight(null);
+  };
+  const at = inspect(chart, root, overlay, {
+    count: levels.length,
+    x: (index) => x(levels[index].unitPrice),
+    width,
+    start: 0,
+    show,
+    hide,
+  });
+
+  chart.setAttribute(
+    "aria-label",
+    `Units for sale up to each price: ${total.toLocaleString("en")} over ${levels.length} price levels from ${moneyText(levels[0].unitPrice)} to ${moneyText(levels.at(-1).unitPrice)}${earlier ? `, drawn over the observation of ${when(earlier.scannedAt)}` : ""}. Use the arrow keys to read each level.`,
+  );
+  chart.replaceChildren(root, tooltip);
+  drawn.set(chart, { width, draw: () => drawDepthChart(chart, levels, earlier, highlight), show: at, hide });
+  resized.observe(chart);
+}
+
+function describeLevel(level) {
+  return `${moneyText(level.unitPrice)} per unit: ${level.quantity.toLocaleString("en")} at this price, ${level.cumulativeQuantity.toLocaleString("en")} up to it for ${moneyText(level.cumulativeCost)}.`;
+}
+
+// Drawn into `container` after it is on the page, so that the chart can measure itself.
+function drawBook(container, { scannedAt, summary, orderBook }, earlier) {
+  const { totalQuantity } = summary;
+  const children = [
+    element("dl", { className: "summary book-summary" }, [
+      stat("Best ask", orderBook.length ? money(orderBook[0].unitPrice) : "No listings"),
+      stat("Listed units", totalQuantity.toLocaleString("en")),
+      stat("Price levels", orderBook.length.toLocaleString("en")),
+      stat("Observed", age(scannedAt), new Date(scannedAt * 1000).toLocaleString()),
+    ]),
+  ];
+  const chart = orderBook.length > 1 ? element("div", { className: "chart depth-chart", tabIndex: 0 }) : null;
+  const live = element("p", { className: "visually-hidden" });
+  if (chart) {
+    chart.setAttribute("role", "img");
+    live.setAttribute("aria-live", "polite");
+    const key = element("span", { className: "key" });
+    key.style.background = "var(--series-1)";
+    children.push(
+      element("div", { className: "legend" }, [
+        element("span", {}, [key, "Units for sale up to each price"]),
+        ...(earlier ? [element("span", {}, [element("span", { className: "key earlier-key" }), `Earlier, ${when(earlier.scannedAt)}`])] : []),
+      ]),
+      chart,
+      live,
+    );
+  } else if (orderBook.length === 1) {
+    children.push(element("p", { className: "muted", textContent: "All of it is listed at one price, so there is no depth to chart." }));
   }
-  root.append(svg("text", { x: left, y: 12 }, "Cumulative units"),
-    svg("text", { x: x(first), y: 185, "text-anchor": last === first ? "middle" : "start" }, compactMoney(first)));
-  if (last !== first) root.append(svg("text", { x: right, y: 185, "text-anchor": "end" }, compactMoney(last)));
-  root.append(svg("text", { x: (left + right) / 2, y: 205, "text-anchor": "middle" }, "Unit buyout"));
-  return element("div", { className: "chart depth-chart" }, [root]);
+  const rows = orderBook.map((level, index) => {
+    const cumulative = element("td", { className: "number depth-cell", textContent: level.cumulativeQuantity.toLocaleString("en") });
+    cumulative.style.setProperty("--depth", `${(level.cumulativeQuantity / totalQuantity) * 100}%`);
+    const row = element("tr", {}, [
+      element("td", { className: "number ask-price" }, [money(level.unitPrice)]),
+      element("td", { className: "number", textContent: level.quantity.toLocaleString("en") }),
+      cumulative,
+    ]);
+    if (chart) {
+      row.onpointerenter = () => drawn.get(chart).show(index);
+      row.onpointerleave = () => drawn.get(chart).hide();
+    }
+    return row;
+  });
+  children.push(
+    element("table", { className: "seller-table order-book" }, [
+      element("caption", { textContent: "Sell orders · lowest ask first" }),
+      element("thead", {}, [
+        element("tr", {}, ["Ask / unit", "Units", "Cumulative"].map((text) =>
+          element("th", { scope: "col", className: "number", textContent: text }))),
+      ]),
+      element("tbody", {}, rows),
+    ]),
+    element("p", {
+      className: "muted",
+      textContent: orderBook.length
+        ? "Cumulative units include all stock up to that unit price. Completed searches and full scans are recorded; changes between observations are not tracked."
+        : "No buyout stock was listed in this observation.",
+    }),
+  );
+  container.replaceChildren(...children);
+  if (chart) {
+    drawDepthChart(chart, orderBook, earlier, (index) => {
+      rows.forEach((row, position) => row.classList.toggle("active", position === index));
+      if (index !== null) {
+        live.textContent = describeLevel(orderBook[index]);
+      }
+    });
+  }
 }
 
 function drawSellers(data) {
@@ -605,56 +836,35 @@ function drawSellers(data) {
       "No order book has been uploaded for this item. With the updated addon, run /gb scan full at the auction house, then /reload with the desktop app open. A complete search for this item also records its book." }));
     return;
   }
-  const { scannedAt, summary, orderBook, itemKey, id } = data.snapshot;
-  const { totalQuantity } = summary;
-  const captured = new Date(scannedAt * 1000).toLocaleString();
+  const { realm, faction } = state.realm;
+  const { itemKey, id } = data.snapshot;
+  const history = data.history ?? [];
+  const book = element("div");
+  const fetchBook = (snapshot) =>
+    latestOnly("sellers", api("/api/sellers", { realm, faction, itemKey, snapshot })).then((result) => result.snapshot);
+  // Each observation is drawn at once, and again over the one before it once that arrives.
+  const show = (snapshot) => {
+    drawBook(book, snapshot, null);
+    const shown = history.findIndex((entry) => entry.id === snapshot.id);
+    const before = shown === -1 ? undefined : history[shown + 1];
+    if (before) {
+      run(async () => drawBook(book, snapshot, await fetchBook(before.id)));
+    }
+  };
   const children = [title,
     element("p", { className: "muted", textContent: "Sell listings only. WoW does not expose a standing buy-order book. These are recorded snapshots, not a live market feed." }),
-    element("dl", { className: "summary book-summary" }, [
-      stat("Best ask", orderBook.length ? money(orderBook[0].unitPrice) : "No listings"),
-      stat("Listed units", totalQuantity.toLocaleString("en")),
-      stat("Price levels", orderBook.length.toLocaleString("en")),
-      stat("Observed", age(scannedAt), captured),
-    ]),
   ];
-  if (data.history?.length) {
-    const historyTurn = latest.history;
-    const { realm, faction } = state.realm;
-    const select = element("select", { id: "order-book-snapshot" }, data.history.map((snapshot, index) =>
+  if (history.length > 1) {
+    const select = element("select", { id: "order-book-snapshot" }, history.map((snapshot, index) =>
       element("option", { value: snapshot.id, selected: snapshot.id === id,
-        textContent: `${index === 0 ? "Latest: " : ""}${new Date(snapshot.scannedAt * 1000).toLocaleString()} · #${data.history.length - index}` })));
-    select.onchange = () => run(async () => {
-      const result = await latestOnly("sellers", api("/api/sellers", {
-        realm, faction, itemKey, history: 1, snapshot: select.value,
-      }));
-      if (historyTurn !== latest.history) throw STALE;
-      drawSellers(result);
-    });
-    children.push(element("label", { className: "order-book-history", htmlFor: select.id }, [
-      `Observation (${data.history.length.toLocaleString("en")} saved) `, select,
+        textContent: `#${history.length - index} · ${when(snapshot.scannedAt)}${index === 0 ? " · latest" : ""}` })));
+    select.onchange = () => run(async () => show(await fetchBook(select.value)));
+    children.push(element("label", { className: "order-book-history" }, [
+      `Observation (${history.length.toLocaleString("en")} saved)`, element("span", { className: "chip" }, [select]),
     ]));
   }
-  if (orderBook.length) children.push(orderBookDepth(orderBook));
-  children.push(element("table", { className: "seller-table order-book" }, [
-    element("caption", { textContent: "Sell orders · lowest ask first" }),
-    element("thead", {}, [element("tr", {}, ["Ask / unit", "Units", "Cumulative", "Known sellers"].map((text, i) =>
-      element("th", { scope: "col", className: i < 3 ? "number" : "", textContent: text })))]),
-    element("tbody", {}, orderBook.map((level) => {
-      const cumulative = element("td", { className: "number depth-cell", textContent: level.cumulativeQuantity.toLocaleString("en") });
-      cumulative.style.setProperty("--depth", `${level.cumulativeQuantity / totalQuantity * 100}%`);
-      return element("tr", {}, [
-        element("td", { className: "number ask-price" }, [money(level.unitPrice)]),
-        element("td", { className: "number", textContent: level.quantity.toLocaleString("en") }),
-        cumulative,
-        element("td", { textContent: level.owners.length
-          ? `${level.owners.join(", ")}${level.hasUnnamedOwners ? " + unnamed sellers" : ""}` : "Unknown" }),
-      ]);
-    })),
-  ]));
-  children.push(element("p", { className: "muted", textContent: orderBook.length
-    ? "Cumulative units include all stock up to that unit price. Completed searches and full scans are recorded; changes between observations are not tracked."
-    : "No buyout stock was listed in this observation." }));
-  panel.replaceChildren(...children);
+  panel.replaceChildren(...children, book);
+  show(data.snapshot);
 }
 
 async function loadHistory(itemKey) {
@@ -683,6 +893,11 @@ async function loadHistory(itemKey) {
   }
 }
 
+function weekTrend(days, lows, current) {
+  const change = changeOver(seenDays(days, lows), current, WEEK);
+  return [sparkline(weekLows(lows, current), change === null ? "none" : direction(change)), trend(change, "over 7 days")];
+}
+
 function priceRow(item, market, trends) {
   const open = element("button", {
     className: `quality-${quality(item)}`,
@@ -701,17 +916,16 @@ function priceRow(item, market, trends) {
     element("td", { className: "number" }, [money(item.minBuyout, { aligned: true })]),
     marketCell,
     element("td", { className: "number listed", textContent: item.quantity.toLocaleString("en") }),
-    element("td", { className: "spark-cell" }, trends ? [sparkline(lows)] : []),
-    element("td", { className: "number" }, trends ? [trend(changeOver(seenDays(trends.days, lows), item.minBuyout, 7), "over 7 days")] : []),
+    element("td", { className: "number week" }, trends ? weekTrend(trends.days, lows, item.minBuyout) : []),
   ]);
   const compare = element("button", {
-    className: "button compare-item", textContent: "Compare",
+    className: "compare-item",
     onclick: () => toggleComparison({ itemKey: item.itemKey, name: itemName(item), ...state.realm }),
   });
   compare.dataset.compareKey = item.itemKey;
   compare.setAttribute("aria-label", `Compare ${itemName(item)}`);
   compare.setAttribute("aria-pressed", String(comparisonItems.some((entry) => entry.itemKey === item.itemKey)));
-  row.append(element("td", { className: "compare-column" }, [compare]));
+  row.prepend(element("td", { className: "compare-column" }, [compare]));
   row.dataset.itemKey = item.itemKey;
   row.setAttribute("aria-selected", String(item.itemKey === state.selected));
   return row;
@@ -788,9 +1002,9 @@ async function openPrices() {
   }
 }
 
-function showPanel(id) {
+function showPanel(...ids) {
   for (const section of $("account-view").children) {
-    section.hidden = section.id !== id;
+    section.hidden = !ids.includes(section.id);
   }
 }
 
@@ -813,27 +1027,63 @@ function about(character, { faction = false } = {}) {
     .join(" · ");
 }
 
-function characterLink(character) {
+function characterLink(character, current) {
   const route = { view: "character", name: character.name, realm: character.realm };
   const name = element("span", { className: "name", textContent: character.name });
   name.style.color = classColor(character.class);
-  return element("li", {}, [
-    element("a", { href: routeHash(route) }, [
-      name,
-      character.gold === null ? "–" : money(character.gold, { aligned: true }),
-      element("span", { className: "about", textContent: about(character) }),
-    ]),
+  const link = element("a", { href: routeHash(route) }, [
+    name,
+    character.gold === null ? "–" : money(character.gold),
+    element("span", { className: "about", textContent: about(character) }),
   ]);
+  // "true", not "page": the rail's Characters link already marks the page.
+  if (current?.name === character.name && current.realm === character.realm) {
+    link.setAttribute("aria-current", "true");
+  }
+  return element("li", {}, [link]);
 }
 
 const groupedId = (id) => `${id.slice(0, 4)}-${id.slice(4)}`;
 
-async function loadAccount() {
-  const [account, trades] = await latestOnly("view", Promise.all([api("/api/account"), loadTrades()]));
+// The account in the rail, and the purse with the gold of all its characters.
+// `account` is null when signed out and undefined while that is not known.
+function drawSession(account) {
+  // Newer than any answer still on its way.
+  latest.session++;
+  $("session").hidden = account === undefined;
+  $("session").replaceChildren(
+    ...(account ? ["Signed in as ", element("strong", { textContent: groupedId(account.id) })] : ["Not signed in"]),
+  );
+  $("log-in-link").hidden = account !== null;
+  $("log-out").hidden = !account;
+  const golds = (account?.characters ?? []).map(({ gold }) => gold).filter((gold) => gold !== null);
+  $("purse").hidden = golds.length === 0;
+  $("purse-gold").replaceChildren(...(golds.length ? [money(golds.reduce((total, gold) => total + gold, 0))] : []));
+}
+
+async function loadSession() {
+  const account = await latestOnly("session", api("/api/account")).catch((error) => {
+    if (error.status === 401) {
+      return null;
+    }
+    throw error;
+  });
+  drawSession(account);
+}
+
+// The roster, with the character on show marked.
+function drawAccount(account, current = null) {
   const linked = account.linked?.length ? `, linked with ${account.linked.map(groupedId).join(", ")}` : "";
   $("account-id").textContent = `ID ${groupedId(account.id)}${linked}`;
-  $("character-list").replaceChildren(...account.characters.map(characterLink));
+  $("character-list").replaceChildren(...account.characters.map((character) => characterLink(character, current)));
+  drawSession(account);
+}
+
+async function loadAccount() {
+  const [account, trades] = await latestOnly("view", Promise.all([api("/api/account"), loadTrades()]));
+  drawAccount(account);
   drawTrades($("account-trades"), trades, { withCharacter: true });
+  $("account-trades").hidden = false;
   showPanel("characters");
 }
 
@@ -967,7 +1217,7 @@ function drawGoldChart(name, gold) {
   const balances = hourlyGold(gold, times);
   drawChart($("gold-chart"), {
     times,
-    series: [{ name: "Gold", color: "var(--coin-g)", values: balances }],
+    series: [{ name: "Gold", color: "var(--series-1)", values: balances, area: true }],
     steps: true,
     heading: (index) => `${when(times[index])}–${clock(times[index] + HOUR)}`,
     label: `${name}: gold over the last ${SPAN_NAMES[goldSpan]}, from ${moneyText(balances[0])} to ${moneyText(balances.at(-1))}. Use the arrow keys to read each hour.`,
@@ -999,7 +1249,7 @@ function holdingRow(row) {
 function holdings(title, snapshot, seen, missing) {
   const heading = element("h3", { textContent: title });
   if (snapshot === null) {
-    return element("div", {}, [heading, element("p", { className: "muted", textContent: missing })]);
+    return element("div", { className: "panel" }, [heading, element("p", { className: "muted", textContent: missing })]);
   }
   const table =
     snapshot.rows.length === 0
@@ -1010,7 +1260,7 @@ function holdings(title, snapshot, seen, missing) {
           ]),
           element("tbody", {}, snapshot.rows.map(holdingRow)),
         ]);
-  return element("div", {}, [
+  return element("div", { className: "panel" }, [
     heading,
     element("p", { className: "muted" }, ["Total ", money(snapshot.total), ` · ${seen} ${age(snapshot.at)}`]),
     table,
@@ -1214,7 +1464,7 @@ function loadTrades(parameters = {}) {
 }
 
 async function loadCharacter({ name, realm }) {
-  const [character, trades] = await latestOnly(
+  const [character, trades, account] = await latestOnly(
     "view",
     Promise.all([
       api("/api/character", { name, realm }).catch((error) => {
@@ -1224,14 +1474,18 @@ async function loadCharacter({ name, realm }) {
         throw error;
       }),
       loadTrades({ name, realm }),
+      api("/api/account"),
     ]),
   );
+  // The roster leads to the other characters; the trades of all of them stay on the account's page.
+  drawAccount(account, { name, realm });
+  $("account-trades").hidden = true;
   if (character === null) {
     $("no-character-text").textContent = `No character ${name} on ${realm} in this account.`;
-    showPanel("no-character");
+    showPanel("characters", "no-character");
     return;
   }
-  showPanel("character");
+  showPanel("characters", "character");
   $("character-title").textContent = character.name;
   $("character-title").style.color = classColor(character.class);
   $("character-about").textContent = about(character, { faction: true });
@@ -1286,6 +1540,7 @@ async function run(action) {
     await action();
   } catch (error) {
     if (error.status === 401) {
+      drawSession(null);
       showPanel("login");
     } else if (error !== STALE) {
       showMessage(`Something went wrong: ${error.message}`);
@@ -1295,7 +1550,7 @@ async function run(action) {
 
 let comparisonRequest = 0;
 let comparisonItems = [];
-const COMPARISON_COLORS = ["var(--series-1)", "var(--series-2)", "var(--up)", "var(--q-epic)", "var(--down)", "var(--coin-g)"];
+const COMPARISON_COLORS = [1, 2, 3, 4, 5, 6].map((index) => `var(--compare-${index})`);
 
 function updateCompareButtons() {
   for (const button of document.querySelectorAll("[data-compare-key]")) {
@@ -1470,6 +1725,7 @@ $("show-key").onclick = () => {
 $("log-out").onclick = () =>
   run(async () => {
     await api("/api/logout", {}, {});
+    drawSession(null);
     render();
   });
 
@@ -1502,6 +1758,7 @@ $("link-form").onsubmit = async (event) => {
   } catch (error) {
     // A session that ran out shows the login, as any other view does.
     if (error.status === 401) {
+      drawSession(null);
       showPanel("login");
     } else {
       $("link-error").textContent = loginError(error);
@@ -1601,7 +1858,7 @@ async function loadDownload() {
 }
 
 const VIEWS = {
-  prices: { shows: ["price-tools", "prices-view"], link: "#prices", load: openPrices },
+  prices: { shows: ["realm-picker", "price-tools", "prices-view"], link: "#prices", load: openPrices },
   characters: { shows: ["account-view"], link: "#characters", load: loadAccount },
   character: { shows: ["account-view"], link: "#characters", load: loadCharacter },
   download: { shows: ["download-view"], link: "#download", load: loadDownload },
@@ -1625,5 +1882,27 @@ function render() {
   run(() => view.load(route));
 }
 
+// Marks the theme on show; theme.js applied a stored choice before the first paint.
+function drawTheme() {
+  for (const button of document.querySelectorAll("[data-theme-choice]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.themeChoice === document.documentElement.dataset.theme));
+  }
+}
+
+for (const button of document.querySelectorAll("[data-theme-choice]")) {
+  button.onclick = () => {
+    document.documentElement.dataset.theme = button.dataset.themeChoice;
+    try {
+      localStorage.setItem("goldbook-theme", button.dataset.themeChoice);
+    } catch {
+      // Without storage the choice lasts until the page is left.
+    }
+    drawTheme();
+  };
+}
+
 window.onhashchange = render;
+drawTheme();
+// The rail shows the session on every view. A failure leaves it blank; the view reports its own.
+loadSession().catch(() => {});
 render();

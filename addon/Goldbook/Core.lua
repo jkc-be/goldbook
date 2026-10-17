@@ -243,6 +243,19 @@ local COMMANDS = {
   web = function()
     ns.WebLogin.Show()
   end,
+  theme = function(argument)
+    if argument ~= "" and not ns.UI.SetTheme(argument:lower()) then
+      ns.Print("There is no \"" .. argument .. "\" theme.")
+    end
+    ns.Print("The window is " .. ns.UI.Theme() .. ". Change it with /gb theme light or /gb theme dark.")
+  end,
+  scale = function(argument)
+    local low, high = ns.UI.MIN_SCALE, ns.UI.MAX_SCALE
+    if argument ~= "" and not ns.UI.SetScale(tonumber(argument)) then
+      ns.Print(("The window's size goes from %.1f to %.1f, 1 being its normal size."):format(low, high))
+    end
+    ns.Print(("The window is at size %.2f. Change it with /gb scale <%.1f-%.1f>."):format(ns.UI.Scale(), low, high))
+  end,
   status = function()
     local known = 0
     for _ in pairs(ns.db.prices[ns.RealmKey()] or {}) do
@@ -268,7 +281,7 @@ SlashCmdList.GOLDBOOK = function(input)
   else
     ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb trades  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
-    ns.Print("/gb status  |  /gb minimap  |  /gb web")
+    ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end
 end
 
@@ -364,6 +377,10 @@ frame:SetScript("OnEvent", function(_, event, first, second)
   if event == "ADDON_LOADED" and first == ADDON then
     GoldbookDB = Database.Init(GoldbookDB)
     ns.db = GoldbookDB
+    local taken = Database.MergeServer(ns.db, GoldbookServerData)
+    if taken > 0 then
+      ns.Print("Took " .. plural(taken, "newer price") .. " from the Goldbook server.")
+    end
   elseif event == "PLAYER_LOGIN" then
     -- Before login the normalized realm name may be unknown, and gold booked
     -- under the display name would count the character twice.

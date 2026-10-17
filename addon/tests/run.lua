@@ -64,7 +64,11 @@ eq(Codec.ItemKey(4000000000), "4000000000", "item key above 2^31")
 eq(Codec.ItemString("2589"), "item:2589:0:0:0:0:0:0", "item string of a plain item")
 eq(Codec.ItemString("9775:-12"), "item:9775:0:0:0:0:0:-12", "item string keeps the suffix")
 eq(plain(Codec.Money(123456)), "12g 34s 56c", "money")
-eq(plain(Codec.Money(10000)), "1g 0s 0c", "money, round gold")
+eq(plain(Codec.Money(10000)), "1g 00s 00c", "money, round gold")
+eq(plain(Codec.Money(17635000)), "1,763g 50s 00c", "money, thousands of gold")
+eq(plain(Codec.Money(1234567890)), "123,456g 78s 90c", "money, more thousands")
+eq(plain(Codec.Money(705)), "7s 05c", "money, silver and copper")
+eq(Codec.Money(10101, { gold = "a87400", silver = "6e6e78", copper = "a0501c" }), "1|cffa87400g|r 01|cff6e6e78s|r 01|cffa0501cc|r", "money in other coin colours")
 eq(plain(Codec.Money(5)), "5c", "money, copper only")
 eq(Codec.Age(30), "just now", "age under a minute")
 eq(Codec.Age(7200), "2h ago", "age in hours")
@@ -222,7 +226,7 @@ eq(upgraded.prices.R["1"], "100,7,0,5000,105,5000;100;", "schema 1 prices are ca
 eq(#Codec.DecodePrice("100,7,0,5000,105,5000;100,90").days, 2, "records from before the ladder still read")
 eq(upgraded.scanned.R, 5000, "schema 1 realms know their newest scan")
 eq(upgraded.history.R["1"], "0:100:7:105", "schema 1 prices start a dated history")
-eq(upgraded.version, 4, "schema version raised")
+eq(upgraded.version, 5, "schema version raised")
 local fromSchema2 = Database.Init({ version = 2, prices = { R = {
   ["1"] = "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5",
   ["2"] = "100,4,0,1760000000,105,1759900000;100,90",
@@ -230,7 +234,7 @@ local fromSchema2 = Database.Init({ version = 2, prices = { R = {
 eq(fromSchema2.history.R["1"], "20370:1500:7:1400", "schema 2 history starts from the newest price, with that day's market value")
 eq(fromSchema2.history.R["2"], "20370:100:4:0", "a market value from an earlier day is not booked on the newest day")
 eq(fromSchema2.prices.R["1"], "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5", "schema 2 price records stay as they are")
-eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 4", "schema 2 is raised to 4, with its gold by hour")
+eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 5", "schema 2 is raised to 5, with its gold by hour")
 local fromSchema3 = Database.Init({ version = 3, gold = { ["A-R"] = { [20368] = 100, [20369] = 120, [20370] = 250 } } })
 eq(stored(fromSchema3.gold["A-R"]), "488855:100 488879:120 488888:250", "schema 3 gold per day goes to each day's last hour, and today's to the current hour")
 local reopened = Database.Init({ version = 3, gold = { ["A-R"] = { [488800] = 90, [20370] = 250 } } })
@@ -270,21 +274,124 @@ end
 local kept = Database.Lookup(history, "R-F", "1").days
 eq(#kept .. " " .. kept[1] .. " " .. kept[14], "14 103 116", "history keeps the last 14 days")
 
+local function days(entries)
+  local parts = {}
+  for index, entry in ipairs(entries) do
+    parts[index] = entry.day .. " " .. entry.min .. " " .. entry.qty .. " " .. entry.mv
+  end
+  return table.concat(parts, " / ")
+end
+local function points(entries)
+  local parts = {}
+  for index, point in ipairs(entries) do
+    parts[index] = point.at .. " " .. point.min .. " " .. point.qty .. " " .. point.mv .. " " .. tostring(point.hourly)
+  end
+  return table.concat(parts, " / ")
+end
+local function aged(db, at)
+  Database.ApplyScan(db, { realm = "R", faction = "F", region = "EU", at = at, mode = "browse", by = "x", build = "1", rows = {}, names = {} })
+end
+
 local daily = Database.Init(nil)
 scanned(daily, NOW, 100, 120, 4)
-scanned(daily, NOW + 3600, 90, nil, 6)
-eq(daily.history["R-F"]["1"], "20000:90:6:120", "a quick scan the same day replaces the price and quantity and keeps the day's market value")
+scanned(daily, NOW + 1800, 90, nil, 6)
+eq(daily.history["R-F"]["1"] .. " / " .. daily.hours["R-F"]["1"], "20000:90:6:120 / 480000:90:6:120",
+  "a cheaper quick scan in the same hour takes the price and its quantity and keeps the market value, in the day and the hour")
+scanned(daily, NOW + 2400, 120, nil, 2)
+eq(daily.history["R-F"]["1"] .. " / " .. daily.hours["R-F"]["1"], "20000:90:6:120 / 480000:90:6:120", "a dearer scan later keeps the lowest price")
+scanned(daily, NOW + 2700, 90, 130, 9)
+eq(daily.hours["R-F"]["1"], "480000:90:6:130", "a tie keeps the earlier quantity and takes the newer market value")
+scanned(daily, NOW + HOUR, 95, nil, 5)
+eq(daily.history["R-F"]["1"] .. " / " .. daily.hours["R-F"]["1"], "20000:90:6:130 / 480000:90:6:130,480001:95:5:0", "a scan in the next hour adds an hour")
+eq(Database.Lookup(daily, "R-F", "1").days[1], 90, "the price record's day is the day's lowest price too")
 priced(daily, NOW + DAY, { ["1"] = 110, ["2"] = 50 })
 scanned(daily, NOW + 2 * DAY + 60, 130, 125, 3)
-eq(daily.history["R-F"]["1"], "20000:90:6:120,20001:110:5:0,20002:130:3:125", "scans on three days make three dated days")
+eq(daily.history["R-F"]["1"], "20000:90:6:130,20001:110:5:0,20002:130:3:125", "scans on three days make three dated days")
+eq(days(Database.History(daily, "R-F", "1")), "20000 90 6 130 / 20001 110 5 0 / 20002 130 3 125", "history answers per day")
+eq(points(Database.Points(daily, "R-F", "1")),
+  "1728000000 90 6 130 true / 1728003600 95 5 0 true / 1728086400 110 5 0 true / 1728172800 130 3 125 true", "points are the hours, oldest first")
+scanned(daily, NOW + 8 * DAY, 140)
+eq(daily.hours["R-F"]["1"], "480048:130:3:125,480192:140:1:0", "hours more than 168 before the item's newest scan are cut off")
+eq(points(Database.Points(daily, "R-F", "1")),
+  "1728000000 90 6 130 nil / 1728086400 110 5 0 nil / 1728172800 130 3 125 true / 1728691200 140 1 0 true", "before its hours an item's points are its days")
+eq(daily.hours["R-F"]["2"], nil, "an item not listed for a week has no hours")
 scanned(daily, NOW + 61 * DAY, 140)
-eq(daily.history["R-F"]["1"], "20001:110:5:0,20002:130:3:125,20061:140:1:0", "days more than 60 days before the scan are cut off")
+eq(daily.history["R-F"]["1"], "20001:110:5:0,20002:130:3:125,20008:140:1:0,20061:140:1:0", "days more than 60 days before the scan are cut off")
 eq(daily.history["R-F"]["2"], "20001:50:5:0", "an item listed 60 days ago keeps its history")
 scanned(daily, NOW + 62 * DAY, 150)
 eq(daily.history["R-F"]["2"], nil, "an item not listed for more than 60 days loses its history")
-local decoded = Database.History(daily, "R-F", "1")
-eq(#decoded .. " " .. decoded[1].day .. " " .. decoded[1].min .. " " .. decoded[1].qty .. " " .. decoded[1].mv, "3 20002 130 3 125", "history decodes to dated days, oldest first")
-eq(#Database.History(daily, "R-F", "2"), 0, "an item without history has no days")
+eq(#Database.History(daily, "R-F", "2") .. " " .. #Database.Points(daily, "R-F", "2"), "0 0", "an item without history has no days and no points")
+local again = Database.Init(nil)
+scanned(again, NOW, 100, 120, 4)
+local once = again.history["R-F"]["1"] .. " / " .. again.hours["R-F"]["1"]
+scanned(again, NOW, 100, 120, 4)
+eq(again.history["R-F"]["1"] .. " / " .. again.hours["R-F"]["1"], once, "the same scan twice changes nothing")
+
+local back = Database.Init(nil)
+scanned(back, NOW + HOUR, 95)
+scanned(back, NOW, 80)
+eq(back.hours["R-F"]["1"], "480001:95:1:0", "a scan from a clock set back leaves the newer hour as it is")
+
+local fromSchema4 = Database.Init({ version = 4, history = { ["R-F"] = { ["1"] = "20369:80:2:0,20370:100:3:105" } } })
+eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "5 20369:80:2:0,20370:100:3:105 nil",
+  "schema 4 history is kept as it is, with no hours yet")
+-- Server data, as the Goldbook app writes it to ServerData.lua.
+local function serverData(scannedAt)
+  return {
+    version = 1,
+    server = "https://example.test/goldbook",
+    items = { ["1"] = "1|Server Name", ["3"] = "2|Gold Ore" },
+    realms = { ["R-F"] = {
+      scannedAt = scannedAt,
+      prices = {
+        ["1"] = "90,7,2," .. NOW + DAY .. ",95," .. NOW + DAY,
+        ["2"] = "400,3,0," .. NOW + DAY .. ",410," .. NOW + DAY,
+        ["3"] = "1958,183,0," .. NOW + DAY .. ",0,0",
+      },
+      days = { ["1"] = "19999:80:1:0,20000:70:9:0,20001:90:7:95", ["3"] = "20001:1958:183:0" },
+      hours = { ["1"] = "480000:70:9:0,480024:90:7:95" },
+    } },
+  }
+end
+local function saved(db)
+  local lines = {}
+  for _, name in ipairs({ "prices", "history", "hours", "fromServer" }) do
+    for key, value in pairs(db[name]["R-F"] or {}) do
+      lines[#lines + 1] = name .. " " .. key .. " " .. value
+    end
+  end
+  for key, value in pairs(db.items) do
+    lines[#lines + 1] = "items " .. key .. " " .. value
+  end
+  table.sort(lines)
+  return table.concat(lines, "\n")
+end
+local merged = Database.Init(nil)
+scanned(merged, NOW, 100, 120, 4)
+merged.items["1"] = "1|Linen Cloth"
+merged.prices["R-F"]["2"] = Codec.EncodePrice({ min = 500, qty = 1, n = 0, seen = NOW + 2 * DAY, mv = 0, mvAt = 0, days = { 500 }, ladder = {} })
+eq(Database.MergeServer(merged, serverData(NOW + DAY)), 2, "the server's newer prices are taken, the item seen later here is not")
+eq(saved(merged), table.concat({
+  "fromServer 1 1728086400",
+  "fromServer 3 1728086400",
+  "history 1 19999:80:1:0,20000:100:4:120,20001:90:7:95",
+  "history 3 20001:1958:183:0",
+  "hours 1 480000:100:4:120,480024:90:7:95",
+  "items 1 1|Linen Cloth",
+  "items 3 2|Gold Ore",
+  "prices 1 90,7,2,1728086400,95,1728086400;80,100,90;",
+  "prices 2 500,1,0,1728172800,410,1728086400;500;",
+  "prices 3 1958,183,0,1728086400,0,0;1958;",
+}, "\n"), "the server fills the days, hours and names this data lacks, keeps the local day and name, and gives a newer market value")
+eq(tostring(Database.FromServer(merged, "R-F", "1")) .. " " .. tostring(Database.FromServer(merged, "R-F", "2")), "true false",
+  "a price taken from the server is marked as such")
+local once = saved(merged)
+eq(Database.MergeServer(merged, serverData(NOW + DAY)) .. " " .. tostring(saved(merged) == once), "0 true", "the same server data again is skipped")
+merged.serverMerged["R-F"] = nil
+eq(Database.MergeServer(merged, serverData(NOW + DAY)) .. " " .. tostring(saved(merged) == once), "0 true", "and merged again it changes nothing")
+scanned(merged, NOW + 3 * DAY, 85)
+eq(tostring(Database.FromServer(merged, "R-F", "1")), "false", "a scan here clears the server's mark")
+eq(Database.MergeServer(Database.Init(nil), { version = 2, realms = serverData(NOW).realms }), 0, "data of a version the addon does not know is left alone")
 
 local trend = Advisor.Evolution({
   { day = 19960, min = 200, qty = 1, mv = 0 },
@@ -379,7 +486,7 @@ options.checks.minimap.checked = true
 options.checks.minimap.scripts.OnClick(options.checks.minimap)
 
 SlashCmdList.GOLDBOOK("")
-eq(lastPrint(), "Goldbook /gb status  |  /gb minimap  |  /gb web", "/gb lists /gb web")
+eq(lastPrint(), "Goldbook /gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>", "/gb lists /gb web, /gb theme and /gb scale")
 
 GoldbookDB.account = { id = "K7Q2M9PX", key = "7KQ2M9PXABCDEFGHJKMN" }
 SlashCmdList.GOLDBOOK("web")
@@ -405,7 +512,7 @@ web.key.scripts.OnMouseUp(web.key, "LeftButton")
 eq(web.id.selected .. " " .. web.key.selected, "K7Q2-M9PX 7KQ2M-9PXAB-CDEFG-HJKMN", "clicking into a box selects all of its code for copying")
 typeInto(web.key, "7KQ2M-9PXAB-CDEFGx-HJKMN")
 eq(web.key.text .. " " .. web.key.selected, "7KQ2M-9PXAB-CDEFG-HJKMN 7KQ2M-9PXAB-CDEFG-HJKMN", "typing in a box puts the code back, selected")
-eq(web.site.text .. " " .. web.height, "https://app.jkc-be.com/goldbook 182", "/gb web shows the site's address from the .toc, in a row above the ID")
+eq(web.site.text .. " " .. web.height, "https://app.jkc-be.com/goldbook 208", "/gb web shows the site's address from the .toc, in a row above the ID")
 web.site.scripts.OnMouseUp(web.site, "LeftButton")
 eq(web.site.selected, "https://app.jkc-be.com/goldbook", "clicking the address selects all of it")
 typeInto(web.site, "https://app.jkc-be.com/goldbookx")
@@ -447,7 +554,7 @@ C_AddOns, GetAddOnMetadata = modern, nil
 local website = Stub.metadata["X-Website"]
 Stub.metadata["X-Website"] = nil
 local siteless = webLoginAgain()
-eq(tostring(rawget(siteless, "site")) .. " " .. siteless.id.text .. " " .. siteless.height, "nil K7Q2-M9PX 156",
+eq(tostring(rawget(siteless, "site")) .. " " .. siteless.id.text .. " " .. siteless.height, "nil K7Q2-M9PX 180",
   "without X-Website in the .toc the dialog leaves the Site row out")
 Stub.metadata["X-Website"] = website
 siteless:Hide()
@@ -485,15 +592,15 @@ eq(GoldbookDB.items["2592"], "1|Thrall's \"Ünicode\" Wool, Fine", "late name st
 eq(GoldbookDB.items["9775:584"], "2|Bandit Cinch", "a variant whose item key info is not in yet is named after its base item")
 eq(GoldbookDB.vendor[2589] .. " " .. GoldbookDB.vendor[2592], "13 0", "vendor prices stored, late ones too")
 eq(plain(Stub.printed[#Stub.printed - 1]), "Goldbook 3 items scanned. Type /reload or log out to hand the scan to Goldbook.", "scan announced")
-eq(lastPrint(), "Goldbook 1 deal worth 10s 0c. Type /gb deals.", "deals announced")
-eq(GoldbookScanButton.text, "Goldbook scan", "button label restored")
+eq(lastPrint(), "Goldbook 1 deal worth 10s 00c. Type /gb deals.", "deals announced")
+eq(GoldbookScanButton.label.text, "Goldbook scan", "button label restored")
 
 Stub.ah.browse[3].minPrice = 200
 Stub.ah.browse[1].minPrice = 200
 Stub.ah.keyInfo["9775:584"] = { itemName = "Bandit Cinch of the Monkey", quality = 2 }
 GoldbookScanButton.scripts.OnClick(GoldbookScanButton, "LeftButton")
 Stub.advance(5)
-eq(GoldbookDB.prices["Faramon-Horde"]["2589"], "200,42,0,1760000005,0,0;200;", "a later scan the same day replaces the price")
+eq(GoldbookDB.prices["Faramon-Horde"]["2589"], "200,42,0,1760000005,0,0;110;", "a later, dearer scan the same day takes the price and keeps the day's lowest")
 eq(GoldbookDB.items["9775:584"], "2|Bandit Cinch of the Monkey", "a quick scan names a variant by its item key, over the base name stored before")
 
 local cloth = "|cffffffff|Hitem:2589::::::::60:::::|h[Linen Cloth]|h|r"
@@ -539,10 +646,10 @@ eq(#GoldbookDB.scans, 3, "refused scan queues nothing")
 
 GoldbookScanButton.scripts.OnClick(GoldbookScanButton, "LeftButton")
 Stub.advance(0.15)
-eq(GoldbookScanButton.text, "2 items", "button shows the progress")
+eq(GoldbookScanButton.label.text, "2 items", "button shows the progress")
 GoldbookScanButton.scripts.OnClick(GoldbookScanButton, "LeftButton")
 eq(lastPrint(), "Goldbook Cannot scan: a scan is already running.", "a second start is refused")
-eq(Scanner.state .. " " .. GoldbookScanButton.text, "scanning 2 items", "a refused start leaves the running scan alone")
+eq(Scanner.state .. " " .. GoldbookScanButton.label.text, "scanning 2 items", "a refused start leaves the running scan alone")
 Stub.fire("AUCTION_HOUSE_CLOSED")
 eq(lastPrint(), "Goldbook Scan stopped: the auction house was closed.", "closing the auction house stops the scan")
 Stub.advance(120)
@@ -592,19 +699,24 @@ Stub.ah.browse = listed
 GameTooltip.lines, GameTooltip.itemLink = {}, cloth
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")),
-  "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 0c /   Market value = 1s 5c /   Post at = 99c /   Vendor = 13c /   Alt+click: price history",
+  "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 00c /   Market value = 1s 05c /   Post at = 99c /   Vendor = 13c /   Alt+click: price history",
   "tooltip lines")
+GoldbookDB.fromServer["Faramon-Horde"] = { ["2589"] = 1760000016 }
+GameTooltip.lines = {}
+Stub.tooltipCalls[1](GameTooltip)
+eq(plain(GameTooltip.lines[2]), "Goldbook = 100 listed, seen 3m ago, from the server", "the tooltip says a price came from the server")
+GoldbookDB.fromServer["Faramon-Horde"] = nil
 
 Stub.shift, GameTooltip.owner, GameTooltip.lines = true, { count = 20 }, {}
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")),
-  "  / Goldbook x20 = 100 listed, seen 3m ago /   Min buyout = 20s 0c /   Market value = 21s 0c /   Post at = 19s 80c /   Vendor = 2s 60c /   Alt+click: price history",
+  "  / Goldbook x20 = 100 listed, seen 3m ago /   Min buyout = 20s 00c /   Market value = 21s 00c /   Post at = 19s 80c /   Vendor = 2s 60c /   Alt+click: price history",
   "tooltip prices the stack while Shift is held")
 Stub.shift, GameTooltip.owner = false, nil
 
 GameTooltip.lines, GameTooltip.itemLink = {}, "|Hitem:7070::::::|h[Elemental Water]|h"
 Stub.tooltipCalls[1](GameTooltip)
-eq(plain(GameTooltip.lines[#GameTooltip.lines - 1]), "  Deal: a vendor pays 4s 0c, profit 1s 98c on 3 units", "tooltip points out a deal")
+eq(plain(GameTooltip.lines[#GameTooltip.lines - 1]), "  Deal: a vendor pays 4s 00c, profit 1s 98c on 3 units", "tooltip points out a deal")
 
 GameTooltip.lines, GameTooltip.itemLink = {}, "|Hitem:4306::::::|h[Silk Cloth]|h"
 Stub.tooltipCalls[1](GameTooltip)
@@ -614,7 +726,7 @@ ns.db.merchant[2589], ns.db.vendorPaid[2589] = 50, 10
 GameTooltip.lines, GameTooltip.itemLink = {}, cloth
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")),
-  "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 0c /   Market value = 1s 5c /   Vendor = 10c /   Merchant sells = 50c /   Alt+click: price history",
+  "  / Goldbook = 100 listed, seen 3m ago /   Min buyout = 1s 00c /   Market value = 1s 05c /   Vendor = 10c /   Merchant sells = 50c /   Alt+click: price history",
   "tooltip of what merchants sell shows their price, what a vendor paid, and no price to post at")
 ns.db.merchant[2589], ns.db.vendorPaid[2589] = nil, nil
 GameTooltip.lines, GameTooltip.itemLink = {}, "|Hitem:3857::::::|h[Coal]|h"
@@ -623,10 +735,13 @@ Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")), "  / Goldbook =  /   Vendor = 1s 25c /   Sold by merchants", "tooltip of known merchant goods says so without a price")
 Stub.items[3857] = nil
 
+-- The text of the row's cells the view uses.
 local function cells(index)
   local texts = {}
-  for column, cell in ipairs(GoldbookWindow.rows[index].cells) do
-    texts[column] = plain(cell.text)
+  for _, cell in ipairs(GoldbookWindow.rows[index].cells) do
+    if cell.shown then
+      texts[#texts + 1] = plain(cell.text)
+    end
   end
   return table.concat(texts, " | ")
 end
@@ -635,7 +750,7 @@ end
 local function selectedTabs()
   local names = {}
   for name, tab in pairs(GoldbookWindow.tabs) do
-    if rawget(tab, "highlighted") then
+    if tab.selected.shown then
       names[#names + 1] = name
     end
     if rawget(tab, "enabled") == false then
@@ -646,27 +761,76 @@ local function selectedTabs()
   return table.concat(names, " ")
 end
 
--- The days the chart marks, as day@height in the plot, and the days a line
--- reaches from the day before.
+-- The chart's points, as point@height of the first line in the plot, the
+-- segments that line draws, and the lines with a dot on their latest point.
 local function plotted()
-  local marks, lines = {}, {}
-  for index, day in ipairs(GoldbookWindow.chart.days) do
-    if day.marker.shown then
-      marks[#marks + 1] = index .. "@" .. math.floor(day.marker.point[5] + 0.5)
+  local chart, marks, lines, dots = GoldbookWindow.chart, {}, {}, {}
+  for index, hit in ipairs(chart.hits) do
+    if hit.shown then
+      marks[#marks + 1] = index .. "@" .. math.floor(hit.ys[1] + 0.5)
     end
-    if day.line.shown then
+  end
+  for index, segment in ipairs(chart.lines[1].segments) do
+    if segment.shown then
       lines[#lines + 1] = index
     end
   end
-  return marks, lines
+  for index, line in ipairs(chart.lines) do
+    if line.dot.shown then
+      dots[#dots + 1] = index
+    end
+  end
+  return marks, lines, dots
+end
+
+-- What hovering a point shows.
+local function hoverPoint(index)
+  GameTooltip.lines = {}
+  local hit = GoldbookWindow.chart.hits[index]
+  hit.scripts.OnEnter(hit)
+  return plain(table.concat(GameTooltip.lines, " / "))
+end
+
+-- The cards above the list, as "KEY value detail".
+local function cards()
+  local texts = {}
+  for index, card in ipairs(GoldbookWindow.cards.cards) do
+    texts[index] = plain(card.key.text .. " " .. card.value.text .. " " .. card.detail.text)
+  end
+  return table.concat(texts, " / ")
+end
+
+-- The title line: its title, figure, text after them and tags.
+local function head()
+  local window = GoldbookWindow.head
+  local parts = { window.title.text, window.figure.text, window.sub.text }
+  for _, tag in ipairs(window.tags) do
+    if tag.shown then
+      parts[#parts + 1] = tag.label.text
+    end
+  end
+  return plain(table.concat(parts, " | "))
+end
+
+-- The segmented control's choices, the picked one in brackets.
+local function segments()
+  local texts = {}
+  for _, button in ipairs(GoldbookWindow.segments.buttons) do
+    if button.shown then
+      texts[#texts + 1] = button.picked.shown and ("[" .. plain(button.label.text) .. "]") or plain(button.label.text)
+    end
+  end
+  return table.concat(texts, " ")
 end
 
 SlashCmdList.GOLDBOOK("show cloth")
 eq(GoldbookWindow.shown, true, "window opens")
-eq(cells(1), "Linen Cloth | 1s 0c | 1s 5c | 100 | 3m ago", "price list shows the match")
+eq(cells(1), "Linen Cloth | 1s 00c | 1s 05c | 100 | 3m ago", "price list shows the match")
 eq(cells(2), " |  |  |  | ", "price list shows only matches")
 eq(GoldbookWindow.rows[2].hit.shown, false, "empty rows cannot be clicked")
-eq(GoldbookWindow.status.text, "1 item on Faramon-Horde", "price list status")
+eq(head(), "Prices |  | 1 item on Faramon-Horde", "the price list's title counts its items")
+eq(GoldbookWindow.status.text, "Click an item to search the auction house · Alt+click for its history", "price list status")
+eq(GoldbookWindow.rows[1].spark.shown, true, "the price list draws the last 7 days of each item")
 eq(selectedTabs(), "prices", "the open view's tab is drawn selected and every tab stays clickable")
 eq(GoldbookWindow.search.hint.shown, false, "a search box with text shows no hint")
 eq(GoldbookWindow.scroll.shown, false, "a list that fits has no scroll marker")
@@ -680,18 +844,19 @@ C_Item.GetItemIconByID = function(itemID)
   return itemID == 2589 and 132889 or nil
 end
 SlashCmdList.GOLDBOOK("show cloth")
-eq(GoldbookWindow.rows[1].cells[1].text, "|T132889:14|t |cffffffffLinen Cloth|r", "an item's name follows its icon")
+eq(GoldbookWindow.rows[1].icon.texture .. " " .. GoldbookWindow.rows[1].cells[1].text, "132889 |cfff3eee4Linen Cloth|r",
+  "an item's icon comes before its name, in its quality's colour in the dark window")
 C_Item.GetItemIconByID = nil
 GetItemIcon = function()
   return 134400
 end
 SlashCmdList.GOLDBOOK("show cloth")
-eq(GoldbookWindow.rows[1].cells[1].text, "|T134400:14|t |cffffffffLinen Cloth|r", "a client without C_Item.GetItemIconByID asks GetItemIcon")
+eq(GoldbookWindow.rows[1].icon.texture, 134400, "a client without C_Item.GetItemIconByID asks GetItemIcon")
 GetItemIcon = nil
 
 GoldbookWindow.tabs.deals.scripts.OnClick()
 eq(GoldbookWindow.search.text, "cloth", "switching views keeps the search text")
-eq(GoldbookWindow.status.text, "0 deals in the scan of 3m ago. Click one to search for it.", "deals are filtered by the search text")
+eq(head(), "Deals |  | 0 in the scan of 3m ago", "deals are filtered by the search text")
 eq(selectedTabs(), "deals", "the selection follows the tab clicked")
 SlashCmdList.GOLDBOOK("deals")
 eq(GoldbookWindow.search.text, "", "/gb deals without text clears the search")
@@ -700,13 +865,14 @@ GoldbookWindow.search.scripts.OnEditFocusGained(GoldbookWindow.search)
 eq(GoldbookWindow.search.hint.shown, false, "the hint goes when the box is clicked into")
 GoldbookWindow.search.scripts.OnEditFocusLost(GoldbookWindow.search)
 eq(GoldbookWindow.search.hint.shown, true, "the hint comes back when the box is left empty")
-eq(GoldbookWindow.headers[2].text, "Buy from", "deals view has its own columns")
-eq(cells(1), "Elemental Water x3 | 3s 34c | 4s 0c | 1s 98c | Vendor?", "deals view lists the vendor deal with its units and total profit")
-eq(GoldbookWindow.status.text, "1 deal in the scan of 3m ago. Click one to search for it. Vendor? prices are unconfirmed.",
+eq(GoldbookWindow.headers[2].text .. " / " .. GoldbookWindow.headers[5].text, "BUY FROM / PROFIT ↓", "deals view has its own columns, most profit first")
+eq(cells(1), "Elemental Water x3 | 3s 34c | 4s 00c | 1s 98c | Vendor?", "deals view lists the vendor deal with its units and total profit")
+eq(GoldbookWindow.status.text, "Click a deal to search for it · Vendor? prices are unconfirmed",
   "deals status says the item's own vendor price is not confirmed")
+eq(segments(), "Min profit [10s 00c]", "deals show the profit a resale deal must make")
 GoldbookDB.vendorPaid[7070] = 400
 SlashCmdList.GOLDBOOK("deals")
-eq(cells(1) .. " / " .. GoldbookWindow.status.text, "Elemental Water x3 | 3s 34c | 4s 0c | 1s 98c | Vendor / 1 deal in the scan of 3m ago. Click one to search for it.",
+eq(cells(1) .. " / " .. GoldbookWindow.status.text, "Elemental Water x3 | 3s 34c | 4s 00c | 1s 98c | Vendor / Click a deal to search for it",
   "a vendor price seen paid is confirmed")
 GoldbookDB.vendorPaid[7070] = nil
 SlashCmdList.GOLDBOOK("deals")
@@ -718,10 +884,10 @@ local function tooltipAnchor()
   local tipPoint, owner, ownerPoint, tipX, tipY = unpack(GameTooltip.point)
   return ("%s %s %s %d %d"):format(tipPoint, tostring(owner == firstRow), ownerPoint, tipX, tipY)
 end
-eq(tooltipAnchor(), "TOPLEFT true TOPRIGHT 19 0", "a row's tooltip sits beside the window, level with the row")
+eq(tooltipAnchor(), "TOPLEFT true TOPRIGHT 16 0", "a row's tooltip sits beside the window, level with the row")
 GoldbookWindow.right, UIParent.right, GameTooltip.width = 1100, 1280, 300
 firstRow.scripts.OnEnter(firstRow)
-eq(tooltipAnchor(), "TOPRIGHT true TOPLEFT -14 0", "it moves to the window's left when the screen ends first")
+eq(tooltipAnchor(), "TOPRIGHT true TOPLEFT -165 0", "it moves to the window's left when the screen ends first")
 GoldbookWindow.right, UIParent.right, GameTooltip.width = nil, nil, nil
 firstRow.scripts.OnClick(firstRow)
 eq(AuctionHouseFrame.SearchBar.searchText .. " " .. AuctionHouseFrame.SearchBar.searches, "Elemental Water 1", "clicking a row searches the auction house")
@@ -732,7 +898,8 @@ AuctionHouseFrame.shown = true
 
 SlashCmdList.GOLDBOOK("minprofit 2.5")
 eq(GoldbookDB.settings.minProfit, 25000, "/gb minprofit takes gold")
-eq(lastPrint(), "Goldbook Resale deals must make at least 2g 50s 0c. Change it with /gb minprofit <gold>.", "/gb minprofit confirms")
+eq(lastPrint(), "Goldbook Resale deals must make at least 2g 50s 00c. Change it with /gb minprofit <gold>.", "/gb minprofit confirms")
+eq(segments(), "Min profit [2g 50s 00c]", "the deals view shows the new minimum at once")
 
 Stub.bags[0] = {
   slots = 5,
@@ -744,37 +911,42 @@ Stub.bags[0] = {
 Stub.bags[1] = { slots = 1, { hyperlink = "|Hitem:4306::::::|h[Silk Cloth]|h", stackCount = 2 } }
 GoldbookWindow.tabs.sell.scripts.OnClick()
 eq(cells(1), "Linen Cloth x25 | 99c | 13c | 23s 50c | Auction", "sell view undercuts the lowest listing")
-eq(cells(2), "Elemental Water x3 |  | 4s 0c | 12s 0c | Vendor", "sell view vendors what lists under vendor price")
-eq(cells(3), "Silk Cloth x2 |  | 1s 50c | 3s 0c | Vendor", "sell view vendors what has no auction price")
+eq(cells(2), "Elemental Water x3 |  | 4s 00c | 12s 00c | Vendor", "sell view vendors what lists under vendor price")
+eq(cells(3), "Silk Cloth x2 |  | 1s 50c | 3s 00c | Vendor", "sell view vendors what has no auction price")
 eq(cells(4), " |  |  |  | ", "sell view skips bound items")
-eq(plain(GoldbookWindow.status.text), "3 items worth 38s 50c after the auction house cut", "sell view totals the bags")
+eq(head() .. " / " .. plain(GoldbookWindow.head.aside.text), "Sell |  | 3 items in your bags / Worth 38s 50c after the cut", "sell view totals the bags")
 
 Stub.money = 1250000
 Stub.fire("PLAYER_MONEY")
 SlashCmdList.GOLDBOOK("gold")
-eq(cells(1), "Sultan-Faramon | 125g 0s 0c | +25g 0s 0c | +25g 0s 0c | today", "gold view shows the character and what it earned")
+eq(cells(1), "Sultan | 125g 00s 00c | +25g 00s 00c | today", "gold view shows the character and what it earned")
 eq(GoldbookWindow.rows[1].hit.shown, false, "gold rows are not items")
-eq(plain(GoldbookWindow.chart.summary.text), "Total 125g 0s 0c   Today +25g 0s 0c (+25.0%)   7 days +25g 0s 0c   30 days +25g 0s 0c", "gold view states the account")
-eq(plain(GoldbookWindow.chart.detail.text), "High 125g 0s 0c   Best day +25g 0s 0c   Bags 38s 50c   Net worth 125g 38s 50c", "gold view adds the bags to the net worth")
-eq(GoldbookWindow.chart.caption.text, "Total gold over the last 30 days", "the gold caption names the line; the axis labels give its range")
-eq(GoldbookWindow.rows[1].cells[3].text, "|cff20ff20+25|r|cffffd700g|r|cff20ff20 0|r|cffc7c7cfs|r|cff20ff20 0|r|cffeda55fc|r",
-  "a gain is green between the coloured money units")
-eq(GoldbookWindow.chart.summary.text:match("Today (.-)   7 days"),
-  "|cff20ff20+25|r|cffffd700g|r|cff20ff20 0|r|cffc7c7cfs|r|cff20ff20 0|r|cffeda55fc|r (|cff20ff20+25.0%|r)",
-  "the gold summary colours today's change and its percent")
-eq(GoldbookWindow.chart.header.shown, false, "the gold summary is not an item to hover")
-local marks, lines = plotted()
-eq(#marks .. " " .. #lines .. " " .. marks[1] .. " " .. marks[29] .. " " .. marks[30], "30 29 1@5 29@5 30@85",
-  "the gold line has a marker per day, from the lowest total at the bottom to the highest at the top")
-local lastLine = GoldbookWindow.chart.days[30].line
-eq(("%d,%d -> %d,%d"):format(lastLine.startPoint[3] + 0.5, lastLine.startPoint[4], lastLine.endPoint[3] + 0.5, lastLine.endPoint[4]),
-  "558,5 -> 577,85", "a line joins each day to the day before")
-eq(GoldbookWindow.chart.days[30].marker.width .. " " .. GoldbookWindow.chart.days[29].marker.width, "9 5", "the newest day has the larger marker")
-eq(plain(GoldbookWindow.chart.high.text) .. " / " .. plain(GoldbookWindow.chart.low.text), "125g 0s 0c / 100g 0s 0c",
-  "the axis labels give the high and the low")
-GameTooltip.lines = {}
-GoldbookWindow.chart.days[30].hit.scripts.OnEnter(GoldbookWindow.chart.days[30].hit)
-eq(plain(table.concat(GameTooltip.lines, " / ")), "Thu 09 Oct / Total 125g 0s 0c", "hovering a gold day gives its day and total")
+eq(cards(), "TOTAL GOLD 125g 00s 00c High 125g 00s 00c / TODAY +25g 00s 00c +25.0% since yesterday"
+  .. " / 30 DAYS +25g 00s 00c 7 days +25g 00s 00c / NET WORTH 125g 38s 50c Bags 38s 50c", "gold view states the account, adding the bags to the net worth")
+eq(GoldbookWindow.rows[1].cells[3].text, "|cff5fd35a+25|r|cffffd34dg|r|cff5fd35a 00|r|cffc7c7cfs|r|cff5fd35a 00|r|cffeda55fc|r",
+  "a gain is green between the money units, in the dark window's colours")
+eq(GoldbookWindow.head.link.shown, false, "the gold title is not an item to hover")
+eq(segments(), "1W [1M] 2M", "the gold chart starts on a month")
+eq(plain(GoldbookWindow.side.lines[1].key.text .. " " .. GoldbookWindow.side.lines[1].value.text .. " / "
+  .. GoldbookWindow.side.lines[5].key.text .. " " .. GoldbookWindow.side.lines[5].value.text), "Sold, after the cut 0c / Best sale –",
+  "the month's trades sit beside the characters")
+local marks, lines, dots = plotted()
+eq(#marks .. " " .. #lines .. " " .. table.concat(dots, " ") .. " " .. marks[1] .. " " .. marks[29] .. " " .. marks[30], "30 29 1 1@0 29@0 30@127",
+  "the gold line has a point per day, from the bottom of the axis to the highest total, and a dot on today's")
+local lastLine = GoldbookWindow.chart.lines[1].segments[29]
+eq(("%.0f,%.0f -> %.0f,%.0f"):format(lastLine.startPoint[3], lastLine.startPoint[4], lastLine.endPoint[3], lastLine.endPoint[4]),
+  "544,0 -> 563,127", "a line joins each day to the day before")
+eq(plain(GoldbookWindow.chart.grid[1].label.text) .. " / " .. plain(GoldbookWindow.chart.grid[4].label.text) .. " " .. tostring(GoldbookWindow.chart.grid[5].label.shown),
+  "100g / 130g false", "the axis runs in round steps from below the lowest total to above the highest")
+GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
+marks = plotted()
+eq(segments() .. " " .. #marks, "[1W] 1M 2M 7", "1W charts the last 7 days")
+GoldbookWindow.segments.buttons[3].scripts.OnClick(GoldbookWindow.segments.buttons[3])
+marks = plotted()
+eq(segments() .. " " .. #marks, "1W 1M [2M] 60", "2M charts the 60 days the ledger keeps")
+GoldbookWindow.segments.buttons[2].scripts.OnClick(GoldbookWindow.segments.buttons[2])
+eq(hoverPoint(30), "Thu 09 Oct / Total = 125g 00s 00c", "hovering a gold day gives its day and total")
+eq(GoldbookWindow.chart.legend[1].label.shown, false, "a chart of one line needs no legend")
 
 Stub.advance(0.2)
 Stub.money = 1260000
@@ -782,10 +954,11 @@ local timers = #Stub.timers
 for _ = 1, 10 do
   Stub.fire("PLAYER_MONEY")
 end
-eq(cells(1), "Sultan-Faramon | 125g 0s 0c | +25g 0s 0c | +25g 0s 0c | today", "the window is not redrawn on the spot for each gold change")
+eq(cells(1), "Sultan | 125g 00s 00c | +25g 00s 00c | today", "the window is not redrawn on the spot for each gold change")
 eq(#Stub.timers - timers, 1, "ten gold changes in a row queue one redraw")
 Stub.advance(0.2)
-eq(cells(1), "Sultan-Faramon | 126g 0s 0c | +26g 0s 0c | +26g 0s 0c | today", "the redraw a moment later shows the new balance")
+eq(cells(1), "Sultan | 126g 00s 00c | +26g 00s 00c | today", "the redraw a moment later shows the new balance")
+eq(plain(GoldbookWindow.purse.text), "126g 00s 00c", "the title bar shows the account's gold")
 
 Stub.items[5000] = { name = "Rough Stone", quality = 1, vendor = 2, cached = false }
 Stub.bags[1][2] = { hyperlink = "|Hitem:5000::::::|h[Rough Stone]|h", stackCount = 4 }
@@ -797,20 +970,26 @@ eq(cells(4), "Rough Stone x4 |  | 2c | 8c | Vendor", "the name and vendor price 
 Stub.bags[1][3] = { stackCount = 1 }
 Stub.bags[1].slots = 3
 GoldbookWindow.tabs.sell.scripts.OnClick()
-eq(plain(GoldbookWindow.status.text), "4 items worth 38s 58c after the auction house cut", "a bag slot whose item has no link yet is left out")
+eq(plain(GoldbookWindow.head.aside.text), "Worth 38s 58c after the cut", "a bag slot whose item has no link yet is left out")
 
 SlashCmdList.GOLDBOOK("movers")
 eq(GoldbookWindow.chart.shown, false, "the chart belongs to the gold view")
-eq(GoldbookWindow.headers[4].text, "Change", "movers view has its own columns")
-eq(GoldbookWindow.status.text, "0 prices moved since the day before. Top gains first; click Change for the losses.", "movers need a second day of prices")
+eq(GoldbookWindow.headers[5].text .. " / " .. segments(), "CHANGE ↓ / [Risers] Fallers", "movers list the risers first, biggest rise first")
+eq(head(), "Movers |  | 0 prices rose since the day before", "movers need a second day of prices")
+GoldbookWindow.segments.buttons[2].scripts.OnClick(GoldbookWindow.segments.buttons[2])
+eq(GoldbookWindow.headers[5].text .. " / " .. segments() .. " / " .. head(), "CHANGE ↑ / Risers [Fallers] / Movers |  | 0 prices fell since the day before",
+  "Fallers lists the prices that fell, biggest fall first")
+GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
 
 SlashCmdList.GOLDBOOK("show")
-eq(cells(1), "Bandit Cinch of the Monkey | 3g 0s 0c | 3g 0s 0c | 1 | 3m ago", "price list starts in name order")
-GoldbookWindow.headerButtons[4].scripts.OnClick()
-eq(GoldbookWindow.headers[4].text, "Listed v", "a header click sorts by that column, largest first")
+eq(GoldbookWindow.headers[1].text .. " " .. cells(1), "ITEM ↑ Bandit Cinch of the Monkey | 3g 00s 00c | 3g 00s 00c | 1 | 3m ago", "price list starts in name order")
+GoldbookWindow.headerButtons[5].scripts.OnClick()
+eq(GoldbookWindow.headers[5].text, "LISTED ↓", "a header click sorts by that column, largest first")
 eq(cells(1):match("^[^|]+"), "Linen Cloth ", "sorted by quantity the most listed item leads")
-GoldbookWindow.headerButtons[4].scripts.OnClick()
-eq(GoldbookWindow.headers[4].text .. " " .. cells(1):match("^[^|]+"), "Listed ^ Bandit Cinch of the Monkey ", "a second click reverses the order")
+GoldbookWindow.headerButtons[5].scripts.OnClick()
+eq(GoldbookWindow.headers[5].text .. " " .. cells(1):match("^[^|]+"), "LISTED ↑ Bandit Cinch of the Monkey ", "a second click reverses the order")
+eq(GoldbookWindow.headerButtons[4].shown, false, "the 7 day column does not sort")
+GoldbookWindow.headerButtons[1].scripts.OnClick()
 
 SlashCmdList.GOLDBOOK("autoscan")
 eq(lastPrint(), "Goldbook Quick scan when the auction house opens: on.", "/gb autoscan turns it on")
@@ -829,17 +1008,22 @@ eq(GoldbookDB.settings.autoScan, nil, "/gb autoscan turns it off again")
 Stub.alt = true
 HandleModifiedItemClick(Stub.bags[0][1].hyperlink)
 eq(GoldbookWindow.shown, true, "Alt+click on a bag item opens the window")
-eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[5].text, "Day Change", "Alt+click shows the item's price history")
-eq(cells(1), "Thu 09 Oct | 1s 0c | 1s 5c | 100 | ", "the newest day comes first")
+eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[5].text, "DAY ↓ CHANGE", "Alt+click shows the item's price history")
+eq(cells(1), "Thu 09 Oct | 1s 00c | 1s 05c | 100 | ", "the newest day comes first")
 eq(cells(2), " |  |  |  | ", "one row per day the item was seen")
-eq(plain(GoldbookWindow.status.text), "1 day recorded for Linen Cloth. Alt+click any item for its history.", "item view status")
-eq(plain(GoldbookWindow.chart.summary.text), "Linen Cloth   1s 0c", "item chart names the item and its price")
+eq(plain(GoldbookWindow.status.text), "1 day recorded for Linen Cloth · Shift+click its name to link it in chat", "item view status")
+eq(head(), "Linen Cloth | 1s 00c | ", "the item view's title names the item and its price")
+GoldbookDB.fromServer["Faramon-Horde"] = { ["2589"] = 1760000016 }
+ns.UI.Refresh()
+eq(plain(GoldbookWindow.cards.cards[3].detail.text), "From the server, 18m ago", "the item view says a price came from the server")
+GoldbookDB.fromServer["Faramon-Horde"] = nil
+ns.UI.Refresh()
 eq(selectedTabs(), "", "the item view has no tab to mark")
 eq(GoldbookWindow.scroll.shown, false, "one day needs no scroll marker")
-marks, lines = plotted()
-eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " "), "30@85 | ", "a single price is one marker at the top, without a line")
-eq(plain(GoldbookWindow.chart.high.text) .. " / " .. GoldbookWindow.chart.low.text, "1s 0c / ", "a single price has one axis label")
-local header = GoldbookWindow.chart.header
+marks, lines, dots = plotted()
+eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " ") .. " | " .. table.concat(dots, " "), "1@0 |  | 1 2",
+  "a single day is a dot for its price and one for its market value, without lines")
+local header = GoldbookWindow.head.link
 header.scripts.OnEnter(header)
 eq(GameTooltip.hyperlink .. " " .. tostring(GameTooltip.point[2] == header), "item:2589:0:0:0:0:0:0 true",
   "hovering the item's name shows its tooltip")
@@ -860,12 +1044,12 @@ ChatEdit_InsertLink = nil
 SlashCmdList.GOLDBOOK("show")
 Stub.shift = true
 HandleModifiedItemClick(cloth)
-eq(GoldbookWindow.headers[1].text, "Item", "Shift+Alt+click leaves the window alone")
+eq(GoldbookWindow.headers[1].text, "ITEM ↑", "Shift+Alt+click leaves the window alone")
 Stub.shift = false
 options.checks.altClick.checked = false
 options.checks.altClick.scripts.OnClick(options.checks.altClick)
 HandleModifiedItemClick(cloth)
-eq(GoldbookWindow.headers[1].text, "Item", "Alt+click does nothing when turned off")
+eq(GoldbookWindow.headers[1].text, "ITEM ↑", "Alt+click does nothing when turned off")
 GameTooltip.lines, GameTooltip.itemLink = {}, cloth
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(GameTooltip.lines[#GameTooltip.lines]), "  Vendor = 13c", "the tooltip drops the Alt+click hint when it is off")
@@ -874,19 +1058,47 @@ options.checks.altClick.scripts.OnClick(options.checks.altClick)
 eq(GoldbookDB.settings.altClick, true, "Alt+click turned on again")
 
 GoldbookWindow.rows[1].hit.scripts.OnClick(GoldbookWindow.rows[1].hit)
-eq(GoldbookWindow.headers[1].text .. " " .. AuctionHouseFrame.SearchBar.searches, "Day 1", "Alt+click on a row opens its history instead of searching")
+eq(GoldbookWindow.headers[1].text .. " " .. AuctionHouseFrame.SearchBar.searches, "DAY ↓ 1", "Alt+click on a row opens its history instead of searching")
 Stub.alt = false
 GoldbookWindow.search.text = "silk"
 GoldbookWindow.search.scripts.OnTextChanged(GoldbookWindow.search, true)
-eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.status.text, "Item 0 items on Faramon-Horde", "typing a search leaves the item view for the price list")
+eq(GoldbookWindow.headers[1].text .. " " .. head(), "ITEM ↑ Prices |  | 0 items on Faramon-Horde", "typing a search leaves the item view for the price list")
+
+for index = 1, 30 do
+  GoldbookDB.items["900" .. index] = "1|Test Ore " .. index
+  GoldbookDB.prices["Faramon-Horde"]["900" .. index] = ("%d,%d,1,1760000016,0,0;%d;"):format(100 + index, index, 100 + index)
+end
+SlashCmdList.GOLDBOOK("show test ore")
+GoldbookWindow.headerButtons[5].scripts.OnClick()
+GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -1)
+local before = GoldbookWindow.headers[5].text .. " / " .. plain(GoldbookWindow.status.text):match("^(.-) ·") .. " / " .. cells(1)
+Stub.alt = true
+GoldbookWindow.rows[2].hit.scripts.OnClick(GoldbookWindow.rows[2].hit)
+Stub.alt = false
+eq(GoldbookWindow.head.back.shown and GoldbookWindow.head.back.label.text .. " / " .. head(), "Back to Prices / Test Ore 26 | 1s 26c | ",
+  "the item view offers a way back to the list it was opened from")
+GoldbookWindow.head.back.scripts.OnClick(GoldbookWindow.head.back)
+eq(GoldbookWindow.search.text .. " / " .. GoldbookWindow.headers[5].text .. " / " .. plain(GoldbookWindow.status.text):match("^(.-) ·") .. " / " .. cells(1),
+  "test ore / " .. before, "Back returns to the same list, search, sort and scroll")
+eq(before, "LISTED ↓ / 4–22 of 30 / Test Ore 27 | 1s 27c |  | 27 | 18m ago", "the list was sorted and scrolled before the item opened")
+eq(GoldbookWindow.head.back.shown, false, "the list has no Back button")
+GoldbookWindow:Hide()
+ns.UI.ShowItem("9001")
+eq(GoldbookWindow.head.back.label.text, "Back to Prices", "an item opened with the window closed goes back to the price list")
+GoldbookWindow.head.back.scripts.OnClick(GoldbookWindow.head.back)
+eq(head(), "Prices |  | 30 items on Faramon-Horde", "and Back goes there")
+for index = 1, 30 do
+  GoldbookDB.items["900" .. index], GoldbookDB.prices["Faramon-Horde"]["900" .. index] = nil, nil
+end
+GoldbookWindow.search:SetText("")
 
 GoldbookDB.items["2996"] = "1|Bolt of Linen Cloth"
 GoldbookDB.prices["Faramon-Horde"]["2996"] = "500,3,0,1760000016,0,0;500;"
 GoldbookDB.history["Faramon-Horde"]["2996"] = "20370:500:3:0"
 SlashCmdList.GOLDBOOK("item linen CLOTH")
-eq(cells(1), "Thu 09 Oct | 1s 0c | 1s 5c | 100 | ", "/gb item prefers the item named exactly that")
+eq(cells(1), "Thu 09 Oct | 1s 00c | 1s 05c | 100 | ", "/gb item prefers the item named exactly that")
 SlashCmdList.GOLDBOOK("item linen")
-eq(cells(1), "Thu 09 Oct | 5s 0c |  | 3 | ", "/gb item otherwise takes the first name containing the text")
+eq(cells(1), "Thu 09 Oct | 5s 00c |  | 3 | ", "/gb item otherwise takes the first name containing the text")
 SlashCmdList.GOLDBOOK("item nothing like it")
 eq(lastPrint(), "Goldbook No item priced on Faramon-Horde matches \"nothing like it\". Type /gb item <link or name>.", "/gb item says when nothing matches")
 
@@ -897,37 +1109,36 @@ GoldbookDB.history["Faramon-Horde"]["727:14322"] = "20361:2000:4:0,20362:2100:4:
 GameTooltip.lines, GameTooltip.itemLink = {}, bonusLink
 Stub.tooltipCalls[1](GameTooltip)
 eq(plain(table.concat(GameTooltip.lines, " / ")),
-  "  / Goldbook = 2 listed, seen 18m ago /   Min buyout = 26s 0c /   Usual over 3 days = 25s 0c /   Post at = 25s 99c /   Alt+click: price history",
+  "  / Goldbook = 2 listed, seen 18m ago /   Min buyout = 26s 00c /   Usual over 3 days = 25s 00c /   Post at = 25s 99c /   Alt+click: price history",
   "the tooltip finds a variant by the suffix among its bonus ids")
 Stub.alt = true
 HandleModifiedItemClick(bonusLink)
 Stub.alt = false
-eq(plain(GoldbookWindow.status.text), "1-8 of 10 days recorded for Notched Shortsword of Healing. Alt+click any item for its history.",
+eq(plain(GoldbookWindow.status.text), "1–6 of 10 · 10 days recorded for Notched Shortsword of Healing · Shift+click its name to link it in chat",
   "Alt+click finds a variant by the suffix among its bonus ids; the status says which days show")
-eq(cells(1), "Thu 09 Oct | 26s 0c |  | 2 | +4.0%", "the change from the day before")
-eq(cells(8), "Thu 02 Oct | 22s 0c |  | 4 | +4.8%", "a view with a chart lists 8 rows")
-eq(cells(9), " |  |  |  | ", "rows under the chart stay empty")
+eq(cells(1), "Thu 09 Oct | 26s 00c |  | 2 | +4.0%", "the change from the day before")
+eq(cells(6), "Sat 04 Oct | 24s 00c |  | 4 | +4.3%", "the item view's chart and cards leave room for 6 rows")
+eq(cells(7), " |  |  |  | ", "rows under the chart stay empty")
 eq(GoldbookWindow.rows[1].cells[5].text .. " " .. GoldbookWindow.rows[3].cells[5].text .. " " .. GoldbookWindow.rows[4].cells[5].text,
-  "|cff20ff20+4.0%|r 0.0% |cffff2020-4.0%|r", "a gain is green, a loss red, no change plain")
-eq(tostring(GoldbookWindow.rows[1].stripe.shown) .. " " .. tostring(GoldbookWindow.rows[2].stripe.shown) .. " " .. tostring(GoldbookWindow.rows[10].stripe.shown),
-  "false true false", "every other filled row is striped")
+  "|cff5fd35a+4.0%|r 0.0% |cffff6d5a-4.0%|r", "a gain is green, a loss red, no change plain")
+eq(tostring(GoldbookWindow.rows[1].rule.shown) .. " " .. tostring(GoldbookWindow.rows[6].rule.shown) .. " " .. tostring(GoldbookWindow.rows[7].rule.shown),
+  "true true false", "every filled row is ruled off")
 local thumb = GoldbookWindow.scroll.thumb
 eq(("%s %.1f %.1f %s"):format(tostring(GoldbookWindow.scroll.shown), GoldbookWindow.scroll.height, thumb.height, tostring(thumb.point[5] == 0)),
-  "true 144.0 115.2 true", "the scroll marker spans the 8 rows and its thumb starts at the top")
+  "true 138.0 82.8 true", "the scroll marker spans the 6 rows and its thumb starts at the top")
 GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -1)
-eq(cells(1) .. " / " .. cells(8), "Tue 07 Oct | 24s 0c | 24s 50c | 3 | 0.0% / Tue 30 Sep | 20s 0c |  | 4 | ", "scrolling stops at the oldest day")
-eq(plain(GoldbookWindow.status.text):match("^[^.]*"), "3-10 of 10 days recorded for Notched Shortsword of Healing", "the status follows the scrolling")
-eq(("%.1f"):format(thumb.point[5]), "-28.8", "the thumb ends at the bottom with the oldest day")
-eq(plain(GoldbookWindow.chart.summary.text), "Notched Shortsword of Healing   26s 0c   1 day +4.0%   7 days +18.2%", "item chart states the price and its changes")
-eq(GoldbookWindow.chart.summary.text:match("1 day .*"), "1 day |cff20ff20+4.0%|r   7 days |cff20ff20+18.2%|r", "the item summary colours its changes")
-eq(plain(GoldbookWindow.chart.detail.text), "Usual 25s 0c   Listed 2", "item chart gives the usual price; the axis labels give the range")
-eq(GoldbookWindow.chart.caption.text, "Lowest price over the last 30 days", "the item caption names the line")
+GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -1)
+eq(cells(1) .. " / " .. cells(6), "Sun 05 Oct | 25s 00c |  | 4 | +4.2% / Tue 30 Sep | 20s 00c |  | 4 | ", "scrolling stops at the oldest day")
+eq(plain(GoldbookWindow.status.text):match("^(.-) ·"), "5–10 of 10", "the status follows the scrolling")
+eq(("%.1f"):format(thumb.point[5]), "-55.2", "the thumb ends at the bottom with the oldest day")
+eq(head(), "Notched Shortsword of Healing | 26s 00c |  | 1 day +4.0% | 7 days +18.2%", "the item's title states its price and its changes")
+eq(GoldbookWindow.head.tags[1].label.text, "|cffab9f891 day|r |cff5fd35a+4.0%|r", "the changes are coloured")
+eq(cards(), "MARKET VALUE –  / USUAL 25s 00c  / LISTED 2 Seen 18m ago / 30-DAY LOW 20s 00c High 26s 00c",
+  "the item's cards give its usual price, what is listed and its range over 30 days")
 marks, lines = plotted()
-eq(table.concat(marks, " "), "21@5 22@18 23@32 24@45 25@58 26@72 27@58 28@58 29@72 30@85",
-  "the item line runs from the lowest price at the bottom to the highest at the top")
-GameTooltip.lines = {}
-GoldbookWindow.chart.days[28].hit.scripts.OnEnter(GoldbookWindow.chart.days[28].hit)
-eq(plain(table.concat(GameTooltip.lines, " / ")), "Tue 07 Oct / Min buyout 24s 0c / Listed 3 / Market value 24s 50c", "hovering an item day gives that day's prices")
+eq(table.concat(marks, " "), "1@0 2@17 3@34 4@51 5@68 6@85 7@68 8@68 9@85 10@102",
+  "the item line runs from the lowest price at the bottom to the highest at the top, from its first day")
+eq(hoverPoint(8), "Tue 07 Oct / Min buyout = 24s 00c / Market value = 24s 50c / Listed = 3", "hovering an item day gives that day's prices and the amount listed")
 
 GoldbookDB.items["2997"] = "1|Bolt of Woolen Cloth"
 GoldbookDB.prices["Faramon-Horde"]["2997"] = "100000,1,1,1760000016,0,0;100000;"
@@ -937,18 +1148,161 @@ marks, lines = plotted()
 eq(#lines, 29, "the gold chart joins its 30 days")
 SlashCmdList.GOLDBOOK("item woolen")
 marks, lines = plotted()
-eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " "), "26@5 27@5 29@85 30@5 | 27 30",
-  "after the gold chart only this item's markers and lines show, with no line across the missing day")
-eq(cells(1) .. " / " .. cells(2), "Thu 09 Oct | 10g 0s 0c |  | 1 | 0.0% / Wed 08 Oct | 10g 0s 40c |  | 1 | 0.0%",
+eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " "), "1@0 2@0 3@102 4@0 | 1 2 3",
+  "after the gold chart only this item's points and lines show, joined across a missing day as on the web")
+eq(cells(1) .. " / " .. cells(2), "Thu 09 Oct | 10g 00s 00c |  | 1 | 0.0% / Wed 08 Oct | 10g 00s 40c |  | 1 | 0.0%",
   "a change that rounds to nothing has no sign, up or down")
-eq(GoldbookWindow.chart.summary.text:match("1 day .*"), "1 day 0.0%", "nor in the summary")
-eq(GoldbookWindow.chart.days[30].marker.width .. " " .. GoldbookWindow.chart.days[29].marker.width, "9 5", "the newest day has the larger marker")
+eq(plain(GoldbookWindow.head.tags[1].label.text), "1 day 0.0%", "nor in the title")
+local chart = GoldbookWindow.chart
+eq(("%.0f %.0f"):format(chart.hits[1].x, chart.hits[4].x), "0 563", "four days recorded span the whole plot, from the first to today")
+local legend = {}
+for _, key in ipairs(chart.legend) do
+  legend[#legend + 1] = key.label.shown and key.label.text or nil
+end
+local bars, tallest = 0, 0
+for _, bar in ipairs(chart.bars) do
+  if bar.shown then
+    bars, tallest = bars + 1, math.max(tallest, bar.height)
+  end
+end
+eq(table.concat(legend, ", ") .. " / " .. bars .. " bars, the tallest " .. tallest .. " / " .. chart.most.text,
+  "Min buyout, Market value, Listed / 4 bars, the tallest 30 / 1", "the item chart's legend names its lines and the band of amounts listed")
+eq(plain(chart.lines[1].value.text) .. " " .. tostring(chart.lines[2].value.shown) .. " / " .. segments(), "10g 00s false / 1D 1W [1M] 2M",
+  "the newest price is labelled right of the plot, and the item chart starts on a month")
+GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
+marks = plotted()
+eq(table.concat(marks, " ") .. " / " .. segments(), "1@51 / [1D] 1W 1M 2M", "1D charts the last day")
+local woolen = GoldbookDB.history["Faramon-Horde"]["2997"]
+local woolenHours = GoldbookDB.hours["Faramon-Horde"]["2997"]
+GoldbookDB.history["Faramon-Horde"]["2997"] = "20369:100040:1:0,20370:99000:3:101000"
+GoldbookDB.hours["Faramon-Horde"]["2997"] = "488880:100000:2:0,488886:99000:3:101000"
+SlashCmdList.GOLDBOOK("item woolen")
+marks = plotted()
+eq(table.concat(marks, " ") .. " / " .. hoverPoint(2),
+  "1@51 2@0 / " .. os.date("%a %d %b %H:%M", 488886 * 3600) .. " / Min buyout = 9g 90s 00c / Market value = 10g 10s 00c / Listed = 3",
+  "the last day is charted by the hour, and an hour's tooltip gives its local time")
+eq(("%.0f %.0f"):format(chart.hits[1].x, chart.hits[2].x), "401 563", "hours sit on the time axis: midnight 15 hours into the last 21, the newest scan at the right edge")
+GoldbookDB.history["Faramon-Horde"]["2997"], GoldbookDB.hours["Faramon-Horde"]["2997"] = woolen, woolenHours
+GoldbookWindow.segments.buttons[3].scripts.OnClick(GoldbookWindow.segments.buttons[3])
+
+-- Each palette's pairs keep their contrast plainly and as the client measured
+-- in client.lua draws them: text 7:1, quieter text and coloured letters 4.5:1,
+-- the chart line 3:1, and lines and bands enough to be seen.
+local Client = dofile(here .. "/client.lua")
+local function luminance(hex, transfer)
+  local total = 0
+  for index, weight in ipairs({ 0.2126, 0.7152, 0.0722 }) do
+    local value = transfer(tonumber(hex:sub(index * 2 - 1, index * 2), 16) / 255)
+    total = total + weight * (value <= 0.04045 and value / 12.92 or ((value + 0.055) / 1.055) ^ 2.4)
+  end
+  return total
+end
+local TRANSFERS = { plainly = function(value) return value end, ["in the client"] = Client.Render }
+local LEGIBLE = {
+  { "text", "panel", 7 }, { "text", "bg", 7 }, { "text", "field", 7 }, { "railText", "rail", 7 },
+  { "buttonText", "buttonBottom", 7 }, { "buttonText", "buttonTop", 7 },
+  { "muted", "panel", 4.5 }, { "muted", "bg", 4.5 }, { "muted", "rail", 4.5 }, { "muted", "field", 4.5 },
+  { "goldhi", "panel", 4.5 }, { "goldhi", "on", 4.5 }, { "goldhi", "rail", 4.5 }, { "gain", "panel", 4.5 }, { "loss", "panel", 4.5 },
+  { "coins.gold", "panel", 4.5 }, { "coins.silver", "panel", 4.5 }, { "coins.copper", "panel", 4.5 }, { "coins.gold", "bg", 4.5 },
+  { "brand", "titleBottom", 3 }, { "gold", "panel", 3 }, { "second", "panel", 3 },
+  { "edge", "panel", 1.6 }, { "edge", "bg", 1.5 }, { "line", "panel", 1.3 }, { "line", "bg", 1.3 }, { "titleBottom", "bg", 1.1 },
+}
+for quality = 0, 7 do
+  LEGIBLE[#LEGIBLE + 1] = { "quality." .. quality, "panel", 4.5 }
+end
+for _, theme in ipairs({ "light", "dark" }) do
+  local palette = ns.UI.Palettes[theme]
+  local function hex(key)
+    local group, member = key:match("^(%a+)%.(%w+)$")
+    return group and palette[group][tonumber(member) or member] or palette[key]
+  end
+  for _, pair in ipairs(LEGIBLE) do
+    for name, transfer in pairs(TRANSFERS) do
+      local a, b = luminance(hex(pair[1]), transfer), luminance(hex(pair[2]), transfer)
+      local ratio = (math.max(a, b) + 0.05) / (math.min(a, b) + 0.05)
+      eq(ratio >= pair[3], true, ("%s %s on %s %s: %.2f:1, needs %.1f:1"):format(theme, pair[1], pair[2], name, ratio, pair[3]))
+    end
+  end
+end
+
+-- In game, rail icons drawn from strokes of about 2 lost them; 4 draws.
+local shortest, strokes = math.huge, 0
+for _, tab in pairs(GoldbookWindow.tabs) do
+  for _, line in ipairs(tab.glyph) do
+    local from, to = line.startPoint, line.endPoint
+    shortest, strokes = math.min(shortest, math.sqrt((to[3] - from[3]) ^ 2 + (to[4] - from[4]) ^ 2)), strokes + 1
+  end
+end
+eq(("%d strokes, the shortest %.1f"):format(strokes, shortest), "49 strokes, the shortest 4.0", "every rail icon stroke is long enough for the client to draw")
+
+eq(ns.UI.Theme(), "dark", "the window starts dark")
+SlashCmdList.GOLDBOOK("theme light")
+eq(lastPrint() .. " " .. GoldbookDB.settings.theme, "Goldbook The window is light. Change it with /gb theme light or /gb theme dark. light",
+  "/gb theme light switches the window and keeps the choice")
+eq(("%.2f %s"):format(GoldbookWindow.version.textColor[1], GoldbookWindow.head.tags[1].label.text:sub(1, 10)), "0.31 |cff4e412d",
+  "the frames already drawn are painted again, and the view redrawn, in the light palette")
+SlashCmdList.GOLDBOOK("theme sepia")
+eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. lastPrint(),
+  "Goldbook There is no \"sepia\" theme. / Goldbook The window is light. Change it with /gb theme light or /gb theme dark.",
+  "an unknown theme says so and changes nothing")
+options.scripts.OnShow()
+eq(options.checks.light.checked, true, "the options show the light window")
+local toggle = GoldbookWindow.themeToggle
+GameTooltip.lines = {}
+toggle.scripts.OnEnter(toggle)
+eq(table.concat(GameTooltip.lines, " / "), "Dark window / Click to draw Goldbook in dark ink. / /gb theme and the Options panel switch it too.",
+  "the title bar's theme button says what a click does")
+GameTooltip.lines = {}
+toggle.scripts.OnClick(toggle)
+eq(("%s %.2f %s / %s"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1], tostring(options.checks.light.checked), GameTooltip.lines[1]),
+  "dark 0.67 false / Light window", "the theme button draws the window dark, the options follow, and its tooltip offers light again")
+options.checks.light.checked = true
+options.checks.light.scripts.OnClick(options.checks.light)
+eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.31", "the options switch to parchment")
+SlashCmdList.GOLDBOOK("theme dark")
+eq(tostring(options.checks.light.checked), "false", "/gb theme dark unticks the options' light box")
+UIParent.width, UIParent.height = 1280, 768
+GoldbookWindow.center = { 640, 384 }
+SlashCmdList.GOLDBOOK("scale 1.2")
+local function placed()
+  local point = GoldbookWindow.point
+  return ("%s %s %.1f %.1f"):format(point[1], point[3], point[4], point[5])
+end
+eq(lastPrint() .. " / " .. GoldbookWindow.scale .. " " .. GoldbookDB.settings.scale .. " " .. placed(),
+  "Goldbook The window is at size 1.20. Change it with /gb scale <0.7-1.4>. / 1.2 1.2 CENTER BOTTOMLEFT 533.3 320.0",
+  "/gb scale sizes the window and keeps its centre where it was on the screen")
+eq(options.scale.value, 1.2, "the options' slider follows /gb scale")
+GoldbookWindow.center = { 1200, 384 }
+options.scale.scripts.OnValueChanged(options.scale, 1.4, true)
+eq(GoldbookDB.settings.scale .. " " .. placed() .. " / " .. tostring(GoldbookDB.settings.window[3]), "1.4 CENTER BOTTOMLEFT 484.3 228.6 / 484.28571428571",
+  "the slider sizes the window too, and a window grown past the screen's edge moves back onto it with its title bar at the top")
+SlashCmdList.GOLDBOOK("scale 2")
+eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. GoldbookDB.settings.scale, "Goldbook The window's size goes from 0.7 to 1.4, 1 being its normal size. / 1.4",
+  "a size out of range says so and changes nothing")
+SlashCmdList.GOLDBOOK("scale large")
+eq(GoldbookDB.settings.scale, 1.4, "nor does a size that is not a number")
+GoldbookWindow.center = nil
+SlashCmdList.GOLDBOOK("scale 1")
+eq(GoldbookWindow.scale, 1, "/gb scale 1 gives the window its normal size")
+options.scale.scripts.OnValueChanged(options.scale, 0.699999988079071, true)
+eq(GoldbookDB.settings.scale, 0.7, "the slider's left end, a single float a little under 0.7, sizes the window to 0.7")
+GoldbookWindow.center = {}
+GoldbookDB.settings.window = { "TOPLEFT", "BOTTOMLEFT", 280, 560 }
+SlashCmdList.GOLDBOOK("scale 1.4")
+eq(table.concat(GoldbookDB.settings.window, " "), "TOPLEFT BOTTOMLEFT 140 280",
+  "a window not drawn yet keeps its place on the screen, its saved offsets turned into the new size's units")
+GoldbookWindow.center = nil
+SlashCmdList.GOLDBOOK("scale 1")
+
+ns.UI.ShowItem("99999")
+eq(plain(GoldbookWindow.chart.grid[1].label.text .. " " .. GoldbookWindow.chart.grid[2].label.text .. " " .. GoldbookWindow.chart.grid[5].label.text)
+  .. " " .. tostring(GoldbookWindow.chart.grid[6].label.shown), "0c 1c 4c false", "an item without prices gets an axis in whole coppers")
 
 Stub.fire("AUCTION_HOUSE_SHOW")
 Stub.ah.silent = true
 SlashCmdList.GOLDBOOK("scan full")
 Stub.advance(61)
-eq(Scanner.state .. " " .. GoldbookScanButton.text, "scanning starting", "a full scan still waits for the list after a minute")
+eq(Scanner.state .. " " .. GoldbookScanButton.label.text, "scanning starting", "a full scan still waits for the list after a minute")
 Stub.advance(120)
 eq(lastPrint(), "Goldbook Scan stopped: the auction house stopped responding.", "a full scan gives up after three minutes without a list")
 eq(GoldbookDB.settings.lastReplicate, 1760000011, "the cooldown counts from the list the server last sent, not from a request it ignored")

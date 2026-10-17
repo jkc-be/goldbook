@@ -1,87 +1,127 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <title>Goldbook</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
-    <header class="masthead">
-      <div class="coin" aria-hidden="true"></div>
-      <h1>Goldbook</h1>
+    <aside class="rail">
+      <div class="topbar">
+        <span class="brand"><span class="crest" aria-hidden="true"></span>Goldbook</span>
+      </div>
       <nav class="views" aria-label="Views">
-        <button type="button" data-view="prices">Prices</button>
-        <button type="button" data-view="characters">Characters</button>
-        <button type="button" data-view="sync" aria-current="page">Sync</button>
+        <button type="button" data-view="prices"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8l6-6h6v6l-6 6z" /><circle cx="11" cy="5" r="1.2" /></svg>Prices</button>
+        <button type="button" data-view="characters"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="3" /><path d="M2 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /></svg>Characters</button>
+        <button type="button" data-view="sync" aria-current="page"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7a5.5 5.5 0 0 1 10-2.5M13.5 9a5.5 5.5 0 0 1-10 2.5M12.5 1.5v3h-3M3.5 14.5v-3h3" /></svg>Sync</button>
       </nav>
-      <button type="button" id="update-alert" class="button" hidden>Update ready</button>
-    </header>
-    <div class="content">
-    <p id="notice" class="message" role="status" hidden></p>
-    <main>
-      <section aria-labelledby="sync-title">
-        <h2 id="sync-title">Auction scans</h2>
-        <p class="muted">Uploads price scans and order books after you type /reload or log out.</p>
-        <p id="live" class="status" role="status"></p>
-        <div class="actions">
-          <button type="button" id="sync" class="button primary">Sync now</button>
-          <button type="button" id="site" class="button">Open website</button>
+      <div class="rail-foot">
+        <button type="button" id="update-alert" class="button" hidden>Update ready</button>
+        <div class="segmented theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-theme-choice="light">Light</button>
+          <button type="button" data-theme-choice="dark">Dark</button>
         </div>
-      </section>
-      <section aria-labelledby="updates-title">
-        <div class="section-head">
-          <h2 id="updates-title">Updates</h2>
-          <button type="button" id="check-updates" class="button">Check for updates</button>
+      </div>
+    </aside>
+
+    <!-- The website view covers this area on Prices and Characters. -->
+    <div class="stage">
+      <header class="topbar">
+        <p class="purse"><span class="purse-label">Client</span><span id="topbar-version"></span></p>
+      </header>
+      <div class="content">
+        <div class="pagehead">
+          <h1>Sync</h1>
+          <p class="sub">Uploads your scans and characters, and keeps the app and the addon up to date.</p>
         </div>
-        <p id="client-version" class="muted"></p>
-        <p id="client-update" class="status" role="status">Checking for client updates...</p>
-        <p id="addon-update" role="status"></p>
-        <p class="muted">Checks at startup and every six hours. Client updates download automatically. The WoW addon updates automatically.</p>
-        <button type="button" id="install-update" class="button primary" hidden>Install and restart</button>
-      </section>
-      <section aria-labelledby="settings-title">
-        <div class="section-head">
-          <h2 id="settings-title">Settings</h2>
-          <button type="button" id="settings-toggle" class="button" aria-expanded="false" aria-controls="settings">Show</button>
-        </div>
-        <form id="settings" hidden>
-          <label>
-            World of Warcraft folder
-            <span class="secret">
-              <input id="wow" spellcheck="false" />
-              <button type="button" id="choose" class="button">Choose</button>
-            </span>
-          </label>
-          <label>
-            Server
-            <input id="api" spellcheck="false" autocomplete="url" />
-          </label>
-          <label>
-            Upload token (optional)
-            <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Set up automatically when you save" />
-          </label>
-          <div class="actions">
-            <button type="button" id="battlenet-login" class="button">Sign in with Battle.net</button>
-            <button type="button" id="battlenet-cancel" class="button" hidden>Cancel sign-in</button>
-          </div>
-          <p id="battlenet-code" role="status" hidden></p>
-          <p class="muted">Save your folder and server first, then sign in in your browser.</p>
-          <label class="check">
-            <input id="auto" type="checkbox" />
-            Sync automatically
-          </label>
-          <label>
-            Check again every (minutes)
-            <input id="minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" />
-          </label>
-          <label class="check">
-            <input id="login" type="checkbox" />
-            Open Goldbook when you log in
-          </label>
-          <button type="submit" id="save" class="button primary">Save</button>
-        </form>
-      </section>
-    </main>
+        <p id="notice" class="message" role="status" hidden></p>
+        <main>
+          <section class="panel" aria-labelledby="sync-title">
+            <h2 id="sync-title">Auction scans</h2>
+            <p id="live" class="status" role="status"></p>
+            <p class="muted">Uploads price scans and order books after you type /reload or log out.</p>
+            <div class="actions">
+              <button type="button" id="sync" class="button primary">Sync now</button>
+              <button type="button" id="site" class="button">Open website</button>
+            </div>
+          </section>
+          <section class="panel ruled" aria-labelledby="updates-title">
+            <h2 id="updates-title">Updates</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Component</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td id="client-version"></td>
+                  <td id="client-update" role="status">Checking for client updates...</td>
+                </tr>
+                <tr>
+                  <td class="component">WoW addon</td>
+                  <td id="addon-update" role="status"></td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="muted">Checks at startup and every six hours. Client updates download automatically. The WoW addon updates automatically.</p>
+            <div class="actions">
+              <button type="button" id="install-update" class="button primary" hidden>Install and restart</button>
+              <button type="button" id="check-updates" class="button">Check for updates</button>
+            </div>
+          </section>
+          <section class="panel settings" aria-labelledby="settings-title">
+            <div class="panel-head">
+              <h2 id="settings-title">Settings</h2>
+              <button type="button" id="settings-toggle" class="text-button" aria-expanded="false" aria-controls="settings">Show</button>
+            </div>
+            <form id="settings" hidden>
+              <label>
+                World of Warcraft folder
+                <span class="secret">
+                  <input id="wow" spellcheck="false" />
+                  <button type="button" id="choose" class="button">Choose</button>
+                </span>
+              </label>
+              <label>
+                Server
+                <input id="api" spellcheck="false" autocomplete="url" />
+              </label>
+              <label>
+                Upload token (optional)
+                <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Set up automatically when you save" />
+              </label>
+              <div class="battlenet">
+                <div class="actions">
+                  <button type="button" id="battlenet-login" class="button">Sign in with Battle.net</button>
+                  <button type="button" id="battlenet-cancel" class="button" hidden>Cancel sign-in</button>
+                </div>
+                <p class="muted">Save your folder and server first, then sign in in your browser.</p>
+              </div>
+              <p id="battlenet-code" class="wide" role="status" hidden></p>
+              <div class="schedule">
+                <label class="check">
+                  <input id="auto" type="checkbox" />
+                  Sync automatically
+                </label>
+                <label class="inline">
+                  Check again every (minutes)
+                  <input id="minutes" type="number" min="1" max="1440" step="1" inputmode="numeric" />
+                </label>
+              </div>
+              <label class="check">
+                <input id="login" type="checkbox" />
+                Open Goldbook when you log in
+              </label>
+              <div class="wide">
+                <button type="submit" id="save" class="button primary">Save</button>
+              </div>
+            </form>
+          </section>
+        </main>
+      </div>
     </div>
     <dialog id="account-picker">
       <form method="dialog">

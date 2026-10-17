@@ -1,6 +1,6 @@
-use crate::settings::{self, normalize_api, Settings, DEFAULT_API};
-use anyhow::{bail, Result};
-use goldbook_sync::{account_fingerprint, saved_variables_files, WatchFile};
+use crate::settings::{self, DEFAULT_API, Settings, normalize_api};
+use anyhow::{Result, bail};
+use goldbook_sync::{WatchFile, account_fingerprint, saved_variables_files};
 use serde::Deserialize;
 use std::{
     collections::HashSet,
@@ -38,9 +38,11 @@ async fn register(api: &str, fingerprint: &str, session: Option<&str>) -> Result
         Some(session) => request.bearer_auth(session),
         None => request,
     };
-    let mut response = request
-        .send().await
-        .map_err(|_| anyhow::anyhow!("Goldbook cannot reach that server to set up uploads. Try again when you are connected."))?;
+    let mut response = request.send().await.map_err(|_| {
+        anyhow::anyhow!(
+            "Goldbook cannot reach that server to set up uploads. Try again when you are connected."
+        )
+    })?;
     let status = response.status().as_u16();
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| {
@@ -54,10 +56,21 @@ async fn register(api: &str, fingerprint: &str, session: Option<&str>) -> Result
     match status {
         200..=299 => {}
         401 => bail!("Sign in with Battle.net in Settings to set up uploads."),
-        403 if serde_json::from_slice::<serde_json::Value>(&body).ok().is_some_and(|v| v["error"] == "this account is blocked") => return Ok(None),
-        403 | 404 => bail!("This server does not support automatic upload setup. Ask its administrator to enable automatic setup or update the server, or enter an upload token in Settings."),
-        429 => bail!("This server has received too many setup requests. Wait 15 minutes, then try again."),
-        code => bail!("The server answered {code} during upload setup. Try again later, or enter an upload token in Settings."),
+        403 if serde_json::from_slice::<serde_json::Value>(&body)
+            .ok()
+            .is_some_and(|v| v["error"] == "this account is blocked") =>
+        {
+            return Ok(None);
+        }
+        403 | 404 => bail!(
+            "This server does not support automatic upload setup. Ask its administrator to enable automatic setup or update the server, or enter an upload token in Settings."
+        ),
+        429 => bail!(
+            "This server has received too many setup requests. Wait 15 minutes, then try again."
+        ),
+        code => bail!(
+            "The server answered {code} during upload setup. Try again later, or enter an upload token in Settings."
+        ),
     }
     let registration: Registration = serde_json::from_slice(&body)
         .map_err(|_| anyhow::anyhow!("The server returned an invalid upload setup response."))?;
@@ -147,7 +160,7 @@ pub async fn prepare_uploads(settings: &mut Settings, config: &Path) -> Result<U
 mod tests {
     use super::*;
     use axum::Router;
-    use goldbook_server::{router, Config};
+    use goldbook_server::{Config, router};
 
     fn account_files(root: &Path, account: &str) {
         for flavor in ["_retail_", "_classic_"] {
@@ -181,8 +194,8 @@ mod tests {
     #[tokio::test]
     async fn oauth_gates_cached_anonymous_tokens_and_sends_enrollment_session() {
         use axum::{
-            routing::{get, post},
             Json,
+            routing::{get, post},
         };
         let temp = tempfile::tempdir().unwrap();
         account_files(temp.path(), "ACCOUNT");
@@ -213,12 +226,14 @@ mod tests {
             .upload_tokens
             .insert(fingerprint, "old-anonymous-token".into());
         let config = temp.path().join("settings.json");
-        assert!(prepare_uploads(&mut settings, &config)
-            .await
-            .err()
-            .unwrap()
-            .to_string()
-            .contains("Sign in with Battle.net"));
+        assert!(
+            prepare_uploads(&mut settings, &config)
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("Sign in with Battle.net")
+        );
         settings.upload_tokens.clear();
         settings.battlenet_session = Some("enrollment-session".into());
         let setup = prepare_uploads(&mut settings, &config).await.unwrap();

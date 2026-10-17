@@ -6,22 +6,22 @@ mod settings;
 mod updates;
 mod website;
 
-use goldbook_sync::{WatchHandle, WatchOptions};
-use serde::Serialize;
+use goldbook_sync::{ServerData, WatchHandle, WatchOptions};
+use serde::{Deserialize, Serialize};
 use settings::Settings;
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 use tauri::{
+    Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    webview::WebviewBuilder,
-    Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
+    webview::{PageLoadEvent, WebviewBuilder},
 };
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
@@ -29,9 +29,32 @@ use tauri_plugin_opener::OpenerExt;
 
 const SITE: &str = "site";
 
-// The app bar replaces the page's own title and tabs. A constructable style
-// sheet is not blocked by the server's content security policy.
-const HIDE_MASTHEAD: &str = "document.addEventListener('DOMContentLoaded', () => { const sheet = new CSSStyleSheet(); sheet.replaceSync('.masthead { display: none !important; }'); document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]; });";
+// Under this mark web/style.css hides the website's rail and brand, which the
+// app's own rail replaces. WebView2 can run this before the document element exists.
+const EMBED: &str = "{ const mark = () => document.documentElement && (document.documentElement.dataset.embed = 'desktop'); if (!mark()) new MutationObserver((_, watch) => mark() && watch.disconnect()).observe(document, { childList: true }); }";
+
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Theme {
+    #[default]
+    Light,
+    Dark,
+}
+
+impl Theme {
+    // The website's theme.js reads the stored choice before its first paint, so
+    // later pages in the view open in the app's theme.
+    fn script(self) -> &'static str {
+        match self {
+            Theme::Light => {
+                "document.documentElement.dataset.theme = 'light'; try { localStorage.setItem('goldbook-theme', 'light'); } catch {}"
+            }
+            Theme::Dark => {
+                "document.documentElement.dataset.theme = 'dark'; try { localStorage.setItem('goldbook-theme', 'dark'); } catch {}"
+            }
+        }
+    }
+}
 
 #[derive(Clone, Serialize)]
 struct Snapshot {
@@ -47,6 +70,7 @@ struct AppState {
     website: Mutex<Option<website::Handoff>>,
     // The server the website view last showed, and whether it holds a web login.
     site: Mutex<(String, bool)>,
+    theme: Mutex<Theme>,
     operation: tokio::sync::Mutex<()>,
     generation: AtomicU64,
     battlenet_login: AtomicU64,
@@ -69,7 +93,29 @@ fn watching_message(count: usize, auto: bool) -> String {
     }
 }
 
+fn spoken_list(list: &str) -> String {
+    match list.rsplit_once(", ") {
+        Some((head, last)) => format!("{head} and {last}"),
+        None => list.to_owned(),
+    }
+}
+
 fn describe_log(line: &str) -> Option<String> {
+    // The error after " failed: " can quote a server's reply, so it decides
+    // before the upload branches below look at the line.
+    if let Some(rest) = line.strip_prefix("server prices for ") {
+        let failed = rest.find(" failed: ");
+        return match rest.find(" written to ") {
+            Some(at) if failed.is_none_or(|failed| at < failed) => Some(format!(
+                "Prices for {} updated from the server. /reload to load them.",
+                spoken_list(&rest[..at])
+            )),
+            _ if failed.is_some() => Some(
+                "Goldbook could not download prices from the server. It will try again.".into(),
+            ),
+            _ => None,
+        };
+    }
     if line.contains("this account is blocked") {
         return Some("The server has blocked uploads from this WoW account.".into());
     }
@@ -321,7 +367,9 @@ async fn check_upload(settings: &Settings) -> anyhow::Result<()> {
         .map_err(|_| anyhow::anyhow!("Goldbook cannot reach that server."))?;
     match response.status().as_u16() {
         400 | 200..=299 => Ok(()),
-        401 => anyhow::bail!("The server refused this app's upload access. Check Settings or contact the server administrator."),
+        401 => anyhow::bail!(
+            "The server refused this app's upload access. Check Settings or contact the server administrator."
+        ),
         503 => anyhow::bail!("That server has no upload token configured."),
         code => anyhow::bail!("The server answered {code}."),
     }
@@ -387,9 +435,17 @@ async fn do_sync(app: &tauri::AppHandle) -> Result<(), String> {
     if let Some(service) = service {
         let results = service.sync_now().await.map_err(|e| e.to_string())?;
         let mut any_update = false;
-        for result in results {
+        for result in &results {
             if result.sent + result.invalid + result.failed > 0 {
                 any_update = true;
+            }
+        }
+        // A written file or a failed download has already put its message in the status line.
+        if results.iter().all(|result| result.failed == 0) {
+            for (_, outcome) in service.refresh_server_data().await {
+                if matches!(outcome, Ok(ServerData::Written { .. }) | Err(_)) {
+                    any_update = true;
+                }
             }
         }
         if !any_update {
@@ -470,31 +526,42 @@ async fn open_site(app: tauri::AppHandle, account_id: Option<String>) -> Result<
     Ok(())
 }
 
+// The website covers the window from the page's measured left and top edges.
 // WebKit can inset the page below the macOS title bar even when the native
 // webview fills the window. Include that inset when placing the website.
 #[cfg(not(target_os = "linux"))]
 #[tauri::command]
-fn layout_site(window: tauri::Window, viewport_height: f64, bar_height: f64) -> Result<(), String> {
+fn layout_site(
+    window: tauri::Window,
+    viewport_height: f64,
+    left: f64,
+    top: f64,
+) -> Result<(), String> {
     let Some(site) = window.get_webview(SITE) else {
         return Ok(());
     };
     let size = window.inner_size().map_err(|e| e.to_string())?;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let size = size.to_logical::<f64>(scale);
-    let top = (size.height - viewport_height).max(0.0) + bar_height;
+    let top = (size.height - viewport_height).max(0.0) + top;
     site.set_bounds(tauri::Rect {
-        position: LogicalPosition::new(0.0, top).into(),
-        size: LogicalSize::new(size.width, (size.height - top).max(0.0)).into(),
+        position: LogicalPosition::new(left, top).into(),
+        size: LogicalSize::new((size.width - left).max(0.0), (size.height - top).max(0.0)).into(),
     })
     .map_err(|e| e.to_string())
 }
 
 // GTK packs the window's webviews into a box, splits its height between them
 // and ignores their bounds. Stack them in an overlay instead, so the website
-// covers this page below its bar as it does on macOS and Windows.
+// covers this page beside its rail as it does on macOS and Windows.
 #[cfg(target_os = "linux")]
 #[tauri::command]
-fn layout_site(window: tauri::Window, viewport_height: f64, bar_height: f64) -> Result<(), String> {
+fn layout_site(
+    window: tauri::Window,
+    viewport_height: f64,
+    left: f64,
+    top: f64,
+) -> Result<(), String> {
     use gtk::prelude::*;
     let _ = viewport_height;
     let page = window
@@ -541,7 +608,8 @@ fn layout_site(window: tauri::Window, viewport_height: f64, bar_height: f64) -> 
             .into_iter()
             .filter(|child| *child != page)
         {
-            site.set_margin_top(bar_height.ceil() as i32);
+            site.set_margin_start(left.ceil() as i32);
+            site.set_margin_top(top.ceil() as i32);
         }
     })
     .map_err(|e| e.to_string())
@@ -555,7 +623,8 @@ async fn show_view(
     name: String,
     account_id: Option<String>,
     viewport_height: f64,
-    bar_height: f64,
+    left: f64,
+    top: f64,
 ) -> Result<(), String> {
     let window = app
         .get_window("main")
@@ -595,7 +664,7 @@ async fn show_view(
             ),
             (None, 1) => Some(0),
             (None, _) => {
-                return Err("Choose the World of Warcraft account you want to open.".into())
+                return Err("Choose the World of Warcraft account you want to open.".into());
             }
         };
         if let Some(index) = index {
@@ -620,7 +689,13 @@ async fn show_view(
             let origin = url::Url::parse(&settings.api).map_err(|e| e.to_string())?;
             let opener = app.clone();
             let builder = WebviewBuilder::new(SITE, WebviewUrl::External(url))
-                .initialization_script(HIDE_MASTHEAD)
+                .initialization_script(EMBED)
+                .on_page_load(|site, page| {
+                    if page.event() == PageLoadEvent::Finished {
+                        let theme = *site.state::<AppState>().theme.lock().unwrap();
+                        let _ = site.eval(theme.script());
+                    }
+                })
                 // Pages stay on the Goldbook server. The sign-in handoff is a loopback page.
                 .on_navigation(move |next| {
                     let local = next.host_str() == Some("127.0.0.1");
@@ -639,11 +714,23 @@ async fn show_view(
                 .map_err(|e| e.to_string())?;
         }
     }
-    layout_site(window, viewport_height, bar_height)
+    layout_site(window, viewport_height, left, top)
 }
 
+// The website's own theme switch is in the rail the view hides.
+#[tauri::command]
+fn set_theme(app: tauri::AppHandle, theme: Theme) -> Result<(), String> {
+    *app.state::<AppState>().theme.lock().unwrap() = theme;
+    match app.get_webview(SITE) {
+        Some(site) => site.eval(theme.script()).map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+// Not get_webview_window: once the website view is added the window holds two
+// webviews, and Tauri then no longer returns it as a webview window.
 fn show(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -654,7 +741,8 @@ fn main() {
     // (Error 71) on some Mesa setups. Must be set before GTK starts.
     #[cfg(target_os = "linux")]
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        // SAFETY: this runs before GTK, Tauri, or the async runtime starts any threads.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
     }
 
     let config = settings::config_path().expect("Cannot find the Goldbook settings folder");
@@ -668,6 +756,7 @@ fn main() {
         }),
         website: Mutex::new(None),
         site: Mutex::new((String::new(), false)),
+        theme: Mutex::new(Theme::default()),
         operation: tokio::sync::Mutex::new(()),
         generation: AtomicU64::new(0),
         battlenet_login: AtomicU64::new(0),
@@ -698,6 +787,7 @@ fn main() {
             open_site,
             show_view,
             layout_site,
+            set_theme,
             updates::get_updates,
             updates::check_updates,
             updates::install_update
@@ -800,11 +890,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.app_handle().tray_by_id("goldbook").is_some() {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.app_handle().tray_by_id("goldbook").is_some()
+            {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
@@ -822,4 +912,121 @@ fn main() {
                 state.website.lock().unwrap().take();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    const WEB_STYLE: &str = include_str!("../../../web/style.css");
+    const APP_STYLE: &str = include_str!("../../ui/style.css");
+
+    fn rules(css: &str) -> impl Iterator<Item = (Vec<&str>, &str)> {
+        css.split('}').filter_map(|rule| {
+            let (selectors, body) = rule.split_once('{')?;
+            let selectors = selectors.rsplit("*/").next()?;
+            Some((selectors.split(',').map(str::trim).collect(), body))
+        })
+    }
+
+    fn tokens<'a>(css: &'a str, selector: &str) -> BTreeMap<&'a str, &'a str> {
+        rules(css)
+            .filter(|(selectors, _)| selectors == &[selector])
+            .flat_map(|(_, body)| body.split(';'))
+            .filter_map(|line| line.trim().split_once(':'))
+            .filter(|(name, _)| name.starts_with("--"))
+            .map(|(name, value)| (name, value.trim()))
+            .collect()
+    }
+
+    #[test]
+    fn website_hides_its_rail_and_brand_under_the_embed_mark() {
+        assert!(EMBED.contains("dataset.embed = 'desktop'"));
+        for part in [".rail", ".brand"] {
+            let selector = format!(":root[data-embed=\"desktop\"] {part}");
+            assert!(
+                rules(WEB_STYLE).any(|(selectors, body)| selectors.contains(&selector.as_str())
+                    && body.contains("display: none")),
+                "web/style.css no longer hides {part} in the desktop app"
+            );
+        }
+    }
+
+    #[test]
+    fn server_price_lines_describe_written_and_failed_downloads() {
+        let path =
+            "/Applications/World of Warcraft/_classic_/Interface/AddOns/Goldbook/ServerData.lua";
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Faramon-Horde written to {path}: 2 items"
+            )),
+            Some("Prices for Faramon-Horde updated from the server. /reload to load them.".into())
+        );
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Faramon-Horde, Pyrewood Village-Alliance written to {path}: 3 items"
+            )),
+            Some(
+                "Prices for Faramon-Horde and Pyrewood Village-Alliance updated from the server. /reload to load them."
+                    .into()
+            )
+        );
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Area 52-Alliance, Faramon-Horde, Pyrewood Village-Alliance written to {path}: 9 items"
+            )),
+            Some(
+                "Prices for Area 52-Alliance, Faramon-Horde and Pyrewood Village-Alliance updated from the server. /reload to load them."
+                    .into()
+            )
+        );
+        assert_eq!(
+            describe_log(&format!(
+                "server prices for Faramon-Horde unchanged in {path}"
+            )),
+            None
+        );
+        assert_eq!(
+            describe_log(
+                "server prices for /Applications/World of Warcraft/_classic_ failed: export of Faramon-Horde answered 502 uploaded account written to unreadable another key"
+            ),
+            Some("Goldbook could not download prices from the server. It will try again.".into())
+        );
+        assert_eq!(
+            describe_log("uploaded account K7Q2-M9PX: 3 characters"),
+            Some("Uploaded 3 characters.".into())
+        );
+    }
+
+    #[test]
+    fn theme_accepts_only_light_or_dark() {
+        let dark: Theme = serde_json::from_str("\"dark\"").unwrap();
+        assert_eq!(
+            dark.script(),
+            "document.documentElement.dataset.theme = 'dark'; try { localStorage.setItem('goldbook-theme', 'dark'); } catch {}"
+        );
+        let light: Theme = serde_json::from_str("\"light\"").unwrap();
+        assert_eq!(
+            light.script(),
+            "document.documentElement.dataset.theme = 'light'; try { localStorage.setItem('goldbook-theme', 'light'); } catch {}"
+        );
+        for input in ["\"Dark\"", "\"sepia\"", "\"dark'; alert(1); '\"", "null"] {
+            assert!(serde_json::from_str::<Theme>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn app_colours_match_the_website() {
+        for selector in [":root", ":root[data-theme=\"dark\"]"] {
+            let web = tokens(WEB_STYLE, selector);
+            let app = tokens(APP_STYLE, selector);
+            assert!(app.len() > 20, "{selector} has {} tokens", app.len());
+            for (name, value) in app {
+                if name != "--tick" {
+                    assert_eq!(web.get(name), Some(&value), "{selector} {name}");
+                }
+            }
+        }
+    }
 }

@@ -1,11 +1,11 @@
-use crate::luatable::{js_value, SavedVariables};
-use anyhow::{anyhow, bail, Result};
+use crate::luatable::{SavedVariables, js_value};
+use anyhow::{Result, anyhow, bail};
 use goldbook_core::{
-    key_hash, normalize_code, parse_account_upload, parse_scan_upload, parse_trade, sha256,
-    AccountUpload, ScanUpload, Trade, MAX_CHARACTERS, MAX_GOLD_POINTS, MAX_TRADES,
+    AccountUpload, MAX_CHARACTERS, MAX_GOLD_POINTS, MAX_TRADES, ScanUpload, Trade, key_hash,
+    normalize_code, parse_account_upload, parse_scan_upload, parse_trade, sha256,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn table<'a>(v: Option<&'a Value>, what: &str) -> Result<&'a Map<String, Value>> {
@@ -86,12 +86,11 @@ impl QueuedScan {
         let mut items = Map::new();
         for row in &rows {
             let key = row[0].as_str().unwrap();
-            if let Some(packed) = self.names.get(key).and_then(Value::as_str) {
-                if let Some((quality, name)) = packed.split_once('|') {
-                    if !name.is_empty() {
-                        items.insert(key.to_owned(), json!([name, js_number(quality)]));
-                    }
-                }
+            if let Some(packed) = self.names.get(key).and_then(Value::as_str)
+                && let Some((quality, name)) = packed.split_once('|')
+                && !name.is_empty()
+            {
+                items.insert(key.to_owned(), json!([name, js_number(quality)]));
             }
         }
         parse_scan_upload(&json!({"realm":get(s,"realm"),"faction":get(s,"faction"),"region":get(s,"region"),"scannedAt":get(s,"at"),"mode":get(s,"mode"),"scanner":get(s,"by"),"build":get(s,"build"),"rows":rows,"items":items})).map_err(anyhow::Error::msg)
@@ -194,7 +193,7 @@ fn container(v: Option<&Value>, what: &str) -> Result<Value> {
     let rows=list(c.get("rows"),&format!("{what}.rows"))?.iter().enumerate().map(|(i,row)|{let r=table(Some(row),&format!("{what}.rows[{}]",i+1))?;Ok(json!({"key":get(r,"key"),"name":get(r,"name"),"quality":get(r,"quality"),"count":get(r,"count"),"action":get(r,"action"),"post":get(r,"post"),"vendor":get(r,"vendor"),"value":get(r,"value")}))}).collect::<Result<Vec<_>>>()?;
     Ok(json!({"at":get(c,"at"),"rows":rows}))
 }
-fn normalized_realm(realm: &str) -> String {
+pub(crate) fn normalized_realm(realm: &str) -> String {
     realm
         .chars()
         .filter(|c| !(c.is_whitespace() && *c != '\u{0085}' || *c == '\u{feff}'))

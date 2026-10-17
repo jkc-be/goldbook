@@ -1,13 +1,14 @@
 ## Interface: 16001
 ## Title: Goldbook
 ## Notes: Scans the auction house, shows prices in tooltips, and queues scans for cloud sync.
-## Version: 0.1.13
+## Version: 0.2.1
 ## Category: Auctions
 ## IconTexture: Interface\Icons\INV_Misc_Coin_01
 ## AddonCompartmentFunc: Goldbook_OnAddonCompartmentClick
 ## SavedVariables: GoldbookDB
 ## X-Website: https://app.jkc-be.com/goldbook
 
+ServerData.lua
 Stats.lua
 Codec.lua
 ProfessionData.lua

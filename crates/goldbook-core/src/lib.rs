@@ -1,14 +1,14 @@
 mod professions;
-pub use professions::{profession_items, professions, Profession};
+pub use professions::{Profession, profession_items, professions};
 
 mod sellers;
-pub use sellers::{parse_seller_snapshot, SellerOffer, SellerSnapshot, SellerSummary};
+pub use sellers::{SellerOffer, SellerSnapshot, SellerSummary, parse_seller_snapshot};
 
 mod trades;
-pub use trades::{parse_trade, Trade, MAX_TRADES};
+pub use trades::{MAX_TRADES, Trade, parse_trade};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 
@@ -254,7 +254,7 @@ fn parse_row(v: &Value, at: &str) -> Result<ItemRow, String> {
             None => {
                 return Err(format!(
                     "{at}.name must be a string of 0 to 200 characters or null"
-                ))
+                ));
             }
         };
     let quality = integer(field(r, "quality"), 0, 8)
@@ -304,7 +304,7 @@ fn character(v: &Value, at: &str) -> Result<Character, String> {
         _ => {
             return Err(format!(
                 "{at}.faction must be one of Alliance, Horde, Neutral or null"
-            ))
+            ));
         }
     };
     let class =
@@ -316,7 +316,7 @@ fn character(v: &Value, at: &str) -> Result<Character, String> {
             None => {
                 return Err(format!(
                     "{at}.class must be a string of 1 to 20 characters or null"
-                ))
+                ));
             }
         };
     let level = match c.get("level") {
@@ -328,7 +328,7 @@ fn character(v: &Value, at: &str) -> Result<Character, String> {
         None => {
             return Err(format!(
                 "{at}.level must be an integer from 1 to 100 or null"
-            ))
+            ));
         }
     };
     let updated_at = nullable_count(c.get("updatedAt"), &format!("{at}.updatedAt"))?;
