@@ -7,6 +7,14 @@ were released with.
 
 ## Unreleased
 
+## 0.2.3 - 2026-10-17
+
+### Addon
+
+- Fix a Lua error whenever a merchant opened, on clients that read merchant
+  items with `C_MerchantFrame.GetItemInfo` instead of `GetMerchantItemInfo`.
+  Goldbook now learns the goods merchants sell on those clients.
+
 ## 0.2.2 - 2026-10-17
 
 ### Desktop app

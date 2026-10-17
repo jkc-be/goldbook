@@ -320,13 +320,46 @@ local function bookVendorSales(opened)
   end
 end
 
+-- The open merchant's item at `index` as { name, price, stack, available,
+-- extendedCost, itemID, link }: `price` buys `stack` items, `available` is -1
+-- without limit, and `extendedCost` says it asks items or currencies besides
+-- gold. Nil when there is none. Newer clients have only
+-- C_MerchantFrame.GetItemInfo, older ones only GetMerchantItemInfo.
+function ns.MerchantItem(index)
+  local name, price, stack, available, extendedCost
+  if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
+    local info = C_MerchantFrame.GetItemInfo(index)
+    if info then
+      name, price, stack, available, extendedCost = info.name, info.price, info.stackCount, info.numAvailable, info.hasExtendedCost
+    end
+  elseif GetMerchantItemInfo then
+    local _
+    name, _, price, stack, available, _, _, extendedCost = GetMerchantItemInfo(index)
+  end
+  if not name then
+    return nil
+  end
+  local link = GetMerchantItemLink and GetMerchantItemLink(index)
+  if GetMerchantItemCostInfo then
+    extendedCost = extendedCost or GetMerchantItemCostInfo(index) > 0
+  end
+  return {
+    name = name,
+    price = price or 0,
+    stack = math.max(stack or 1, 1),
+    available = available,
+    extendedCost = extendedCost or false,
+    itemID = GetMerchantItemID and GetMerchantItemID(index) or link and tonumber(link:match("item:(%d+)")),
+    link = link,
+  }
+end
+
 -- What the open merchant sells without limit, for gold alone.
 local function recordMerchantGoods()
-  for index = 1, GetMerchantNumItems() do
-    local _, _, price, count, available = GetMerchantItemInfo(index)
-    local itemID = GetMerchantItemID(index)
-    if itemID and price and price > 0 and available == -1 and GetMerchantItemCostInfo(index) == 0 then
-      Database.SetMerchantPrice(ns.db, itemID, math.max(count or 1, 1), price)
+  for index = 1, GetMerchantNumItems and GetMerchantNumItems() or 0 do
+    local item = ns.MerchantItem(index)
+    if item and item.itemID and item.price > 0 and item.available == -1 and not item.extendedCost then
+      Database.SetMerchantPrice(ns.db, item.itemID, item.stack, item.price)
     end
   end
 end
