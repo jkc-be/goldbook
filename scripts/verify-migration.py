@@ -308,6 +308,18 @@ def exercise_upgrade(directory, old_repo, server_binary):
     return api.transcript
 
 
+# The original addon booked only auction house and vendor trades. Accounting
+# entries of any other side (the run test books gold it cannot explain as
+# other income) are left out of the fixture, so that the account upload still
+# compares with the original; verify-trades.py and the sync tests cover them.
+ORIGINAL_SIDES = ("buy", "sell", "vendor")
+
+
+def original_trades(saved):
+    entry = re.compile(r'^\{\n(?:(?!^\}).*\n)*?\["side"\] = "(\w+)",\n(?:(?!^\}).*\n)*?^\}, -- \[\d+\]\n', re.M)
+    return entry.sub(lambda match: match.group(0) if match.group(1) in ORIGINAL_SIDES else "", saved)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--old-repo", type=Path, help="Run the original Python server and TypeScript sync from this checkout")
@@ -318,9 +330,10 @@ def main():
     if args.capture_baseline and not args.old_repo:
         parser.error("--capture-baseline requires --old-repo")
     run(["luajit", "addon/tests/run.lua"], cwd=ROOT)
-    fixture = ROOT / "fixtures/Goldbook.lua"
     with tempfile.TemporaryDirectory(prefix="goldbook-verify-") as temporary:
         directory = Path(temporary)
+        fixture = directory / "Goldbook.lua"
+        fixture.write_text(original_trades((ROOT / "fixtures/Goldbook.lua").read_text()))
         with server(directory, args.old_repo, args.server.resolve()) as api:
             transcript = exercise(api, directory, fixture, args.old_repo, args.sync.resolve())
         transcript.update(exercise_upgrade(directory / "upgrade", args.old_repo, args.server.resolve()))
