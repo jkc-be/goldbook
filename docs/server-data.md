@@ -18,6 +18,8 @@ Data flows in three steps:
 
 `GET /api/export?realm=<realm>&faction=<faction>` is public and read-only, like `/api/prices`. It needs no login and no upload token.
 
+When the request's `Accept-Encoding` names `gzip`, the server compresses the body and answers `Content-Encoding: gzip`. Every export answer carries `Vary: Accept-Encoding`. The server compresses the body itself, because the Traefik labels in `server/compose*.yaml` have no `compress` middleware. The sync client asks for gzip and decodes it.
+
 | Status | Body |
 | --- | --- |
 | 200 | The realm's data, described below. |
@@ -52,7 +54,7 @@ The fields mean the following:
 - `hours` holds one `[hour, min, qty, mv]` entry per unix hour (`floor(time / 3600)`) in which a scan saw the item, oldest first. It covers the 168 hours that end with the hour of `scannedAt`.
 - `days` holds one `[day, min, qty, mv]` entry per UTC day number (`floor(time / 86400)`) in which a scan saw the item, oldest first. It covers the day of `scannedAt` and the 60 days before it, the same window as `KEPT_DAYS` in `Database.lua`. `days` overlaps `hours`, so that the addon can merge daily history without adding up hours.
 
-In an `hours` or `days` entry, `min` is the lowest buyout any scan saw in that hour or day, and `qty` is the quantity of the row that had it. When rows tie on `min`, the earlier row wins. `mv` is the market value of the newest row in that hour or day whose market value is above 0, or 0 when there is none.
+In an `hours` or `days` entry, `min` is the lowest buyout any scan saw in that hour or day, and `qty` is the quantity of the row that had it. When rows tie on `min`, the earlier row wins. A day's `min` is its lowest buyout, the same daily low that `/api/trends` gives the website. `mv` is the market value of the newest row in that hour or day whose market value is above 0, or 0 when there is none.
 
 Rows are ordered by scan time. Two scans can have the same time, and then the scan that the server stored first counts as the earlier one. "Newest" and "earlier" in this section follow that order.
 
@@ -97,7 +99,7 @@ The file does not hold the table as one constructor. It fills the table in funct
 
 ## How the app writes the file
 
-The app writes `ServerData.lua` after a sync pass that uploaded without errors. In the background it does this at most once per sync interval for each game flavor. **Sync now** and `goldbook-sync --once` write it after every pass whose uploads did not fail, whatever the interval.
+The app writes `ServerData.lua` after a sync pass that uploaded without errors. In the background it does this at most once every 15 minutes for each game flavor, or once per sync interval when the interval is longer. **Sync now** and `goldbook-sync --once` write it after every pass whose uploads did not fail, whatever the interval.
 
 For each flavor folder, the app does the following:
 
@@ -123,3 +125,8 @@ The addon does not read `GoldbookServerData` yet. The change that merges it into
 - Server names fill only the items that `GoldbookDB.items` lacks.
 - The merge is idempotent. A second merge of the same file after `/reload` changes nothing, because every entry it would copy is already there or lost to a newer local one. The addon can skip the merge when the realm's `scannedAt` equals the `scannedAt` it merged last.
 - The addon marks a price it took from the server, for example with the server's `seen` in a `fromServer[realmKey][itemKey]` table, so the window and tooltip can say the price came from the server. A local scan of the item clears the mark.
+
+## Limitations
+
+- An addon install that runs while the app writes `ServerData.lua` can lose the new file. The installer copies the installed file before it swaps the folders. If the app renames a new file into place between those two steps, the swap removes it. The next download writes it again, which in the background can be 15 minutes later.
+- A download that is running when the sync service stops still finishes and writes its file. After a server change in Settings, the old server's data can therefore land just before the new server's first download replaces it.

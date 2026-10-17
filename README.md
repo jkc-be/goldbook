@@ -212,7 +212,7 @@ accounts are saved, choose which one to open.
 After a sync pass whose uploads succeed, the app also downloads the server's
 prices and history for each realm your SavedVariables name, including other
 players' scans. It writes them to `Interface/AddOns/Goldbook/ServerData.lua`
-in each game folder, at most once per sync interval, and **Sync now** writes
+in each game folder, at most once every 15 minutes, and **Sync now** writes
 them again. The game loads the file at login and at `/reload`. The addon
 does not show these prices yet. The app never writes SavedVariables. [Server data for the addon](docs/server-data.md) describes
 the endpoint, the file, and the rules for using it in the addon.
