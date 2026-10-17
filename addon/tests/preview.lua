@@ -1051,6 +1051,39 @@ for container, slots in pairs(BAGS) do
   Stub.bags[container] = bag
 end
 
+-- A mailbox with mail of every kind; the server holds back three more.
+local AH = "Auction House"
+local function sale(item, count, money, days)
+  return { sender = AH, subject = "Auction successful: " .. item, money = money, daysLeft = days,
+    invoice = { "seller", item, "Kargath", money, money, 0, math.floor(money / 19), count } }
+end
+local function returned(kind, itemID, item, count, quality, days)
+  return { sender = AH, subject = "Auction " .. kind .. ": " .. item, daysLeft = days, items = { { itemID, item, count, quality } } }
+end
+Stub.inbox.mails = {
+  sale("Runecloth", 20, 131100, 29.6),
+  sale("Runecloth", 20, 131100, 29.4),
+  sale("Bandit Cinch of the Monkey", 1, 19950, 28.2),
+  { sender = AH, subject = "Auction won: Essence of Undeath", daysLeft = 29.1,
+    invoice = { "buyer", "Essence of Undeath", "Mirelle", 39000, 39000, 0, 0, 3 }, items = { { 12808, "Essence of Undeath", 3, 1 } } },
+  returned("expired", 13468, "Black Lotus", 1, 2, 27.5),
+  returned("cancelled", 13446, "Major Healing Potion", 5, 1, 30),
+  { sender = "Mirelle", subject = "Thorium for you", daysLeft = 3.6, items = { { 10620, "Thorium Ore", 20, 1 } } },
+  { sender = "Mirelle", subject = "Gold for the mats", money = 150000, daysLeft = 3.3 },
+  { sender = "Kargath", subject = "Arcanite", cod = 240000, daysLeft = 2.4, items = { { 12360, "Arcanite Bar", 2, 2 } } },
+  sale("Major Healing Potion", 5, 123500, 26.3),
+  sale("Light Leather", 7, 1050, 25.8),
+  returned("expired", 10620, "Thorium Ore", 9, 1, 24.7),
+  { sender = "Mirelle", subject = "Mats", daysLeft = 12.2,
+    items = { { 14047, "Runecloth", 20, 1 }, { 14047, "Runecloth", 20, 1 }, { 12359, "Thorium Bar", 10, 1 } } },
+  { sender = "Postmaster", subject = "Recovered items", daysLeft = 1.5, items = { { 2589, "Linen Cloth", 12, 1 } } },
+  sale("Runecloth", 20, 131100, 23.1),
+  returned("cancelled", 12808, "Essence of Undeath", 3, 1, 22.9),
+  sale("Black Lotus", 1, 812000, 21.4),
+  sale("Runecloth", 20, 131100, 20.2),
+}
+Stub.inbox.shows = 15
+
 GoldbookDB = seededDB()
 Stub.fire("ADDON_LOADED", "Goldbook")
 Stub.money = CHARACTERS[1][3]
@@ -1113,6 +1146,14 @@ local function captureViews(suffix)
     run(view)
     captureWindow(view .. suffix)
   end
+  -- The mailbox opens the Mail view, and closing it closes the window. Its
+  -- invoices book trades; the seeded ones are kept, so both themes match.
+  local trades = ns.db.trades
+  ns.db.trades = {}
+  Stub.openMailbox()
+  captureWindow("mail" .. suffix)
+  Stub.fire("MAIL_CLOSED")
+  ns.db.trades = trades
   run("gold")
   hoverPoint(22)
   captureWindow("gold" .. suffix, GameTooltip)
