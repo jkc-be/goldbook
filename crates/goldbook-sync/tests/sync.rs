@@ -511,6 +511,34 @@ fn addon_updates_replace_obsolete_files_recover_interrupted_swap_and_preserve_sa
     install_addon(Some(temp.path()), &source, None).unwrap();
     assert!(!addons.join(".Goldbook-backup").exists());
 }
+#[test]
+fn addon_updates_keep_the_server_data_the_app_wrote() {
+    use std::fs;
+    let temp = tempfile::tempdir().unwrap();
+    let addon = temp.path().join("_classic_/Interface/AddOns/Goldbook");
+    let source = temp.path().join("source");
+    fs::create_dir_all(&addon).unwrap();
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("Goldbook.toc"), "ServerData.lua\n").unwrap();
+    fs::write(source.join("ServerData.lua"), "GoldbookServerData = nil\n").unwrap();
+    install_addon(Some(temp.path()), &source, None).unwrap();
+    assert_eq!(
+        fs::read_to_string(addon.join("ServerData.lua")).unwrap(),
+        "GoldbookServerData = nil\n"
+    );
+    let written = b"local data = { version = 1 }\nGoldbookServerData = data\n\xc3\xbc";
+    fs::write(addon.join("ServerData.lua"), written).unwrap();
+    for _ in 0..2 {
+        fs::write(addon.join("Old.lua"), "obsolete").unwrap();
+        install_addon(Some(temp.path()), &source, None).unwrap();
+        assert_eq!(fs::read(addon.join("ServerData.lua")).unwrap(), written);
+        assert!(!addon.join("Old.lua").exists());
+        assert_eq!(
+            fs::read_to_string(addon.join("Goldbook.toc")).unwrap(),
+            "ServerData.lua\n"
+        );
+    }
+}
 
 #[tokio::test]
 async fn seller_uploads_batch_retry_and_remember_more_than_500_snapshots() {

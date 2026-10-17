@@ -3,6 +3,7 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
 };
+pub(crate) const SERVER_DATA: &str = "ServerData.lua";
 fn entries(path: &Path) -> Vec<PathBuf> {
     fs::read_dir(path)
         .map(|d| d.filter_map(|e| e.ok().map(|e| e.path())).collect())
@@ -217,6 +218,10 @@ pub fn install_addon(
                 })
                 .collect::<String>();
             fs::write(toc, content)?;
+        }
+        let written = destination.join(SERVER_DATA);
+        if written.is_file() {
+            fs::copy(written, prepared.join(SERVER_DATA))?;
         }
         if destination.exists() {
             fs::rename(&destination, &backup)?;
