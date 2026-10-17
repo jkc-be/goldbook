@@ -835,8 +835,9 @@ function characterLink(character, current) {
     character.gold === null ? "–" : money(character.gold),
     element("span", { className: "about", textContent: about(character) }),
   ]);
+  // "true", not "page": the rail's Characters link already marks the page.
   if (current?.name === character.name && current.realm === character.realm) {
-    link.setAttribute("aria-current", "page");
+    link.setAttribute("aria-current", "true");
   }
   return element("li", {}, [link]);
 }

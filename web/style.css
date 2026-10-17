@@ -161,6 +161,13 @@
   display: none !important;
 }
 
+/* Keeps what scrollIntoView brings up clear of the sticky top bar. */
+@media (min-width: 761px) {
+  html {
+    scroll-padding-top: calc(var(--top) + 8px);
+  }
+}
+
 body {
   margin: 0;
   background: var(--page);
@@ -1293,7 +1300,7 @@ td.item button {
   background: linear-gradient(var(--tint), var(--tint)), var(--panel);
 }
 
-.character-list a[aria-current="page"] {
+.character-list a[aria-current] {
   border-color: var(--gold-edge);
   box-shadow: inset 0 2px 0 var(--gold);
 }
