@@ -310,6 +310,9 @@ end
 eq(table.concat(options, ", "), "All sources, Merchant purchase, Trade sale, Trade purchase, Trade gold in, Trade gold out, Mail gold in, "
   .. "Mail gold out, Cash on delivery, Quest reward, Looted gold, Repairs, Postage, Auction deposit, Flight, Training, Talent reset, Other income, Other expense",
   "the source chip offers every source booked")
+local eleventh = chip.menu.options[11]
+eq(table.concat({ chip.menu.width, chip.menu.height, eleventh.point[2], eleventh.point[3] }, " "), "400 228 201 -4",
+  "twenty choices run in two columns of ten")
 
 io.write(("%d accounting checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)

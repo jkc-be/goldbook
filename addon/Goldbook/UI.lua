@@ -15,6 +15,8 @@ local HEADER_HEIGHT, ROW_HEIGHT, MAX_ROWS, MAX_COLUMNS = 27, 23, 20, 6
 local CELL_PAD, ICON_SIZE = 10, 18
 local SPARK_WIDTH, SPARK_HEIGHT, SPARK_DAYS = 64, 16, 7
 local SEARCH_WIDTH, CHIP_HEIGHT, MENU_WIDTH, MENU_ROW = 240, 24, 200, 22
+-- A longer menu runs in columns, so that it ends within the window.
+local MENU_ROWS = 12
 local SIDE_ROW = 26
 -- The plot sits right of its axis labels and left of the latest values'
 -- labels, under its legend, over the band of amounts and the dates.
@@ -517,7 +519,8 @@ local SPARK = { "7 days", nil, 87, spark = true }
 
 -- What the window can show, one entry per view.
 --   blocks    what stacks under the title, top to bottom; the table takes the height left over
---   columns   { label, field, width }; a header click sorts by the field
+--   columns   { label, field, width }; a header click sorts by the field; `left` aligns a column of
+--             words as the first, rather than as figures
 --   cells     the text of a row's columns, the sparkline column left out
 --   rows      (search text, segment) -> the rows; `keep` then filters them by the toolbar's chips
 --   items     rows are items to hover and click; `icons` puts the item's icon before its name
@@ -685,7 +688,7 @@ local VIEWS = {
       return (filters.character == nil or row.character == filters.character)
         and (filters.source == nil or row.side == filters.source)
     end,
-    columns = { { "Entry", "name", 290 }, { "Source", "source", 128 }, { "Net", "net", 108 }, { "Character", "character", 88 }, { "When", "at", 65 } },
+    columns = { { "Entry", "name", 290 }, { "Source", "source", 128, left = true }, { "Net", "net", 108 }, { "Character", "character", 88 }, { "When", "at", 65 } },
     sort = { 5, true },
     segments = { { "all", "All" }, { "revenue", "Revenue" }, { "expenses", "Expenses" } },
     rows = function(text, segment)
@@ -1018,7 +1021,7 @@ local function layout(definition)
       local sorted = sort and sort[1] == column
       header:SetText(spec[1]:upper() .. (sorted and (sort[2] and " ↓" or " ↑") or ""))
       header:SetTextColor(rgb(sorted and "goldhi" or "muted"))
-      header:SetJustifyH(column == 1 and "LEFT" or spec.spark and "CENTER" or "RIGHT")
+      header:SetJustifyH((column == 1 or spec.left) and "LEFT" or spec.spark and "CENTER" or "RIGHT")
       header:SetPoint("LEFT", tableFrame.columns, "TOPLEFT", left + CELL_PAD, -HEADER_HEIGHT / 2)
       header:SetWidth(spec[3] - 2 * CELL_PAD)
       button:SetPoint("TOPLEFT", tableFrame.columns, "TOPLEFT", left, 0)
@@ -1031,7 +1034,7 @@ local function layout(definition)
           local inset = column == 1 and definition.icons and ICON_SIZE + 7 or 0
           cell:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + inset, 0)
           cell:SetWidth(spec[3] - 2 * CELL_PAD - inset)
-          cell:SetJustifyH(column == 1 and "LEFT" or "RIGHT")
+          cell:SetJustifyH((column == 1 or spec.left) and "LEFT" or "RIGHT")
           cell:SetFontObject(FONT[column == 1 and "body" or "number"])
         end
       end
@@ -1615,7 +1618,6 @@ end
 local function addMenu()
   local menu = panel(window, "panel", "edge")
   menu:SetFrameStrata("TOOLTIP")
-  menu:SetWidth(MENU_WIDTH)
   menu:EnableMouse(true)
   menu.options = {}
   menu:Hide()
@@ -1635,12 +1637,13 @@ local function openMenu(chip, name)
   menu:ClearAllPoints()
   menu:SetPoint("TOPLEFT", chip, "BOTTOMLEFT", 0, -2)
   local options = FILTERS[name]()
-  menu:SetHeight(#options * MENU_ROW + 8)
+  local columns = math.ceil(#options / MENU_ROWS)
+  local rows = math.ceil(#options / columns)
+  menu:SetSize(columns * MENU_WIDTH, rows * MENU_ROW + 8)
   for row = 1, math.max(#options, #menu.options) do
     local choice = menu.options[row]
     if not choice then
       choice = CreateFrame("Button", nil, menu)
-      choice:SetPoint("TOPLEFT", 1, -4 - (row - 1) * MENU_ROW)
       choice:SetSize(MENU_WIDTH - 2, MENU_ROW)
       choice.label = label(choice, "body", "text")
       choice.label:SetPoint("LEFT", 9, 0)
@@ -1652,6 +1655,7 @@ local function openMenu(chip, name)
       menu.options[row] = choice
     end
     local option = options[row]
+    choice:SetPoint("TOPLEFT", 1 + math.floor((row - 1) / rows) * MENU_WIDTH, -4 - (row - 1) % rows * MENU_ROW)
     choice:SetShown(option ~= nil)
     if option then
       choice.label:SetText(option[2])
