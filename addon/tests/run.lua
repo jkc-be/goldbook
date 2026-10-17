@@ -1102,7 +1102,7 @@ for _, bar in ipairs(chart.bars) do
 end
 eq(table.concat(legend, ", ") .. " / " .. bars .. " bars, the tallest " .. tallest .. " / " .. chart.most.text,
   "Min buyout, Market value, Listed / 4 bars, the tallest 30 / 1", "the item chart's legend names its lines and the band of amounts listed")
-eq(plain(chart.lines[1].value.text) .. " " .. tostring(chart.lines[2].value.shown) .. " / " .. segments(), "10g false / 1D 1W [1M] 2M",
+eq(plain(chart.lines[1].value.text) .. " " .. tostring(chart.lines[2].value.shown) .. " / " .. segments(), "10g 00s false / 1D 1W [1M] 2M",
   "the newest price is labelled right of the plot, and the item chart starts on a month")
 GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
 marks = plotted()

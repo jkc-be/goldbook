@@ -1159,6 +1159,13 @@ local function axisMoney(copper)
   return silver > 0 and money(silver * 100):match("^(.-) ") or money(rest)
 end
 
+-- A latest value right of a chart: its two largest units, enough to tell
+-- two lines close together apart.
+local function latestMoney(copper)
+  local text = money(copper)
+  return copper >= 10000 and text:match("^(.*) ") or text
+end
+
 -- The date marks between `from` and `to`, counted back from `to`'s day so
 -- that it always has one: hours for a day or so, else every 1, 2, 7 or 14 days.
 local function dateMarks(from, to)
@@ -1314,7 +1321,7 @@ local function drawChart(spec)
     if last then
       line.dot:SetPoint("CENTER", plot, "BOTTOMLEFT", last.x, last.y)
       line.dot:SetVertexColor(rgb(series[index].colour))
-      line.value:SetText(axisMoney(last.value))
+      line.value:SetText(latestMoney(last.value))
       ends[#ends + 1] = { label = line.value, y = last.y }
     end
   end

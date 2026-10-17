@@ -1121,6 +1121,13 @@ local function captureViews(suffix)
   hoverPoint(-4)
   captureWindow("item" .. suffix, GameTooltip)
   GameTooltip:Hide()
+  -- The last week, by the hour.
+  local ranges = GoldbookWindow.segments.buttons
+  ranges[2].scripts.OnClick(ranges[2])
+  hoverPoint(-6)
+  captureWindow("item-week" .. suffix, GameTooltip)
+  GameTooltip:Hide()
+  ranges[3].scripts.OnClick(ranges[3])
   run("item Gold Ore")
   hoverPoint(-2)
   captureWindow("item-sparse" .. suffix, GameTooltip)
