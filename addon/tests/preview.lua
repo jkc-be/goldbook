@@ -913,28 +913,21 @@ local function priceHistory(item)
 end
 
 -- A day's entry as `count` scans `every` hours apart, up to that day's scan,
--- that fold back into the entry: the other scans list dearer and measure no
--- market value, and the newest has the entry's quantity and market value.
--- Before today the cheapest scan falls at some hour; today it is the newest,
--- the price the price record has. `wobble` is the item's own random stream,
--- so that the other items keep their numbers.
+-- that fold back into the entry: the newest scan is the entry, and the ones
+-- before it list a little either side of its price and measure no market
+-- value. `wobble` is the item's own random stream, so that the other items
+-- keep their numbers.
 local function scansOf(entry, count, every, wobble)
   local last = math.floor(scanTime(entry.day) / 3600)
-  local hours = {}
-  for hour = last, math.max(entry.day * 24, last - (count - 1) * every), -every do
-    table.insert(hours, 1, hour)
-  end
-  local cheapest = entry.day == TODAY and #hours or 1 + math.floor(wobble() * #hours)
   local points = {}
-  for index, hour in ipairs(hours) do
-    local newest = index == #hours
-    points[index] = {
+  for hour = last, math.max(entry.day * 24, last - (count - 1) * every), -every do
+    table.insert(points, 1, hour == last and { at = hour * 3600, hourly = true, min = entry.min, qty = entry.qty, mv = entry.mv } or {
       at = hour * 3600,
       hourly = true,
-      min = index == cheapest and entry.min or math.floor(entry.min * (1.01 + wobble() * 0.07)),
-      qty = newest and entry.qty or math.max(1, math.floor(entry.qty * (0.8 + wobble() * 0.4))),
-      mv = newest and entry.mv or 0,
-    }
+      min = math.floor(entry.min * (0.95 + wobble() * 0.1)),
+      qty = math.max(1, math.floor(entry.qty * (0.8 + wobble() * 0.4))),
+      mv = 0,
+    })
   end
   return points
 end

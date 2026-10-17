@@ -236,17 +236,18 @@ function Database.Lookup(db, realmKey, key)
   return packed and Codec.DecodePrice(packed)
 end
 
--- Folds a later point of the same hour or day into `into`: the lowest price,
--- the later quantity, and the later market value unless that scan measured
--- none.
+-- Folds a later point of the same hour or day into `into`, the way a later
+-- scan replaces the day in the price record's days, so that a day reads the
+-- same in both: the later price and quantity, and the later market value
+-- unless that scan measured none.
 local function absorb(into, later)
-  into.min, into.qty = math.min(into.min, later.min), later.qty
+  into.min, into.qty = later.min, later.qty
   if later.mv > 0 then
     into.mv = later.mv
   end
 end
 
--- Points oldest first, one per day.
+-- The points folded to one per day, oldest first.
 local function byDay(points)
   local days = {}
   for _, point in ipairs(points) do
