@@ -84,7 +84,7 @@ The fields mean the following:
 
 - `version` is 1. A change to this shape that an older addon cannot read raises it. The addon ignores a table whose `version` it does not know.
 - `server` is the server address the app is set to, as Settings shows it.
-- `items[itemKey]` is `"quality|name"`, the encoding of `GoldbookDB.items`. Items without a name on the server are not in `items`.
+- `items[itemKey]` is `"quality|name"`, the encoding of `GoldbookDB.items`. Items without a name or a quality on the server are not in `items`. When realms name an item differently, the first realm key in sorted order wins.
 - `realms` is keyed by the addon's realm key, `ns.RealmKey()`: the realm as `GetNormalizedRealmName()` gives it, a hyphen, and the faction. The app splits a key at its last hyphen to get the realm and the faction for the export.
 - `scannedAt` is the export's `scannedAt`.
 - `prices[itemKey]` is the export's `price` joined with commas. These are the first six fields of `Codec.EncodePrice`, in the same order, so `Codec.DecodePrice(packed .. ";")` decodes the string into a record with empty `days` and `ladder`.

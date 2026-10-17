@@ -14,7 +14,7 @@ fn flavor(path: &Path) -> bool {
         .and_then(|n| n.to_str())
         .is_some_and(|n| n.len() > 2 && n.starts_with('_') && n.ends_with('_'))
 }
-pub fn account_fingerprint(file: &Path) -> Result<String> {
+fn account_path(file: &Path) -> Result<(&str, &Path)> {
     let mut path = file;
     for expected in ["Goldbook.lua", "SavedVariables"] {
         ensure!(
@@ -44,10 +44,19 @@ pub fn account_fingerprint(file: &Path) -> Result<String> {
         flavor(path),
         "Expected a World of Warcraft game flavor folder"
     );
+    Ok((account, path))
+}
+pub fn account_fingerprint(file: &Path) -> Result<String> {
+    let (account, _) = account_path(file)?;
     Ok(goldbook_core::sha256(format!(
         "goldbook:wow-account:v1:{}",
         account.to_ascii_uppercase()
     )))
+}
+pub fn flavor_of(saved_variables_file: &Path) -> Option<PathBuf> {
+    account_path(saved_variables_file)
+        .ok()
+        .map(|(_, flavor)| flavor.to_owned())
 }
 pub fn wow_dir_candidates() -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
@@ -146,13 +155,18 @@ pub fn flavor_dirs(wow_dir: Option<&Path>) -> Vec<PathBuf> {
 pub fn saved_variables_files(wow_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for flavor in flavor_dirs(wow_dir) {
-        for account in entries(&flavor.join("WTF/Account")) {
-            let saved = account.join("SavedVariables");
-            if saved.is_dir() {
-                files.push(saved.join("Goldbook.lua"))
-            }
-        }
+        files.extend(flavor_saved_variables(&flavor))
     }
+    files.sort();
+    files
+}
+pub(crate) fn flavor_saved_variables(flavor: &Path) -> Vec<PathBuf> {
+    let mut files = entries(&flavor.join("WTF/Account"))
+        .into_iter()
+        .map(|account| account.join("SavedVariables"))
+        .filter(|saved| saved.is_dir())
+        .map(|saved| saved.join("Goldbook.lua"))
+        .collect::<Vec<_>>();
     files.sort();
     files
 }

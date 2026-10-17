@@ -2,8 +2,12 @@ use axum::{extract::State, routing::post, Json, Router};
 use goldbook_sync::*;
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 const FIXTURE: &[u8] = include_bytes!("data/Goldbook.lua");
@@ -592,5 +596,322 @@ async fn seller_uploads_batch_retry_and_remember_more_than_500_snapshots() {
         vec![100, 100, 100, 100, 100, 100, 100, 1]
     );
     assert_eq!(rows[1], rows[2], "retry the unacknowledged batch");
+    task.abort();
+}
+struct ExportMock {
+    bodies: HashMap<String, Value>,
+    fail: AtomicBool,
+    requests: Mutex<Vec<(String, String, bool)>>,
+}
+async fn export_server(
+    bodies: HashMap<String, Value>,
+) -> (String, Arc<ExportMock>, tokio::task::JoinHandle<()>) {
+    use axum::{extract::Query, http::StatusCode, response::IntoResponse, routing::get};
+    let mock = Arc::new(ExportMock {
+        bodies,
+        fail: false.into(),
+        requests: Mutex::new(Vec::new()),
+    });
+    let app = Router::new()
+        .route(
+            "/goldbook/api/export",
+            get(
+                |State(mock): State<Arc<ExportMock>>,
+                 headers: axum::http::HeaderMap,
+                 Query(query): Query<HashMap<String, String>>| async move {
+                    let realm = query.get("realm").cloned().unwrap_or_default();
+                    let faction = query.get("faction").cloned().unwrap_or_default();
+                    mock.requests.lock().unwrap().push((
+                        realm.clone(),
+                        faction.clone(),
+                        headers.contains_key("authorization"),
+                    ));
+                    if mock.fail.load(Ordering::SeqCst) {
+                        return (StatusCode::INTERNAL_SERVER_ERROR, "database is down")
+                            .into_response();
+                    }
+                    match mock.bodies.get(&format!("{realm}-{faction}")) {
+                        Some(body) => Json(body.clone()).into_response(),
+                        None => (
+                            StatusCode::NOT_FOUND,
+                            Json(json!({"error":"no scans for this realm and faction"})),
+                        )
+                            .into_response(),
+                    }
+                },
+            ),
+        )
+        .with_state(mock.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{address}/goldbook"), mock, task)
+}
+const STUB: &str = include_str!("../../../addon/Goldbook/ServerData.lua");
+fn recording_logger() -> (Logger, Arc<Mutex<Vec<String>>>) {
+    let lines = Arc::new(Mutex::new(Vec::new()));
+    let sink = lines.clone();
+    (
+        Arc::new(move |line: &str| sink.lock().unwrap().push(line.to_owned())),
+        lines,
+    )
+}
+fn faramon_export() -> Value {
+    json!({
+        "realm": "Faramon",
+        "faction": "Horde",
+        "scannedAt": 1760090000,
+        "items": {
+            "2589": {
+                "name": "Linen Cloth",
+                "quality": 1,
+                "price": [100, 100, 4, 1760090000, 105, 1760090000],
+                "hours": [[488912, 110, 42, 0], [488913, 100, 100, 105]],
+                "days": [[20371, 100, 100, 105]]
+            },
+            "2592": {
+                "name": "Thrall's \"Ünicode\" Wool\\\n7",
+                "quality": 1,
+                "price": [250, 20, 0, 1760080000, 0, 0],
+                "hours": [],
+                "days": [[20371, 250, 20, 0]]
+            }
+        }
+    })
+}
+fn write_account(flavor: &Path, account: &str, text: &str) -> std::path::PathBuf {
+    let file = flavor
+        .join("WTF/Account")
+        .join(account)
+        .join("SavedVariables/Goldbook.lua");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, text).unwrap();
+    file
+}
+#[tokio::test]
+async fn server_data_is_written_for_every_realm_in_the_flavor_and_kept_on_failure() {
+    use std::fs;
+    let (api, mock, task) = export_server(HashMap::from([
+        ("Faramon-Horde".to_owned(), faramon_export()),
+        (
+            "Pyrewood Village-Alliance".to_owned(),
+            json!({
+                "realm": "Pyrewood Village",
+                "faction": "Alliance",
+                "scannedAt": 1760000000,
+                "items": {
+                    "9775:584": {
+                        "name": null,
+                        "quality": null,
+                        "price": [5000, 1, 1, 1760000000, 4800, 1759990000],
+                        "hours": [[488888, 5000, 1, 4800]],
+                        "days": [[20370, 5000, 1, 4800]]
+                    }
+                }
+            }),
+        ),
+    ]))
+    .await;
+    let temp = tempfile::tempdir().unwrap();
+    let flavor = temp.path().join("_classic_");
+    let addon = flavor.join("Interface/AddOns/Goldbook");
+    fs::create_dir_all(&addon).unwrap();
+    fs::write(addon.join("ServerData.lua"), STUB).unwrap();
+    let one_text = "GoldbookDB = {\n[\"prices\"] = { [\"Faramon-Horde\"] = { [\"2589\"] = \"1,1,1,1,1,1;;\" } },\n[\"scanned\"] = { [\"Area 52-Alliance\"] = 1760000000 },\n}\n";
+    let two_text = "GoldbookDB = {\n[\"characters\"] = { [\"Sultan-Pyrewood Village\"] = { [\"realm\"] = \"Pyrewood Village\", [\"faction\"] = \"Alliance\" } },\n[\"scanned\"] = { [\"Faramon-Horde\"] = 1760090000 },\n}\n";
+    let one = write_account(&flavor, "ONE", one_text);
+    let two = write_account(&flavor, "TWO", two_text);
+    assert_eq!(flavor_of(&one), Some(flavor.clone()));
+    assert_eq!(flavor_of(Path::new("/tmp/x.lua")), None);
+    let (log, lines) = recording_logger();
+    let path = addon.join("ServerData.lua");
+    assert_eq!(
+        write_server_data(&flavor, &api, &log).await.unwrap(),
+        ServerData::Written {
+            realms: vec!["Faramon-Horde".into(), "Pyrewood Village-Alliance".into()],
+            items: 3,
+            path: path.clone(),
+        }
+    );
+    let expected = format!(
+        r#"-- The Goldbook app writes this file with prices from the Goldbook server.
+-- The app rewrites it, so edits to it are lost.
+local data = {{ version = 1, server = "{api}", items = {{}}, realms = {{}} }}
+local function fill(t, f) f(t) end
+fill(data.items, function(t)
+t["2589"] = "1|Linen Cloth"
+t["2592"] = "1|Thrall's \"Ünicode\" Wool\\\0107"
+end)
+data.realms["Faramon-Horde"] = {{ scannedAt = 1760090000, prices = {{}}, hours = {{}}, days = {{}} }}
+fill(data.realms["Faramon-Horde"].prices, function(t)
+t["2589"] = "100,100,4,1760090000,105,1760090000"
+t["2592"] = "250,20,0,1760080000,0,0"
+end)
+fill(data.realms["Faramon-Horde"].hours, function(t)
+t["2589"] = "488912:110:42:0,488913:100:100:105"
+end)
+fill(data.realms["Faramon-Horde"].days, function(t)
+t["2589"] = "20371:100:100:105"
+t["2592"] = "20371:250:20:0"
+end)
+data.realms["Pyrewood Village-Alliance"] = {{ scannedAt = 1760000000, prices = {{}}, hours = {{}}, days = {{}} }}
+fill(data.realms["Pyrewood Village-Alliance"].prices, function(t)
+t["9775:584"] = "5000,1,1,1760000000,4800,1759990000"
+end)
+fill(data.realms["Pyrewood Village-Alliance"].hours, function(t)
+t["9775:584"] = "488888:5000:1:4800"
+end)
+fill(data.realms["Pyrewood Village-Alliance"].days, function(t)
+t["9775:584"] = "20370:5000:1:4800"
+end)
+GoldbookServerData = data
+"#
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), expected);
+    assert_eq!(
+        *mock.requests.lock().unwrap(),
+        vec![
+            ("Area 52".to_owned(), "Alliance".to_owned(), false),
+            ("Faramon".to_owned(), "Horde".to_owned(), false),
+            ("Pyrewood Village".to_owned(), "Alliance".to_owned(), false),
+        ]
+    );
+    let modified = fs::metadata(&path).unwrap().modified().unwrap();
+    assert_eq!(
+        write_server_data(&flavor, &api, &log).await.unwrap(),
+        ServerData::Unchanged {
+            realms: vec!["Faramon-Horde".into(), "Pyrewood Village-Alliance".into()],
+        }
+    );
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
+    mock.fail.store(true, Ordering::SeqCst);
+    let error = write_server_data(&flavor, &api, &log).await.unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "export of Area 52-Alliance answered 500 database is down"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), expected);
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
+    let shown = path.display();
+    assert_eq!(
+        *lines.lock().unwrap(),
+        vec![
+            format!("server prices for Faramon-Horde, Pyrewood Village-Alliance written to {shown}: 3 items"),
+            format!("server prices for Faramon-Horde, Pyrewood Village-Alliance unchanged in {shown}"),
+            format!(
+                "server prices for {} failed: export of Area 52-Alliance answered 500 database is down",
+                flavor.display()
+            ),
+        ]
+    );
+    let mut names = fs::read_dir(&addon)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    names.sort();
+    assert_eq!(names, vec!["ServerData.lua"]);
+    assert_eq!(fs::read_to_string(&one).unwrap(), one_text);
+    assert_eq!(fs::read_to_string(&two).unwrap(), two_text);
+    task.abort();
+}
+#[tokio::test]
+async fn server_data_needs_the_addon_folder_and_a_realm_the_server_knows() {
+    use std::fs;
+    let (api, mock, task) = export_server(HashMap::new()).await;
+    let temp = tempfile::tempdir().unwrap();
+    let flavor = temp.path().join("_retail_");
+    write_account(
+        &flavor,
+        "ONE",
+        "GoldbookDB = { [\"scanned\"] = { [\"Area 52-Alliance\"] = 1 } }",
+    );
+    assert_eq!(
+        write_server_data(&flavor, &api, &logger()).await.unwrap(),
+        ServerData::NoAddon
+    );
+    assert_eq!(*mock.requests.lock().unwrap(), vec![]);
+    let addon = flavor.join("Interface/AddOns/Goldbook");
+    fs::create_dir_all(&addon).unwrap();
+    fs::write(addon.join("ServerData.lua"), STUB).unwrap();
+    assert_eq!(
+        write_server_data(&flavor, &api, &logger()).await.unwrap(),
+        ServerData::NoRealms
+    );
+    assert_eq!(
+        *mock.requests.lock().unwrap(),
+        vec![("Area 52".to_owned(), "Alliance".to_owned(), false)]
+    );
+    assert_eq!(
+        fs::read_to_string(addon.join("ServerData.lua")).unwrap(),
+        STUB
+    );
+    task.abort();
+}
+#[tokio::test]
+async fn written_server_data_loads_in_luajit_beyond_its_constant_limit() {
+    if std::process::Command::new("luajit")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("luajit is not on PATH, skipping");
+        return;
+    }
+    let mut export = faramon_export();
+    for i in 0..40_000 {
+        export["items"][format!("{}", 100_000 + i)] = json!({
+            "name": format!("Item {i}"),
+            "quality": 2,
+            "price": [i, 1, 1, 1760090000, 0, 0],
+            "hours": [[488913, i, 1, 0]],
+            "days": [[20371, i, 1, 0]]
+        });
+    }
+    let (api, _mock, task) =
+        export_server(HashMap::from([("Faramon-Horde".to_owned(), export)])).await;
+    let temp = tempfile::tempdir().unwrap();
+    let flavor = temp.path().join("_classic_era_");
+    std::fs::create_dir_all(flavor.join("Interface/AddOns/Goldbook")).unwrap();
+    write_account(
+        &flavor,
+        "ONE",
+        "GoldbookDB = { [\"scanned\"] = { [\"Faramon-Horde\"] = 1 } }",
+    );
+    let ServerData::Written { path, items, .. } =
+        write_server_data(&flavor, &api, &logger()).await.unwrap()
+    else {
+        panic!("server data was not written")
+    };
+    assert_eq!(items, 40_002);
+    let check = r#"
+dofile(os.getenv("SERVER_DATA"))
+local data = GoldbookServerData
+local realm = data.realms["Faramon-Horde"]
+assert(data.version == 1)
+assert(data.server == os.getenv("API"))
+assert(realm.scannedAt == 1760090000)
+assert(realm.prices["2589"] == "100,100,4,1760090000,105,1760090000")
+assert(realm.hours["2589"] == "488912:110:42:0,488913:100:100:105")
+assert(realm.days["2592"] == "20371:250:20:0")
+assert(realm.hours["2592"] == nil)
+assert(data.items["2592"] == "1|Thrall's \"\195\156nicode\" Wool\\\n7")
+assert(data.items["124999"] == "2|Item 24999")
+assert(realm.prices["124999"] == "24999,1,1,1760090000,0,0")
+local count = 0
+for _ in pairs(realm.prices) do count = count + 1 end
+assert(count == 40002, count)
+"#;
+    let output = std::process::Command::new("luajit")
+        .arg("-e")
+        .arg(check)
+        .env("SERVER_DATA", &path)
+        .env("API", &api)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     task.abort();
 }
