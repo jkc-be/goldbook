@@ -320,13 +320,50 @@ fn sellers(input: &Input, db: &Connection) -> Result<Reply> {
     Ok(Reply::json(response))
 }
 
-fn prices(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn search(input: &Input) -> Result<&str> {
     let search = input.query.get("q").map(String::as_str).unwrap_or("");
     if search.encode_utf16().count() > 100 {
         return Err(Error::new(400, "q must be at most 100 characters"));
     }
+    Ok(search)
+}
+/// The items a price list shows, as `q`, `profession`, `kind` and `quality`
+/// select them. MATCHING reads them from ?4, ?6 and ?7.
+struct Filter<'a> {
+    search: &'a str,
+    selected: Option<String>,
+    quality: Option<i64>,
+}
+const MATCHING: &str = "(?4='' OR instr(lower(i.name),lower(?4))>0 OR p.item_key=?4) AND (?6 IS NULL OR CAST(p.item_key AS INTEGER) IN (SELECT value FROM json_each(?6))) AND (?7 IS NULL OR i.quality=?7)";
+impl<'a> Filter<'a> {
+    fn parse(input: &Input, search: &'a str) -> Result<Self> {
+        let profession = input
+            .query
+            .get("profession")
+            .map(String::as_str)
+            .unwrap_or("");
+        let kind = input.query.get("kind").map(String::as_str).unwrap_or("all");
+        let selected =
+            goldbook_core::profession_items(profession, kind).map_err(|e| Error::new(400, e))?;
+        let quality = match input.query.get("quality").map(String::as_str) {
+            None | Some("") => None,
+            Some(_) => Some(integer(input, "quality", 0, 7)?),
+        };
+        Ok(Self {
+            search,
+            selected: selected.map(|ids| serde_json::to_string(&ids).unwrap()),
+            quality,
+        })
+    }
+    fn is_empty(&self) -> bool {
+        self.search.is_empty() && self.selected.is_none() && self.quality.is_none()
+    }
+}
+fn prices(input: &Input, db: &Connection) -> Result<Reply> {
+    let realm = required(input, "realm")?;
+    let faction = required(input, "faction")?;
+    // q is checked before sort and order, and the other filters after them.
+    let search = search(input)?;
     let (sort, sort_join) = match input
         .query
         .get("sort")
@@ -357,19 +394,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         "desc" => "DESC",
         _ => return Err(Error::new(400, "order must be one of asc, desc")),
     };
-    let profession = input
-        .query
-        .get("profession")
-        .map(String::as_str)
-        .unwrap_or("");
-    let kind = input.query.get("kind").map(String::as_str).unwrap_or("all");
-    let selected =
-        goldbook_core::profession_items(profession, kind).map_err(|e| Error::new(400, e))?;
-    let selected = selected.map(|ids| serde_json::to_string(&ids).unwrap());
-    let quality = match input.query.get("quality").map(String::as_str) {
-        None | Some("") => None,
-        Some(_) => Some(integer(input, "quality", 0, 7)?),
-    };
+    let filter = Filter::parse(input, search)?;
     let limit = integer(input, "limit", 50, 200)?;
     let offset = integer(input, "offset", 0, 9007199254740991)?;
     let scan = db::query(
@@ -398,9 +423,15 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         "p.item_key AS itemKey,i.name,i.quality,p.min_buyout AS minBuyout,{MARKET} AS marketValue,p.quantity,p.num_auctions AS numAuctions"
     );
     let bindings: [&dyn rusqlite::ToSql; 7] = [
-        &id, &limit, &offset, &search, &borrowed, &selected, &quality,
+        &id,
+        &limit,
+        &offset,
+        &filter.search,
+        &borrowed,
+        &filter.selected,
+        &filter.quality,
     ];
-    if search.is_empty() && selected.is_none() && quality.is_none() {
+    if filter.is_empty() {
         let sql = format!(
             "SELECT {columns} FROM (SELECT p.* FROM prices p {sort_join} WHERE p.scan_id=?1 {page}) p {NAMED} {MARKET_JOIN} {order}"
         );
@@ -408,9 +439,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
             json!({"scan":scan,"marketScan":full,"total":scan["itemCount"],"items":db::query(db,&sql,&bindings[..5])?}),
         ));
     }
-    let matching = format!(
-        "FROM prices p {NAMED} {MARKET_JOIN} WHERE p.scan_id=?1 AND (?4='' OR instr(lower(i.name),lower(?4))>0 OR p.item_key=?4) AND (?6 IS NULL OR CAST(p.item_key AS INTEGER) IN (SELECT value FROM json_each(?6))) AND (?7 IS NULL OR i.quality=?7)"
-    );
+    let matching = format!("FROM prices p {NAMED} {MARKET_JOIN} WHERE p.scan_id=?1 AND {MATCHING}");
     let mut items = db::query(
         db,
         &format!("SELECT {columns},COUNT(*) OVER() AS total {matching} {page}"),
