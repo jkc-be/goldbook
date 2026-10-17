@@ -1,4 +1,4 @@
-.PHONY: build rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version hooks clean
+.PHONY: build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version hooks clean
 
 OVH_HOST ?= fedora_ovh
 
@@ -7,8 +7,15 @@ node_modules: package-lock.json
 	@touch node_modules
 
 # Installers for this computer in target/release/bundle: dmg on macOS, setup on Windows, deb and rpm on Linux.
+# Then installs this checkout's addon, as install-addon does.
 build: node_modules
 	npm run desktop:pack
+	$(MAKE) install-addon
+
+# Copies this checkout's addon into every game in the World of Warcraft folder,
+# keeping each one's ServerData.lua. Another folder: make install-addon WOW=/path.
+install-addon:
+	cargo run --locked -q -p goldbook-sync -- install --source addon/Goldbook $(if $(WOW),--wow "$(WOW)")
 
 # Linux (Fedora): only the rpm, in target/release/bundle/rpm. Needs rpmbuild.
 rpm: node_modules
@@ -27,7 +34,10 @@ else
 	npm run desktop:pack -- --no-bundle
 endif
 
+# Starts the local server stack, rebuilt from this checkout when it changed, then
+# the desktop app in development mode.
 run: node_modules
+	$(MAKE) dev
 	npm run desktop
 
 # Full local suite, including local Traefik. Needs Docker Compose CLI, not its daemon.

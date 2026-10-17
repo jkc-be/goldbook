@@ -292,7 +292,12 @@ fn extract_trades(db: &Map<String, Value>) -> Vec<Trade> {
             let Some(t) = entry.as_object() else {
                 continue;
             };
-            let trade = json!({"name":name,"realm":normalized_realm(realm),"at":get(t,"at"),"side":get(t,"side"),"item":get(t,"item"),"itemKey":get(t,"key"),"count":get(t,"count"),"price":get(t,"price"),"fee":get(t,"fee")});
+            // Only an auction sale has a cut, so any other entry may leave its fee out.
+            let fee = match t.get("fee") {
+                None if get(t, "side") != "sell" => json!(0),
+                _ => get(t, "fee"),
+            };
+            let trade = json!({"name":name,"realm":normalized_realm(realm),"at":get(t,"at"),"side":get(t,"side"),"item":get(t,"item"),"itemKey":get(t,"key"),"count":get(t,"count"),"price":get(t,"price"),"fee":fee,"party":get(t,"party")});
             if let Ok(trade) = parse_trade(&trade, "trade") {
                 trades.push(trade);
             }

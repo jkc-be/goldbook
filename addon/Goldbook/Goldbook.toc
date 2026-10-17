@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Goldbook
 ## Notes: Scans the auction house, shows prices in tooltips, and queues scans for cloud sync.
-## Version: 0.2.3
+## Version: 0.2.4
 ## Category: Auctions
 ## IconTexture: Interface\Icons\INV_Misc_Coin_01
 ## AddonCompartmentFunc: Goldbook_OnAddonCompartmentClick
@@ -19,9 +19,12 @@ Ledger.lua
 Trades.lua
 Scanner.lua
 Sellers.lua
+Mail.lua
 Core.lua
+Accounting.lua
 Tooltip.lua
 UI.lua
+Clicks.lua
 WebLogin.lua
 Minimap.lua
 Options.lua

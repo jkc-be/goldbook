@@ -230,3 +230,151 @@ fn account_rejections_keep_original_field_messages() {
         assert_eq!(parse_account_upload(&input).unwrap_err(), message, "{path}");
     }
 }
+fn entry(side: &str, item: &str, price: i64) -> Value {
+    json!({"name":"Sultan","realm":"Faramon","at":1760000000,"side":side,"item":item,"itemKey":null,"count":1,"price":price,"fee":0})
+}
+#[test]
+fn trades_book_every_accounting_side() {
+    let sides = "sell buy vendor merchant tradeSell tradeBuy tradeIn tradeOut mailIn mailOut cod \
+        quest loot repair postage deposit travel training respec otherIn otherOut";
+    for side in sides.split_whitespace() {
+        assert_eq!(
+            parse_trade(&entry(side, "Gold", 500), "t")
+                .map(|t| t.side)
+                .as_deref(),
+            Ok(side)
+        );
+    }
+    assert_eq!(
+        parse_trade(&entry("gift", "Gold", 500), "t").unwrap_err(),
+        "t.side must be one of sell, buy, vendor, merchant, tradeSell, tradeBuy, tradeIn, tradeOut, mailIn, mailOut, cod, quest, loot, repair, postage, deposit, travel, training, respec, otherIn, otherOut"
+    );
+}
+#[test]
+fn only_an_item_in_a_player_trade_goes_for_nothing() {
+    for side in ["tradeSell", "tradeBuy"] {
+        assert_eq!(
+            parse_trade(&entry(side, "Linen Cloth", 0), "t").map(|t| t.price),
+            Ok(0)
+        );
+        assert_eq!(
+            parse_trade(&entry(side, "Linen Cloth", -1), "t").unwrap_err(),
+            "t.price must be a non-negative integer"
+        );
+    }
+    for side in ["sell", "merchant", "cod", "mailIn", "loot"] {
+        assert_eq!(
+            parse_trade(&entry(side, "Gold", 0), "t").unwrap_err(),
+            "t.price must be a positive integer",
+            "{side}"
+        );
+    }
+    let mut cut = entry("tradeSell", "Linen Cloth", 2000);
+    cut["fee"] = json!(100);
+    assert_eq!(
+        parse_trade(&cut, "t").unwrap_err(),
+        "t.fee must not exceed the price, and only an auction sale has one"
+    );
+}
+#[test]
+fn a_party_is_optional_text_that_travels_only_when_known() {
+    let mut mail = entry("mailIn", "Thanks for the help", 12000);
+    assert_eq!(
+        serde_json::to_string(&parse_trade(&mail, "t").unwrap()).unwrap(),
+        "{\"name\":\"Sultan\",\"realm\":\"Faramon\",\"at\":1760000000,\"side\":\"mailIn\",\"item\":\"Thanks for the help\",\"itemKey\":null,\"count\":1,\"price\":12000,\"fee\":0}"
+    );
+    mail["party"] = json!("Mirelle");
+    assert_eq!(
+        serde_json::to_string(&parse_trade(&mail, "t").unwrap()).unwrap(),
+        "{\"name\":\"Sultan\",\"realm\":\"Faramon\",\"at\":1760000000,\"side\":\"mailIn\",\"item\":\"Thanks for the help\",\"itemKey\":null,\"count\":1,\"price\":12000,\"fee\":0,\"party\":\"Mirelle\"}"
+    );
+    mail["party"] = Value::Null;
+    assert_eq!(parse_trade(&mail, "t").unwrap().party, None);
+    mail["party"] = json!("M".repeat(64));
+    assert_eq!(
+        parse_trade(&mail, "t").unwrap().party.map(|p| p.len()),
+        Some(64)
+    );
+    for party in [json!(""), json!("M".repeat(65)), json!(7)] {
+        mail["party"] = party;
+        assert_eq!(
+            parse_trade(&mail, "t").unwrap_err(),
+            "t.party must be a string of 1 to 64 characters"
+        );
+    }
+}
+fn record(min: u64, market: Option<u64>, days: &[u64]) -> PriceRecord {
+    PriceRecord {
+        min,
+        market,
+        days: days.to_vec(),
+    }
+}
+#[test]
+fn the_median_rounds_the_middle_two_up() {
+    assert_eq!(median(&[100, 300, 200]), Some(200));
+    assert_eq!(median(&[100, 101]), Some(101));
+    assert_eq!(median(&[]), None);
+}
+#[test]
+fn a_flip_is_priced_under_70_percent_of_its_resale_value() {
+    let earlier = [100, 110, 90, 60];
+    let usual = Some(Flip {
+        sell: 100,
+        profit: 35,
+    });
+    assert_eq!(flip(&record(60, None, &earlier), false), usual);
+    assert_eq!(flip(&record(75, None, &[100, 110, 90, 75]), false), None);
+    assert_eq!(
+        flip(&record(60, None, &[100, 110, 60]), false),
+        None,
+        "two earlier days are not enough history"
+    );
+    assert_eq!(
+        flip(&record(50, Some(100), &[50]), false),
+        Some(Flip {
+            sell: 100,
+            profit: 45
+        }),
+        "priced under the newest scan's market value"
+    );
+    assert_eq!(
+        flip(&record(60, Some(200), &earlier), false),
+        usual,
+        "the lower of market value and earlier days is the resale price"
+    );
+    assert_eq!(flip(&record(60, None, &earlier), true), None);
+}
+#[test]
+fn movers_compare_with_the_day_before_and_skip_copper_noise() {
+    assert_eq!(
+        mover(&record(150, None, &[100, 150])),
+        Some(Mover {
+            before: 100,
+            change: 50.0
+        })
+    );
+    assert_eq!(
+        mover(&record(100, None, &[200, 100])),
+        Some(Mover {
+            before: 200,
+            change: -50.0
+        })
+    );
+    assert_eq!(
+        mover(&record(6000, None, &[10000, 9000, 6000])),
+        Some(Mover {
+            before: 9000,
+            change: -33.3
+        })
+    );
+    assert_eq!(mover(&record(500, None, &[500])), None, "one day");
+    assert_eq!(mover(&record(60, None, &[50, 60])), None, "under a silver");
+    assert_eq!(mover(&record(200, None, &[200, 200])), None, "unchanged");
+}
+#[test]
+fn merchant_goods_are_known_by_base_item_id() {
+    assert!(merchant_sells("3857"));
+    assert!(merchant_sells("2320:584"));
+    assert!(!merchant_sells("2589"));
+}

@@ -2,7 +2,7 @@
 publish = false
 license-file = "../../LICENSE"
 name = "goldbook-sync"
-version = "0.2.3"
+version = "0.2.4"
 edition.workspace = true
 rust-version.workspace = true
 [dependencies]

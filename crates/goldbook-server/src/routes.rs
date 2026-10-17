@@ -2,11 +2,17 @@ use crate::{App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header,
 use axum::http::Method;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use flate2::{Compression, write::GzEncoder};
+use goldbook_core::{HISTORY_DAYS, PriceRecord};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, io::Write, path::Path, sync::LazyLock};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Write,
+    path::Path,
+    sync::LazyLock,
+};
 use subtle::ConstantTimeEq;
 
 const SCANS: &str = "SELECT id, scanned_at AS scannedAt, mode, item_count AS itemCount, scanner FROM scans WHERE realm=?1 AND faction=?2";
@@ -41,6 +47,8 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                 | "/api/professions"
                 | "/api/sellers"
                 | "/api/prices"
+                | "/api/deals"
+                | "/api/movers"
                 | "/api/history"
                 | "/api/trends"
                 | "/api/export"
@@ -101,6 +109,8 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
             json!({"professions": goldbook_core::professions()}),
         )),
         ("GET", "/api/prices") => prices(&input, &db),
+        ("GET", "/api/deals") => deals(&input, &db),
+        ("GET", "/api/movers") => movers(&input, &db),
         ("GET", "/api/history") => history(&input, &db),
         ("GET", "/api/trends") => trends(&input, &db),
         ("GET", "/api/export") => export(&input, &db),
@@ -320,13 +330,50 @@ fn sellers(input: &Input, db: &Connection) -> Result<Reply> {
     Ok(Reply::json(response))
 }
 
-fn prices(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn search(input: &Input) -> Result<&str> {
     let search = input.query.get("q").map(String::as_str).unwrap_or("");
     if search.encode_utf16().count() > 100 {
         return Err(Error::new(400, "q must be at most 100 characters"));
     }
+    Ok(search)
+}
+/// The items a price list shows, as `q`, `profession`, `kind` and `quality`
+/// select them. MATCHING reads them from ?4, ?6 and ?7.
+struct Filter<'a> {
+    search: &'a str,
+    selected: Option<String>,
+    quality: Option<i64>,
+}
+const MATCHING: &str = "(?4='' OR instr(lower(i.name),lower(?4))>0 OR p.item_key=?4) AND (?6 IS NULL OR CAST(p.item_key AS INTEGER) IN (SELECT value FROM json_each(?6))) AND (?7 IS NULL OR i.quality=?7)";
+impl<'a> Filter<'a> {
+    fn parse(input: &Input, search: &'a str) -> Result<Self> {
+        let profession = input
+            .query
+            .get("profession")
+            .map(String::as_str)
+            .unwrap_or("");
+        let kind = input.query.get("kind").map(String::as_str).unwrap_or("all");
+        let selected =
+            goldbook_core::profession_items(profession, kind).map_err(|e| Error::new(400, e))?;
+        let quality = match input.query.get("quality").map(String::as_str) {
+            None | Some("") => None,
+            Some(_) => Some(integer(input, "quality", 0, 7)?),
+        };
+        Ok(Self {
+            search,
+            selected: selected.map(|ids| serde_json::to_string(&ids).unwrap()),
+            quality,
+        })
+    }
+    fn is_empty(&self) -> bool {
+        self.search.is_empty() && self.selected.is_none() && self.quality.is_none()
+    }
+}
+fn prices(input: &Input, db: &Connection) -> Result<Reply> {
+    let realm = required(input, "realm")?;
+    let faction = required(input, "faction")?;
+    // q is checked before sort and order, and the other filters after them.
+    let search = search(input)?;
     let (sort, sort_join) = match input
         .query
         .get("sort")
@@ -357,19 +404,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         "desc" => "DESC",
         _ => return Err(Error::new(400, "order must be one of asc, desc")),
     };
-    let profession = input
-        .query
-        .get("profession")
-        .map(String::as_str)
-        .unwrap_or("");
-    let kind = input.query.get("kind").map(String::as_str).unwrap_or("all");
-    let selected =
-        goldbook_core::profession_items(profession, kind).map_err(|e| Error::new(400, e))?;
-    let selected = selected.map(|ids| serde_json::to_string(&ids).unwrap());
-    let quality = match input.query.get("quality").map(String::as_str) {
-        None | Some("") => None,
-        Some(_) => Some(integer(input, "quality", 0, 7)?),
-    };
+    let filter = Filter::parse(input, search)?;
     let limit = integer(input, "limit", 50, 200)?;
     let offset = integer(input, "offset", 0, 9007199254740991)?;
     let scan = db::query(
@@ -398,9 +433,15 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         "p.item_key AS itemKey,i.name,i.quality,p.min_buyout AS minBuyout,{MARKET} AS marketValue,p.quantity,p.num_auctions AS numAuctions"
     );
     let bindings: [&dyn rusqlite::ToSql; 7] = [
-        &id, &limit, &offset, &search, &borrowed, &selected, &quality,
+        &id,
+        &limit,
+        &offset,
+        &filter.search,
+        &borrowed,
+        &filter.selected,
+        &filter.quality,
     ];
-    if search.is_empty() && selected.is_none() && quality.is_none() {
+    if filter.is_empty() {
         let sql = format!(
             "SELECT {columns} FROM (SELECT p.* FROM prices p {sort_join} WHERE p.scan_id=?1 {page}) p {NAMED} {MARKET_JOIN} {order}"
         );
@@ -408,9 +449,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
             json!({"scan":scan,"marketScan":full,"total":scan["itemCount"],"items":db::query(db,&sql,&bindings[..5])?}),
         ));
     }
-    let matching = format!(
-        "FROM prices p {NAMED} {MARKET_JOIN} WHERE p.scan_id=?1 AND (?4='' OR instr(lower(i.name),lower(?4))>0 OR p.item_key=?4) AND (?6 IS NULL OR CAST(p.item_key AS INTEGER) IN (SELECT value FROM json_each(?6))) AND (?7 IS NULL OR i.quality=?7)"
-    );
+    let matching = format!("FROM prices p {NAMED} {MARKET_JOIN} WHERE p.scan_id=?1 AND {MATCHING}");
     let mut items = db::query(
         db,
         &format!("SELECT {columns},COUNT(*) OVER() AS total {matching} {page}"),
@@ -434,6 +473,178 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
     Ok(Reply::json(
         json!({"scan":scan,"marketScan":full,"total":total,"items":items}),
     ))
+}
+/// An item of the newest scan, priced as the addon prices it after merging
+/// the server's export.
+struct Listing {
+    item_key: String,
+    name: Option<String>,
+    quality: Option<i64>,
+    quantity: u64,
+    record: PriceRecord,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Advised<T> {
+    item_key: String,
+    name: Option<String>,
+    quality: Option<i64>,
+    min_buyout: u64,
+    #[serde(flatten)]
+    advice: T,
+    quantity: u64,
+}
+impl Listing {
+    fn advised<T>(self, advice: T) -> Advised<T> {
+        Advised {
+            item_key: self.item_key,
+            name: self.name,
+            quality: self.quality,
+            min_buyout: self.record.min,
+            advice,
+            quantity: self.quantity,
+        }
+    }
+}
+/// The realm's newest scan and the items of it that `filter` selects, with
+/// the daily lows of the export's window of 61 days.
+fn listings(
+    db: &Connection,
+    realm: &str,
+    faction: &str,
+    filter: &Filter,
+) -> Result<(Value, Vec<Listing>)> {
+    let scan = db::query(
+        db,
+        &format!("{SCANS} ORDER BY scanned_at DESC,id DESC LIMIT 1"),
+        &[&realm, &faction],
+    )?
+    .into_iter()
+    .next()
+    .ok_or_else(|| Error::new(404, "no scans for this realm and faction"))?;
+    let id = scan["id"].as_i64().unwrap();
+    let first = (scan["scannedAt"].as_i64().unwrap() / 86400 - 60) * 86400;
+    let bindings: [&dyn rusqlite::ToSql; 7] = [
+        &id,
+        &realm,
+        &faction,
+        &filter.search,
+        &first,
+        &filter.selected,
+        &filter.quality,
+    ];
+    let matching = format!("FROM prices p {NAMED} WHERE p.scan_id=?1 AND {MATCHING}");
+    let mut days: HashMap<String, Vec<[i64; 4]>> = HashMap::new();
+    // The unary plus keeps SQLite from looking each item up in each scan,
+    // which for a whole realm is slower than reading the scans whole.
+    let mut statement = db.prepare(&format!(
+        "SELECT p.item_key,s.scanned_at/86400,p.min_buyout FROM scans s JOIN prices p ON p.scan_id=s.id WHERE s.realm=?2 AND s.faction=?3 AND s.scanned_at>=?5 AND +p.item_key IN (SELECT p.item_key {matching}) ORDER BY s.scanned_at"
+    ))?;
+    let mut rows = statement.query(&bindings[..])?;
+    while let Some(row) = rows.next()? {
+        let lows = days.entry(row.get(0)?).or_default();
+        add_to_bucket(lows, row.get(1)?, row.get(2)?, 0, 0);
+    }
+    let mut statement = db.prepare(&format!(
+        "SELECT p.item_key,i.name,i.quality,p.quantity,p.min_buyout,p.market_value {matching}"
+    ))?;
+    let listings = statement
+        .query_map(&bindings[..], |row| {
+            let item_key: String = row.get(0)?;
+            let lows = days.remove(&item_key).unwrap_or_default();
+            let lows = &lows[lows.len().saturating_sub(HISTORY_DAYS)..];
+            Ok(Listing {
+                name: row.get(1)?,
+                quality: row.get(2)?,
+                quantity: unsigned(row, 3)?,
+                record: PriceRecord {
+                    min: unsigned(row, 4)?,
+                    market: Some(unsigned(row, 5)?).filter(|market| *market > 0),
+                    days: lows.iter().map(|day| day[1] as u64).collect(),
+                },
+                item_key,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((scan, listings))
+}
+// Uploads store no negative prices or quantities.
+fn unsigned(row: &rusqlite::Row, index: usize) -> rusqlite::Result<u64> {
+    row.get::<_, i64>(index).map(|n| n as u64)
+}
+fn page<T>(items: Vec<T>, limit: i64, offset: i64) -> Vec<T> {
+    items
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect()
+}
+fn deals(input: &Input, db: &Connection) -> Result<Reply> {
+    let realm = required(input, "realm")?;
+    let faction = required(input, "faction")?;
+    let filter = Filter::parse(input, search(input)?)?;
+    // The addon's DEFAULT_MIN_PROFIT.
+    let min_profit = integer(input, "minProfit", 1000, 9007199254740991)?;
+    let limit = integer(input, "limit", 50, 200)?;
+    let offset = integer(input, "offset", 0, 9007199254740991)?;
+    let (scan, listings) = listings(db, realm, faction, &filter)?;
+    let mut deals: Vec<_> = listings
+        .into_iter()
+        .filter_map(|listing| {
+            let stocked = goldbook_core::merchant_sells(&listing.item_key);
+            let flip = goldbook_core::flip(&listing.record, stocked)?;
+            (flip.profit >= min_profit as u64).then(|| listing.advised(flip))
+        })
+        .collect();
+    deals.sort_by(|a, b| {
+        b.advice
+            .profit
+            .cmp(&a.advice.profit)
+            .then_with(|| a.item_key.cmp(&b.item_key))
+    });
+    Ok(Reply::json(json!({
+        "scan": scan,
+        "minProfit": min_profit,
+        "total": deals.len(),
+        "items": page(deals, limit, offset),
+    })))
+}
+fn movers(input: &Input, db: &Connection) -> Result<Reply> {
+    let realm = required(input, "realm")?;
+    let faction = required(input, "faction")?;
+    let filter = Filter::parse(input, search(input)?)?;
+    let risers = match input
+        .query
+        .get("direction")
+        .map(String::as_str)
+        .unwrap_or("risers")
+    {
+        "risers" => true,
+        "fallers" => false,
+        _ => {
+            return Err(Error::new(400, "direction must be one of risers, fallers"));
+        }
+    };
+    let limit = integer(input, "limit", 50, 200)?;
+    let offset = integer(input, "offset", 0, 9007199254740991)?;
+    let (scan, listings) = listings(db, realm, faction, &filter)?;
+    let mut movers: Vec<_> = listings
+        .into_iter()
+        .filter_map(|listing| {
+            let mover = goldbook_core::mover(&listing.record)?;
+            (risers == (mover.change > 0.0)).then(|| listing.advised(mover))
+        })
+        .collect();
+    movers.sort_by(|a, b| {
+        let fall = a.advice.change.total_cmp(&b.advice.change);
+        let biggest = if risers { fall.reverse() } else { fall };
+        biggest.then_with(|| a.item_key.cmp(&b.item_key))
+    });
+    Ok(Reply::json(json!({
+        "scan": scan,
+        "total": movers.len(),
+        "items": page(movers, limit, offset),
+    })))
 }
 fn history(input: &Input, db: &Connection) -> Result<Reply> {
     let realm = required(input, "realm")?;
@@ -650,7 +861,7 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
         }
     }
     {
-        let mut insert = tx.prepare("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy,item_key) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT (account_id,name,realm,at,side,item,count,price,fee,copy) DO UPDATE SET item_key=COALESCE(item_key,excluded.item_key)")?;
+        let mut insert = tx.prepare("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy,item_key,party) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12) ON CONFLICT (account_id,name,realm,at,side,item,count,price,fee,copy) DO UPDATE SET item_key=COALESCE(item_key,excluded.item_key),party=COALESCE(party,excluded.party)")?;
         let mut copies: BTreeMap<_, i64> = BTreeMap::new();
         for t in &account.trades {
             let copy = copies
@@ -669,7 +880,8 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
                 t.price as i64,
                 t.fee as i64,
                 *copy,
-                t.item_key
+                t.item_key,
+                t.party
             ])?;
             *copy += 1;
         }
@@ -923,7 +1135,7 @@ fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     let rows = db::query(
         db,
         &format!(
-            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy FROM trades WHERE account_id IN ({GROUP}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
+            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee,t.party FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy,MAX(party) AS party FROM trades WHERE account_id IN ({GROUP}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
         ),
         &[&owner, &name, &realm],
     )?;

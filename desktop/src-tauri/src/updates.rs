@@ -161,6 +161,11 @@ fn newer_than_bundled(bundle: &AddonBundle) -> bool {
     bundle.sequence >= env!("GOLDBOOK_ADDON_SEQUENCE").parse::<u64>().unwrap()
 }
 pub fn source(app: &tauri::AppHandle) -> Result<PathBuf> {
+    // A development build installs the addon of its checkout, never a published
+    // one: it shares the release app's cache, and its stamp may be older.
+    if cfg!(debug_assertions) {
+        return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../addon/Goldbook"));
+    }
     if let Ok((bundle, _)) = cached_bundle(app)
         && newer_than_bundled(&bundle)
     {
@@ -173,9 +178,6 @@ pub fn source(app: &tauri::AppHandle) -> Result<PathBuf> {
             fs::write(directory.join(name), content)?;
         }
         return Ok(directory);
-    }
-    if cfg!(debug_assertions) {
-        return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../addon/Goldbook"));
     }
     Ok(app.path().resource_dir()?.join("addon/Goldbook"))
 }
@@ -192,6 +194,13 @@ async fn download(client: &reqwest::Client, url: &str, maximum: usize) -> Result
 }
 async fn update_addon(app: &tauri::AppHandle) -> Result<()> {
     if !app.state::<crate::AppState>().config.exists() {
+        return Ok(());
+    }
+    if cfg!(debug_assertions) {
+        addon(
+            app,
+            "A development build installs the addon from its checkout.".into(),
+        );
         return Ok(());
     }
     let http = reqwest::Client::builder()

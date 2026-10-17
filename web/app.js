@@ -44,8 +44,10 @@ const NEWEST_SCANS = 5;
 const WOWHEAD_ITEM = "https://www.wowhead.com/forever/item=";
 const WIDE = matchMedia("(min-width: 1240px)");
 
-const state = { realms: [], realm: null, q: "", profession: "", kind: "all", quality: "", sort: "name", order: "asc", offset: 0, selected: null };
-const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0, session: 0 };
+const state = { realms: [], realm: null, q: "", profession: "", kind: "all", quality: "", sort: "name", order: "asc", offset: 0, selected: null, character: "" };
+const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0, session: 0, list: 0, listTrends: 0 };
+// The account in the rail: null when signed out, undefined while that is not known.
+const session = { account: undefined };
 const STALE = Symbol("stale");
 const $ = (id) => document.getElementById(id);
 
@@ -974,7 +976,11 @@ async function loadPrices() {
   }
 }
 
-async function loadRealms() {
+// The realms and the filters' choices, once. False when no realm has a scan.
+async function ensureRealms() {
+  if (state.realm !== null) {
+    return true;
+  }
   const [{ realms }, { professions }] = await latestOnly("view", Promise.all([api("/api/realms"), api("/api/professions")]));
   $("profession").replaceChildren(element("option", { value: "", textContent: "All professions" }),
     ...professions.filter((p) => p.materials.length > 0).map((p) => element("option", { value: p.id, textContent: p.name })));
@@ -988,18 +994,141 @@ async function loadRealms() {
   );
   if (realms.length === 0) {
     showMessage("No scans have been uploaded yet. Scan in game, type /reload, and leave the Goldbook app open. Get the app under Download.");
-    return;
+    return false;
   }
   state.realm = realms[0];
-  await loadPrices();
+  return true;
 }
 
-// Prices load on the first visit to them, so that a page opened on another
-// view neither waits for them nor shows their messages.
+// The realms load on the first visit to a market view, so that a page opened
+// on another view neither waits for them nor shows their messages.
 async function openPrices() {
-  if (state.realm === null) {
-    await loadRealms();
+  if (await ensureRealms()) {
+    await loadPrices();
   }
+}
+
+const plural = (count, word) => `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
+
+// An item of Deals or Movers opens in Prices, where its history is.
+function openItem(itemKey) {
+  location.hash = "#prices";
+  run(() => loadHistory(itemKey));
+}
+
+const itemColumn = {
+  label: "Item",
+  className: "item",
+  cell: (item) =>
+    element("button", {
+      className: `quality-${quality(item)}`,
+      textContent: itemName(item),
+      title: QUALITIES[quality(item)],
+      onclick: () => openItem(item.itemKey),
+    }),
+};
+
+const weekColumn = {
+  label: "7 days",
+  className: "number week",
+  cell: (item, trends) =>
+    trends ? weekTrend(trends.days, trends.items[item.itemKey] ?? trends.days.map(() => null), item.minBuyout) : [],
+};
+
+const aligned = (copper) => money(copper, { aligned: true });
+
+// The market views that list what the server's copy of the addon's advice
+// finds in the newest scan: each one's endpoint, columns and sub-heading.
+const LISTS = {
+  deals: {
+    endpoint: "/api/deals",
+    offset: 0,
+    parameters: () => ({}),
+    columns: [
+      itemColumn,
+      { label: "Buy from", className: "number", cell: (item) => aligned(item.minBuyout) },
+      { label: "Sells for", className: "number sells", cell: (item) => aligned(item.sell) },
+      weekColumn,
+      { label: "Profit", className: "number", cell: (item) => signedMoney(item.profit, { aligned: true }) },
+    ],
+    heading: (data) => {
+      $("min-profit").replaceChildren("Min profit ", money(data.minProfit));
+      return `${plural(data.total, "deal")} in the scan of ${when(data.scan.scannedAt)}`;
+    },
+    none: "No deals match",
+  },
+  movers: {
+    endpoint: "/api/movers",
+    offset: 0,
+    direction: "risers",
+    parameters: () => ({ direction: LISTS.movers.direction }),
+    columns: [
+      itemColumn,
+      { label: "Price", className: "number", cell: (item) => aligned(item.minBuyout) },
+      { label: "Day before", className: "number before", cell: (item) => aligned(item.before) },
+      weekColumn,
+      { label: "Change", className: "number", cell: (item) => trend(item.change, "since the day before") },
+      { label: "Listed", className: "number listed", cell: (item) => item.quantity.toLocaleString("en") },
+    ],
+    heading: (data) =>
+      `${plural(data.total, "price")} ${LISTS.movers.direction === "risers" ? "rose" : "fell"} since the day before, scan of ${when(data.scan.scannedAt)}`,
+    none: "No prices match",
+  },
+};
+
+const marketFilters = () => ({ q: state.q, profession: state.profession, kind: state.kind, quality: state.quality });
+
+function drawList(name, data, trends) {
+  const list = LISTS[name];
+  $("scan").textContent = list.heading(data);
+  $(name).replaceChildren(
+    element("thead", {}, [
+      element("tr", {}, list.columns.map(({ label, className }) => element("th", { scope: "col", className, textContent: label }))),
+    ]),
+    element("tbody", {}, data.items.map((item) =>
+      element("tr", {}, list.columns.map(({ className, cell }) => element("td", { className }, [cell(item, trends)].flat()))))),
+  );
+  const pages = (offset) => () => {
+    list.offset = offset;
+    run(() => loadList(name));
+  };
+  $(`${name}-view`).querySelector(".pager").replaceChildren(
+    element("span", {
+      className: "range muted",
+      textContent: data.total === 0 ? list.none : `${list.offset + 1}–${list.offset + data.items.length} of ${data.total.toLocaleString("en")}`,
+    }),
+    element("button", { textContent: "Previous", disabled: list.offset === 0, onclick: pages(Math.max(0, list.offset - PAGE)) }),
+    element("button", { textContent: "Next", disabled: list.offset + PAGE >= data.total, onclick: pages(list.offset + PAGE) }),
+  );
+}
+
+async function loadList(name) {
+  if (!(await ensureRealms())) {
+    return;
+  }
+  latest.listTrends++;
+  const { realm, faction } = state.realm;
+  const list = LISTS[name];
+  const data = await latestOnly(
+    "list",
+    api(list.endpoint, { realm, faction, ...marketFilters(), ...list.parameters(), limit: PAGE, offset: list.offset }),
+  );
+  drawList(name, data, null);
+  if (data.items.length > 0) {
+    const items = data.items.map((item) => item.itemKey).join(",");
+    drawList(name, data, await latestOnly("listTrends", api("/api/trends", { realm, faction, items })));
+  }
+}
+
+for (const button of $("mover-direction").querySelectorAll("button")) {
+  button.onclick = () => {
+    LISTS.movers.direction = button.dataset.direction;
+    LISTS.movers.offset = 0;
+    for (const other of $("mover-direction").querySelectorAll("button")) {
+      other.setAttribute("aria-pressed", String(other === button));
+    }
+    run(() => loadList("movers"));
+  };
 }
 
 function showPanel(...ids) {
@@ -1046,10 +1175,10 @@ function characterLink(character, current) {
 const groupedId = (id) => `${id.slice(0, 4)}-${id.slice(4)}`;
 
 // The account in the rail, and the purse with the gold of all its characters.
-// `account` is null when signed out and undefined while that is not known.
 function drawSession(account) {
   // Newer than any answer still on its way.
   latest.session++;
+  session.account = account;
   $("session").hidden = account === undefined;
   $("session").replaceChildren(
     ...(account ? ["Signed in as ", element("strong", { textContent: groupedId(account.id) })] : ["Not signed in"]),
@@ -1080,11 +1209,164 @@ function drawAccount(account, current = null) {
 }
 
 async function loadAccount() {
-  const [account, trades] = await latestOnly("view", Promise.all([api("/api/account"), loadTrades()]));
-  drawAccount(account);
-  drawTrades($("account-trades"), trades, { withCharacter: true });
-  $("account-trades").hidden = false;
+  drawAccount(await latestOnly("view", api("/api/account")));
   showPanel("characters");
+}
+
+// The account and every character in it in full, as each one's page has it.
+async function loadRoster() {
+  const account = await api("/api/account");
+  const characters = await Promise.all(account.characters.map(({ name, realm }) => api("/api/character", { name, realm })));
+  return { account, characters };
+}
+
+const characterKey = (character) => `${character.name}-${character.realm}`;
+
+// The character chips of Bags and Gold choose the same character. One the
+// account no longer has is let go.
+function drawCharacterFilter(characters) {
+  const realms = new Set(characters.map(({ realm }) => realm)).size > 1;
+  if (!characters.some((character) => characterKey(character) === state.character)) {
+    state.character = "";
+  }
+  for (const select of document.querySelectorAll("[data-character-filter]")) {
+    select.replaceChildren(
+      element("option", { value: "", textContent: "All characters" }),
+      ...characters.map((character) =>
+        element("option", { value: characterKey(character), textContent: realms ? `${character.name} · ${character.realm}` : character.name })),
+    );
+    select.value = state.character;
+  }
+}
+
+for (const select of document.querySelectorAll("[data-character-filter]")) {
+  select.onchange = () => {
+    state.character = select.value;
+    render();
+  };
+}
+
+function characterCell(character) {
+  const link = element("a", { href: routeHash({ view: "character", name: character.name, realm: character.realm }), textContent: character.name });
+  link.style.color = classColor(character.class);
+  return element("td", { className: "character" }, [link]);
+}
+
+const WHERE = { bags: "Bags", bank: "Bank" };
+
+// Every unbound item in the bags and banks of the characters chosen, the most
+// valuable first, as each character's page lists them.
+function drawBags({ account, characters }) {
+  drawSession(account);
+  drawCharacterFilter(characters);
+  const shown = characters.filter((character) => state.character === "" || characterKey(character) === state.character);
+  const rows = shown
+    .flatMap((character) =>
+      Object.keys(WHERE).flatMap((where) => (character[where]?.rows ?? []).map((row) => ({ ...row, character, where }))))
+    .sort((a, b) => b.value - a.value || (a.name ?? a.key).localeCompare(b.name ?? b.key));
+  const total = (where) => shown.reduce((sum, character) => sum + (character[where]?.total ?? 0), 0);
+  $("bags-sub").textContent = `${plural(rows.length, "item")} of ${plural(shown.length, "character")}`;
+  $("bags-summary").replaceChildren(
+    stat("Worth", money(total("bags") + total("bank")), "after the auction house cut"),
+    stat("Bags", money(total("bags"))),
+    stat("Bank", money(total("bank"))),
+    stat("Items", rows.length.toLocaleString("en")),
+  );
+  const without = (where) => shown.filter((character) => character[where] === null).map(({ name }) => name);
+  const missing = [
+    without("bags").length ? `Log out or /reload in game to save the bags of ${without("bags").join(", ")}.` : "",
+    without("bank").length ? `Open the bank once in game to see that of ${without("bank").join(", ")}.` : "",
+  ].filter(Boolean);
+  $("bags-missing").textContent = missing.join(" ");
+  $("bags-missing").hidden = missing.length === 0;
+  const [item, ...rest] = HOLDING_COLUMNS;
+  const columns = [item, ["Character", "character"], ["In", "where"], ...rest];
+  $("bags").replaceChildren(
+    element("thead", {}, [element("tr", {}, columns.map(([text, className]) => element("th", { scope: "col", className, textContent: text })))]),
+    element("tbody", {}, rows.length === 0
+      ? [element("tr", {}, [element("td", { colSpan: columns.length, className: "muted", textContent: "No unbound items." })])]
+      : rows.map((row) => {
+          const line = holdingRow(row);
+          line.firstChild.after(characterCell(row.character), element("td", { className: "where", textContent: WHERE[row.where] }));
+          return line;
+        })),
+  );
+}
+
+async function loadBags() {
+  drawBags(await latestOnly("view", loadRoster()));
+}
+
+// The gold of all `characters` over time: at each time any of them recorded
+// a balance, the sum of their balances then. Before its first balance a
+// character counts with it, as Ledger.History has it, so that meeting one is
+// no gain.
+function accountGold(characters) {
+  const series = characters.map(({ gold }) => gold).filter((gold) => gold.length > 0);
+  const times = [...new Set(series.flatMap((gold) => gold.map(([time]) => time)))].sort((a, b) => a - b);
+  const next = series.map(() => 0);
+  return times.map((time) => [
+    time,
+    series.reduce((total, gold, index) => {
+      while (next[index] < gold.length && gold[next[index]][0] <= time) {
+        next[index]++;
+      }
+      return total + gold[Math.max(0, next[index] - 1)][1];
+    }, 0),
+  ]);
+}
+
+const GOLD_COLUMNS = [
+  ["Name", "name"],
+  ["Gold", "number"],
+  ["Today", "number"],
+  ["7 days", "number week-change"],
+  ["Updated", "updated"],
+];
+
+// The gold of the account, or of the character chosen, and a row per
+// character with its changes, the richest first.
+function drawGold({ account, characters }) {
+  drawSession(account);
+  drawCharacterFilter(characters);
+  const chosen = characters.find((character) => characterKey(character) === state.character);
+  const gold = chosen ? chosen.gold : accountGold(characters);
+  const title = chosen ? chosen.name : "All characters";
+  $("gold-sub").textContent = plural(characters.length, "character");
+  $("account-gold-summary").replaceChildren(...goldSummary(gold));
+  $("account-gold").hidden = gold.length === 0;
+  $("account-gold-title").textContent = title;
+  if (gold.length > 0) {
+    drawGoldChart({ chart: $("account-gold-chart"), range: $("account-gold-range") }, title, gold);
+  }
+  const balance = (character) => character.gold.at(-1)?.[1] ?? -1;
+  const rows = characters
+    .toSorted((a, b) => balance(b) - balance(a) || a.name.localeCompare(b.name))
+    .map((character) => {
+      const { gold: held } = character;
+      const change = (span) => (held.length ? signedMoney(goldChange(held, span).change, { aligned: true }) : "–");
+      const row = element("tr", {}, [
+        characterCell(character),
+        element("td", { className: "number" }, [held.length ? aligned(held.at(-1)[1]) : "–"]),
+        element("td", { className: "number" }, [change(1)]),
+        element("td", { className: "number week-change" }, [change(7)]),
+        element("td", { className: "updated muted", textContent: character.updatedAt === null ? "–" : age(character.updatedAt) }),
+      ]);
+      row.setAttribute("aria-selected", String(character === chosen));
+      return row;
+    });
+  $("gold-characters").replaceChildren(
+    element("thead", {}, [element("tr", {}, GOLD_COLUMNS.map(([text, className]) => element("th", { scope: "col", className, textContent: text })))]),
+    element("tbody", {}, rows),
+  );
+}
+
+async function loadGold() {
+  drawGold(await latestOnly("view", loadRoster()));
+}
+
+async function loadAccounting() {
+  drawTrades($("account-trades"), await latestOnly("view", loadTrades()), { withCharacter: true, heading: "All characters" });
 }
 
 // Gold is [[time, copper]], oldest first: the balance at the end of the hour
@@ -1132,19 +1414,24 @@ function goldTrend(change, base, note) {
   return [shown, [note, share].filter(Boolean).join(" · ")];
 }
 
-// As Ledger.Performance has it in game: changes since the end of a UTC day.
-// The balance before the first one on record is the first one, so that
-// meeting a character is not a gain.
+// As Ledger.Performance has it in game: the change over the last `span` UTC
+// days, since the end of the day before them. The balance before the first
+// one on record is the first one, so that meeting a character is not a gain.
+function goldChange(gold, span) {
+  const today = Math.floor(goldNow(gold) / DAY) * DAY;
+  const base = balanceBy(gold, today - (span - 1) * DAY);
+  return { change: gold.at(-1)[1] - base, base };
+}
+
 function goldSummary(gold) {
   if (gold.length === 0) {
     return ["Gold", "Today", "7 days", "30 days", "High", "Best day", "Worst day"].map((label) => stat(label, "–"));
   }
   const now = gold.at(-1)[1];
-  const today = Math.floor(goldNow(gold) / DAY) * DAY;
   const date = (time) => shortDate(time, "UTC");
   const over = (span) => {
-    const base = balanceBy(gold, today - (span - 1) * DAY);
-    return goldTrend(now - base, base);
+    const { change, base } = goldChange(gold, span);
+    return goldTrend(change, base);
   };
   const days = dailyGold(gold);
   const moves = days.slice(1).map(({ day, copper }, index) => ({ day, change: copper - days[index].copper, base: days[index].copper }));
@@ -1199,14 +1486,14 @@ const SPAN_NAMES = { 1: "day", 7: "7 days", 30: "30 days" };
 let goldSpan = 7;
 
 // The balance hour by hour over the last `goldSpan` days, or since the first
-// one on record when that is later, with a button per span.
-function drawGoldChart(name, gold) {
-  for (const button of $("gold-range").querySelectorAll("button")) {
+// one on record when that is later, into `chart`, with a button per span in `range`.
+function drawGoldChart(panel, name, gold) {
+  for (const button of panel.range.querySelectorAll("button")) {
     const span = Number(button.dataset.days);
     button.setAttribute("aria-pressed", String(span === goldSpan));
     button.onclick = () => {
       goldSpan = span;
-      drawGoldChart(name, gold);
+      drawGoldChart(panel, name, gold);
     };
   }
   const end = Math.floor(goldNow(gold) / HOUR) * HOUR;
@@ -1215,7 +1502,7 @@ function drawGoldChart(name, gold) {
     times.push(time);
   }
   const balances = hourlyGold(gold, times);
-  drawChart($("gold-chart"), {
+  drawChart(panel.chart, {
     times,
     series: [{ name: "Gold", color: "var(--series-1)", values: balances, area: true }],
     steps: true,
@@ -1267,15 +1554,50 @@ function holdings(title, snapshot, seen, missing) {
   ]);
 }
 
-// Trades as the addon booked them: auction house sales ("sell") and
-// purchases ("buy") from the mailbox, and sales to vendors ("vendor"):
-// [{ name, realm, at, side, item, itemKey, quality, count, price, fee }],
-// newest first. `price` is the whole stack's and `fee` the auction house cut.
+// The gold the addon booked, newest first:
+// [{ name, realm, at, side, item, itemKey, quality, count, price, fee, party }].
+// `price` is the whole stack's and never negative, `fee` the auction house cut
+// and `party` the other player of a trade, mail or cash on delivery, or null.
 const NEWEST_TRADES = 20;
-const SIDES = { sell: "Sold", buy: "Bought", vendor: "Vendor" };
 
-// What a trade added to the gold: the sale less the cut, or minus the price.
-const tradeNet = (trade) => (trade.side === "buy" ? -trade.price : trade.price - trade.fee);
+// Every side an entry can have. Revenue adds its price less the cut to the
+// gold and an expense takes its price away. A goods side moves an item and
+// counts towards that item's profit; the others move gold alone, and `detail`
+// marks those whose `item` says more than the label. `party` joins the label
+// to the other player, as in "Trade sale to Mirelle".
+const SIDES = {
+  sell: { label: "Auction sale", revenue: true, goods: true },
+  buy: { label: "Auction purchase", revenue: false, goods: true },
+  vendor: { label: "Vendor sale", revenue: true, goods: true },
+  merchant: { label: "Merchant purchase", revenue: false, goods: true },
+  tradeSell: { label: "Trade sale", revenue: true, goods: true, party: "to" },
+  tradeBuy: { label: "Trade purchase", revenue: false, goods: true, party: "from" },
+  tradeIn: { label: "Trade gold in", revenue: true, goods: false, party: "from" },
+  tradeOut: { label: "Trade gold out", revenue: false, goods: false, party: "to" },
+  mailIn: { label: "Mail gold in", revenue: true, goods: false, party: "from", detail: true },
+  mailOut: { label: "Mail gold out", revenue: false, goods: false, party: "to" },
+  cod: { label: "Cash on delivery", revenue: false, goods: true, party: "from" },
+  quest: { label: "Quest reward", revenue: true, goods: false, detail: true },
+  loot: { label: "Looted gold", revenue: true, goods: false },
+  repair: { label: "Repairs", revenue: false, goods: false },
+  postage: { label: "Postage", revenue: false, goods: false },
+  deposit: { label: "Auction deposit", revenue: false, goods: false, detail: true },
+  travel: { label: "Flight", revenue: false, goods: false, detail: true },
+  training: { label: "Training", revenue: false, goods: false, detail: true },
+  respec: { label: "Talent reset", revenue: false, goods: false },
+  otherIn: { label: "Other income", revenue: true, goods: false },
+  otherOut: { label: "Other expense", revenue: false, goods: false },
+};
+
+const ENTRY_FILTERS = {
+  all: { label: "All", keep: () => true },
+  revenue: { label: "Revenue", keep: (side) => side.revenue },
+  expenses: { label: "Expenses", keep: (side) => !side.revenue },
+};
+let entryFilter = "all";
+
+// What an entry added to the gold: its price less the cut, or minus its price.
+const tradeNet = (trade) => (SIDES[trade.side].revenue ? trade.price - trade.fee : -trade.price);
 
 // A gain in green with a plus, a loss in red with a minus.
 function signedMoney(copper, options) {
@@ -1286,21 +1608,22 @@ function signedMoney(copper, options) {
   return element("span", { className: `trend ${kind}` }, [copper > 0 ? "+" : "−", money(Math.abs(copper), options)]);
 }
 
-// One row per item, the most recently traded first. Sales count at auction
-// and to vendors. Profit or loss is realized on the units both bought and
-// sold, at the average sale less the average cost, so an item never bought,
-// or never sold, has none.
+// One row per item moved, the most recently traded first. Every goods side
+// counts: sales at auction, to vendors and in player trades, and purchases at
+// auction, from merchants, in player trades and by cash on delivery. Profit
+// or loss is realized on the units both bought and sold, at the average sale
+// less the average cost, so an item never bought, or never sold, has none.
 function tradedItems(trades) {
   const items = new Map();
-  for (const trade of trades) {
+  for (const trade of trades.filter(({ side }) => SIDES[side].goods)) {
     const item = items.get(trade.item) ?? { name: trade.item, quality: null, bought: 0, cost: 0, sold: 0, proceeds: 0 };
     item.quality ??= trade.quality;
-    if (trade.side === "buy") {
-      item.bought += trade.count;
-      item.cost += trade.price;
-    } else {
+    if (SIDES[trade.side].revenue) {
       item.sold += trade.count;
       item.proceeds += trade.price - trade.fee;
+    } else {
+      item.bought += trade.count;
+      item.cost += trade.price;
     }
     items.set(trade.item, item);
   }
@@ -1317,23 +1640,26 @@ function tradedItems(trades) {
   });
 }
 
+const entries = (count) => `${count.toLocaleString("en")} ${count === 1 ? "entry" : "entries"}`;
+
 function tradeTotals(trades, items) {
-  const sold = trades.filter(({ side }) => side === "sell");
-  const vendored = trades.filter(({ side }) => side === "vendor");
-  const bought = trades.filter(({ side }) => side === "buy");
-  const count = (list) => `${list.length} ${list.length === 1 ? "trade" : "trades"}`;
+  const revenue = trades.filter(({ side }) => SIDES[side].revenue);
+  const expenses = trades.filter(({ side }) => !SIDES[side].revenue);
   const sum = (list, value) => list.reduce((total, trade) => total + value(trade), 0);
+  const cut = sum(revenue, ({ fee }) => fee);
   const realized = items.filter(({ profit }) => profit !== null);
   return [
-    stat("Auction sales", money(sum(sold, ({ price }) => price)), count(sold)),
-    stat("Vendor sales", money(sum(vendored, ({ price }) => price)), count(vendored)),
-    stat("Purchases", money(sum(bought, ({ price }) => price)), count(bought)),
-    stat("Auction cut", money(sum(sold, ({ fee }) => fee))),
-    stat("Net", signedMoney(sum(trades, tradeNet)), "sales less cut and purchases"),
     stat(
-      "Profit or loss",
+      "Revenue",
+      money(sum(revenue, ({ price, fee }) => price - fee)),
+      cut > 0 ? `${entries(revenue.length)} · after ${moneyText(cut)} auction cut` : entries(revenue.length),
+    ),
+    stat("Expenses", money(sum(expenses, ({ price }) => price)), entries(expenses.length)),
+    stat("Net", signedMoney(sum(trades, tradeNet)), "revenue less expenses"),
+    stat(
+      "Realized profit",
       realized.length > 0 ? signedMoney(sum(realized, ({ profit }) => profit)) : "–",
-      "on items both bought and sold",
+      "on goods both bought and sold",
     ),
   ];
 }
@@ -1375,31 +1701,46 @@ function tradedItemsTable(items) {
   );
 }
 
+// "Trade sale to Mirelle": the side's label, and the other player when known.
+function sourceCell(trade) {
+  const side = SIDES[trade.side];
+  const party = side.party && trade.party ? [` ${side.party} `, element("span", { className: "party", textContent: trade.party })] : [];
+  return element("td", { className: "source" }, [side.label, ...party]);
+}
+
 function tradesTable(trades, withCharacter) {
-  const rows = trades.map((trade, index) => {
+  const rows = trades.map((trade) => {
+    const side = SIDES[trade.side];
     const character = element("a", {
       href: routeHash({ view: "character", name: trade.name, realm: trade.realm }),
       textContent: trade.name,
     });
-    const row = element("tr", {}, [
+    const goods = side.goods
+      ? [
+          tradedItemCell(trade.item, trade.quality),
+          element("td", { className: "number", textContent: trade.count.toLocaleString("en") }),
+          element("td", { className: "number each" }, [money(Math.round(trade.price / trade.count), { aligned: true })]),
+        ]
+      : [
+          element("td", { className: "detail", textContent: side.detail ? trade.item : "" }),
+          element("td", { className: "number" }),
+          element("td", { className: "number each" }),
+        ];
+    return element("tr", {}, [
       element("td", { className: "when", textContent: when(trade.at) }),
       ...(withCharacter ? [element("td", { className: "character" }, [character])] : []),
-      element("td", { className: `side ${trade.side}`, textContent: SIDES[trade.side] }),
-      tradedItemCell(trade.item, trade.quality),
-      element("td", { className: "number", textContent: trade.count.toLocaleString("en") }),
-      element("td", { className: "number each" }, [money(Math.round(trade.price / trade.count), { aligned: true })]),
+      sourceCell(trade),
+      ...goods,
       element("td", { className: "number" }, [signedMoney(tradeNet(trade), { aligned: true })]),
     ]);
-    row.hidden = index >= NEWEST_TRADES;
-    return row;
   });
   return ledgerTable(
     "trade-list",
     [
       ["When", "when"],
       ...(withCharacter ? [["Character", "character"]] : []),
-      ["", "side"],
-      ["Item", ""],
+      ["Source", "source"],
+      ["Detail", ""],
       ["Qty", "number"],
       ["Each", "number each"],
       ["Net", "number"],
@@ -1408,10 +1749,11 @@ function tradesTable(trades, withCharacter) {
   );
 }
 
-// The ledger of `trades` into `container`: totals, each item's profit, and the
-// trades themselves, the newest NEWEST_TRADES until the rest are asked for.
-function drawTrades(container, trades, { withCharacter = false } = {}) {
-  const heading = element("h3", { textContent: "Trades" });
+// The accounting of `trades` into `container`: totals, each item's profit, and
+// the entries themselves, those of the chosen filter, the newest
+// NEWEST_TRADES until the rest are asked for.
+function drawTrades(container, trades, { withCharacter = false, heading: title = "Accounting" } = {}) {
+  const heading = element("h3", { textContent: title });
   if (trades === null) {
     container.replaceChildren();
     return;
@@ -1421,30 +1763,52 @@ function drawTrades(container, trades, { withCharacter = false } = {}) {
       heading,
       element("p", {
         className: "muted",
-        textContent: "No auction sales or purchases yet. Open a mailbox in game to book them, then /reload or log out.",
+        textContent: "Nothing booked yet. Goldbook books the gold each character earns and spends in game. Type /reload or log out to save it.",
       }),
     );
     return;
   }
   const items = tradedItems(trades);
   const list = tradesTable(trades, withCharacter);
-  const toggle = element("button", { className: "disclosure", type: "button", hidden: trades.length <= NEWEST_TRADES });
-  toggle.setAttribute("aria-expanded", "false");
-  toggle.textContent = `All ${trades.length} trades`;
-  toggle.onclick = () => {
-    const expanded = toggle.getAttribute("aria-expanded") !== "true";
-    toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.textContent = expanded ? `Newest ${NEWEST_TRADES} trades` : `All ${trades.length} trades`;
-    [...list.tBodies[0].rows].forEach((row, index) => {
-      row.hidden = !expanded && index >= NEWEST_TRADES;
+  const rows = [...list.tBodies[0].rows];
+  let expanded = false;
+  const toggle = element("button", { className: "disclosure", type: "button" });
+  const buttons = Object.entries(ENTRY_FILTERS).map(([name, { label }]) => {
+    const button = element("button", { type: "button", textContent: label });
+    button.dataset.filter = name;
+    button.onclick = () => {
+      entryFilter = name;
+      show();
+    };
+    return button;
+  });
+  const show = () => {
+    const { keep } = ENTRY_FILTERS[entryFilter];
+    let kept = 0;
+    trades.forEach((trade, index) => {
+      const shown = keep(SIDES[trade.side]);
+      rows[index].hidden = !shown || (!expanded && kept >= NEWEST_TRADES);
+      kept += shown ? 1 : 0;
     });
+    for (const button of buttons) {
+      button.setAttribute("aria-pressed", String(button.dataset.filter === entryFilter));
+    }
+    toggle.hidden = kept <= NEWEST_TRADES;
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.textContent = expanded ? `Newest ${NEWEST_TRADES} entries` : `All ${entries(kept)}`;
   };
+  toggle.onclick = () => {
+    expanded = !expanded;
+    show();
+  };
+  show();
+  const filter = element("div", { className: "segmented", role: "group" }, buttons);
+  filter.setAttribute("aria-label", "Entries");
   container.replaceChildren(
     heading,
     element("dl", { className: "summary" }, tradeTotals(trades, items)),
-    element("h4", { textContent: "By item" }),
-    tradedItemsTable(items),
-    element("h4", { textContent: "History" }),
+    ...(items.length > 0 ? [element("h4", { textContent: "By item" }), tradedItemsTable(items)] : []),
+    element("div", { className: "panel-head history-head" }, [element("h4", { textContent: "History" }), filter]),
     list,
     toggle,
   );
@@ -1477,9 +1841,8 @@ async function loadCharacter({ name, realm }) {
       api("/api/account"),
     ]),
   );
-  // The roster leads to the other characters; the trades of all of them stay on the account's page.
+  // The roster leads to the other characters; the trades of all of them are under Ledger.
   drawAccount(account, { name, realm });
-  $("account-trades").hidden = true;
   if (character === null) {
     $("no-character-text").textContent = `No character ${name} on ${realm} in this account.`;
     showPanel("characters", "no-character");
@@ -1492,7 +1855,7 @@ async function loadCharacter({ name, realm }) {
   $("gold-summary").replaceChildren(...goldSummary(character.gold));
   $("gold-history").hidden = character.gold.length === 0;
   if (character.gold.length > 0) {
-    drawGoldChart(character.name, character.gold);
+    drawGoldChart({ chart: $("gold-chart"), range: $("gold-range") }, character.name, character.gold);
   }
   $("holdings").replaceChildren(
     holdings("Bags", character.bags, "saved", "Log out or /reload in game to save the bags."),
@@ -1511,27 +1874,43 @@ function loginError(error) {
   return `Something went wrong: ${error.message}`;
 }
 
-// "#characters/<name>-<realm>" with each part URI-encoded. Names never
-// contain "-", realms can.
+// "#<view>", or "#character/<name>-<realm>" with each part URI-encoded. Names
+// never contain "-", realms can. `moved` marks a link to a page that has
+// another address now: "#characters/<name>-<realm>" before 0.2.4, and any
+// hash the site does not know, which shows Prices.
 function parseRoute(hash) {
-  if (hash === "#characters" || hash === "#download") {
-    return { view: hash.slice(1) };
+  const view = hash.slice(1);
+  if (view === "") {
+    return { view: "prices" };
   }
-  const [, name, realm] = /^#characters\/([^-]+)-(.+)$/.exec(hash) ?? [];
+  if (ROUTES.has(view) && view !== "character") {
+    return { view };
+  }
+  const [, old, name, realm] = /^#character(s?)\/([^-]+)-(.+)$/.exec(hash) ?? [];
   if (name) {
     try {
-      return { view: "character", name: decodeURIComponent(name), realm: decodeURIComponent(realm) };
+      return { view: "character", name: decodeURIComponent(name), realm: decodeURIComponent(realm), moved: old === "s" };
     } catch {
       // A broken escape is as unknown as any other hash.
     }
   }
-  return { view: "prices" };
+  return { view: "prices", moved: true };
 }
 
 function routeHash(route) {
   return route.view === "character"
-    ? `#characters/${encodeURIComponent(route.name)}-${encodeURIComponent(route.realm)}`
+    ? `#character/${encodeURIComponent(route.name)}-${encodeURIComponent(route.realm)}`
     : `#${route.view}`;
+}
+
+const viewSections = () => NAV.flatMap(({ tabs }) => tabs.flatMap(({ shows }) => shows));
+
+// The sign-in prompt in place of the view, whose tabs stay.
+function showLogin() {
+  for (const id of viewSections()) {
+    $(id).hidden = true;
+  }
+  $("login-view").hidden = false;
 }
 
 async function run(action) {
@@ -1541,7 +1920,7 @@ async function run(action) {
   } catch (error) {
     if (error.status === 401) {
       drawSession(null);
-      showPanel("login");
+      showLogin();
     } else if (error !== STALE) {
       showMessage(`Something went wrong: ${error.message}`);
     }
@@ -1650,6 +2029,16 @@ function firstPage() {
   return run(loadPrices);
 }
 
+// The realm and the filters are those of every market view, so each starts
+// again at its first page, and the one on show loads again.
+function marketChanged() {
+  state.offset = 0;
+  for (const list of Object.values(LISTS)) {
+    list.offset = 0;
+  }
+  render();
+}
+
 $("realm").onchange = (event) => {
   state.realm = state.realms[Number(event.target.value)];
   comparisonRequest++;
@@ -1659,14 +2048,14 @@ $("realm").onchange = (event) => {
   // A history still on its way belongs to the realm that was just left.
   latest.history++;
   $("detail").hidden = true;
-  firstPage();
+  marketChanged();
 };
 
 function filterChanged() {
   state.selected = null;
   latest.history++;
   $("detail").hidden = true;
-  firstPage();
+  marketChanged();
 }
 $("profession").onchange = (event) => {
   state.profession = event.target.value;
@@ -1690,7 +2079,7 @@ $("search").oninput = (event) => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     state.q = event.target.value.trim();
-    firstPage();
+    marketChanged();
   }, 250);
 };
 
@@ -1738,6 +2127,7 @@ $("login-form").onsubmit = async (event) => {
     $("login-key").value = "";
     $("login-key").type = "password";
     $("show-key").setAttribute("aria-pressed", "false");
+    await loadSession();
     render();
   } catch (error) {
     $("login-error").textContent = loginError(error);
@@ -1759,7 +2149,7 @@ $("link-form").onsubmit = async (event) => {
     // A session that ran out shows the login, as any other view does.
     if (error.status === 401) {
       drawSession(null);
-      showPanel("login");
+      showLogin();
     } else {
       $("link-error").textContent = loginError(error);
     }
@@ -1857,29 +2247,129 @@ async function loadDownload() {
   drawDownload();
 }
 
-const VIEWS = {
-  prices: { shows: ["realm-picker", "price-tools", "prices-view"], link: "#prices", load: openPrices },
-  characters: { shows: ["account-view"], link: "#characters", load: loadAccount },
-  character: { shows: ["account-view"], link: "#characters", load: loadCharacter },
-  download: { shows: ["download-view"], link: "#download", load: loadDownload },
-};
+const MARKET = ["realm-picker", "market-tools"];
+
+// The site's navigation, as the addon's window has it: the hubs of the rail,
+// each with the tabs at the top of the page, the route of each tab, what it
+// shows and loads, and whether it needs sign-in. A tab without a name is a
+// page of its hub that the tabs do not list. Mail is in game only.
+const NAV = [
+  {
+    hub: "Market",
+    icon: ["M2 8l6-6h6v6l-6 6z", "M12.2 5a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 1 1 2.4 0"],
+    tabs: [
+      { route: "prices", tab: "Prices", shows: [...MARKET, "prices-view"], load: openPrices },
+      { route: "deals", tab: "Deals", shows: [...MARKET, "min-profit", "deals-view"], load: () => loadList("deals") },
+      { route: "movers", tab: "Movers", shows: [...MARKET, "mover-direction", "movers-view"], load: () => loadList("movers") },
+    ],
+  },
+  {
+    hub: "Inventory",
+    icon: ["M3 5.5h10l-1 9H4z", "M5.5 7.5V4.5a2.5 2.5 0 0 1 5 0v3"],
+    tabs: [{ route: "bags", tab: "Bags", signIn: true, shows: ["bags-view"], load: loadBags }],
+  },
+  {
+    hub: "Ledger",
+    icon: ["M8 4C6.5 3 4.5 2.5 2 2.5v10c2.5 0 4.5.5 6 1.5 1.5-1 3.5-1.5 6-1.5v-10c-2.5 0-4.5.5-6 1.5z", "M8 4v10"],
+    tabs: [
+      { route: "gold", tab: "Gold", signIn: true, shows: ["gold-view"], load: loadGold },
+      { route: "accounting", tab: "Accounting", signIn: true, shows: ["accounting-view"], load: loadAccounting },
+    ],
+  },
+  {
+    hub: "Characters",
+    group: "Account",
+    icon: ["M11 5a3 3 0 1 1-6 0a3 3 0 1 1 6 0", "M2 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"],
+    tabs: [
+      { route: "characters", signIn: true, shows: ["account-view"], load: loadAccount },
+      { route: "character", signIn: true, shows: ["account-view"], load: loadCharacter },
+    ],
+  },
+  {
+    hub: "Download",
+    group: "Account",
+    icon: ["M8 2v9M4 7l4 4 4-4M2 14h12"],
+    tabs: [{ route: "download", shows: ["download-view"], load: loadDownload }],
+  },
+];
+const ROUTES = new Map(NAV.flatMap((hub) => hub.tabs.map((tab) => [tab.route, { hub, tab }])));
+
+// The rail, once: a link per hub to the tab of it last on show, the hubs of
+// a group under its name.
+function drawRail() {
+  let group;
+  for (const hub of NAV) {
+    if (hub.group !== group && hub.group) {
+      $("views").append(element("p", { className: "group", textContent: hub.group }));
+    }
+    group = hub.group;
+    hub.link = element("a", { href: `#${hub.tabs[0].route}` }, [
+      svg("svg", { viewBox: "0 0 16 16", "aria-hidden": "true" }, undefined, hub.icon.map((d) => svg("path", { d }))),
+      hub.hub,
+    ]);
+    $("views").append(hub.link);
+  }
+}
+
+function drawNav(current, tab) {
+  for (const hub of NAV) {
+    if (hub === current) {
+      hub.link.setAttribute("aria-current", "page");
+    } else {
+      hub.link.removeAttribute("aria-current");
+    }
+  }
+  if (tab.tab) {
+    current.link.href = `#${tab.route}`;
+  }
+  const tabs = current.tabs.filter((entry) => entry.tab);
+  $("tabs").hidden = tabs.length === 0;
+  $("tabs").setAttribute("aria-label", current.hub);
+  $("tabs").replaceChildren(
+    ...tabs.map((entry) => {
+      const link = element("a", { href: `#${entry.route}`, textContent: entry.tab });
+      if (entry === tab) {
+        link.setAttribute("aria-current", "page");
+      }
+      return link;
+    }),
+  );
+  document.title = `${tab.tab ?? current.hub} · Goldbook`;
+}
+
+let shownHash;
 
 function render() {
   const route = parseRoute(location.hash);
-  const view = VIEWS[route.view];
-  for (const id of Object.values(VIEWS).flatMap(({ shows }) => shows)) {
-    $(id).hidden = !view.shows.includes(id);
+  if (route.moved) {
+    location.replace(routeHash(route));
+    return;
   }
-  for (const link of document.querySelectorAll(".views a")) {
-    if (link.getAttribute("href") === view.link) {
-      link.setAttribute("aria-current", "page");
-    } else {
-      link.removeAttribute("aria-current");
-    }
+  const { hub, tab } = ROUTES.get(route.view);
+  // Another view starts at its top; a filter changed keeps the place.
+  if (location.hash !== shownHash) {
+    shownHash = location.hash;
+    scrollTo(0, 0);
   }
-  // An answer still on its way belongs to the view that was just left.
-  latest.view++;
-  run(() => view.load(route));
+  for (const id of viewSections()) {
+    $(id).hidden = !tab.shows.includes(id);
+  }
+  $("login-view").hidden = true;
+  drawNav(hub, tab);
+  if (tab.shows.includes("market-tools")) {
+    $("market-title").textContent = tab.tab;
+    $("scan").textContent = "";
+  }
+  // An answer still on its way belongs to the view that was just left. The
+  // market views share their heading, so theirs are dropped too.
+  for (const kind of ["view", "prices", "trends", "list", "listTrends"]) {
+    latest[kind]++;
+  }
+  if (tab.signIn && session.account === null) {
+    showLogin();
+    return;
+  }
+  run(() => tab.load(route));
 }
 
 // Marks the theme on show; theme.js applied a stored choice before the first paint.
@@ -1902,6 +2392,7 @@ for (const button of document.querySelectorAll("[data-theme-choice]")) {
 }
 
 window.onhashchange = render;
+drawRail();
 drawTheme();
 // The rail shows the session on every view. A failure leaves it blank; the view reports its own.
 loadSession().catch(() => {});

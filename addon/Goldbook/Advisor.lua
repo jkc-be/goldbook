@@ -91,7 +91,6 @@ function Advisor.Deal(record, vendor, newestScan, stocked)
 end
 
 -- Vendor deals always count; a flip must make `minProfit` in total.
--- `confirmed` marks a vendor deal whose price a vendor was seen paying.
 function Advisor.Deals(db, realmKey, minProfit)
   local newestScan = db.scanned[realmKey]
   local deals = {}
@@ -99,7 +98,6 @@ function Advisor.Deals(db, realmKey, minProfit)
     local found = Advisor.Deal(item, Database.Vendor(db, item.key), newestScan, Database.MerchantSells(db, item.key))
     if found and (found.kind == "vendor" or found.total >= minProfit) then
       item.kind, item.sell, item.total, item.units = found.kind, found.sell, found.total, found.units
-      item.confirmed = found.kind == "vendor" and Database.VendorSeen(db, item.key)
       deals[#deals + 1] = item
     end
   end
