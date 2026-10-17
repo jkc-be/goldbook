@@ -12,7 +12,7 @@ local HELP = {
   "Goldbook scan button at the auction house: left click for a quick scan, right click for a full scan.",
   "/gb scan and /gb scan full do the same from chat.",
   "/gb deals lists what is listed below its resale or vendor value.",
-  "/gb sell says what to auction and what to vendor from your bags.",
+  "/gb bags says what to auction and what to vendor from your bags.",
   "/gb movers lists the prices that rose most since the day before, and under Fallers those that fell.",
   "/gb gold shows your account: gold per character, gains, net worth, a chart and this month's trades.",
   "/gb mail lists the open mailbox and collects the mails it shows; it opens by itself at a mailbox.",

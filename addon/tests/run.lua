@@ -900,12 +900,12 @@ Stub.bags[0] = {
   { hyperlink = "|Hitem:6948::::::|h[Hearthstone]|h", stackCount = 1, isBound = true },
 }
 Stub.bags[1] = { slots = 1, { hyperlink = "|Hitem:4306::::::|h[Silk Cloth]|h", stackCount = 2 } }
-GoldbookWindow.tabs.sell.scripts.OnClick()
-eq(cells(1), "Linen Cloth x25 | 99c | 13c | 23s 50c | Auction", "sell view undercuts the lowest listing")
-eq(cells(2), "Elemental Water x3 |  | 4s 00c | 12s 00c | Vendor", "sell view vendors what lists under vendor price")
-eq(cells(3), "Silk Cloth x2 |  | 1s 50c | 3s 00c | Vendor", "sell view vendors what has no auction price")
-eq(cells(4), " |  |  |  | ", "sell view skips bound items")
-eq(head() .. " / " .. plain(GoldbookWindow.head.aside.text), "Sell |  | 3 items in your bags / Worth 38s 50c after the cut", "sell view totals the bags")
+GoldbookWindow.tabs.bags.scripts.OnClick()
+eq(cells(1), "Linen Cloth x25 | 99c | 13c | 23s 50c | Auction", "bags view undercuts the lowest listing")
+eq(cells(2), "Elemental Water x3 |  | 4s 00c | 12s 00c | Vendor", "bags view vendors what lists under vendor price")
+eq(cells(3), "Silk Cloth x2 |  | 1s 50c | 3s 00c | Vendor", "bags view vendors what has no auction price")
+eq(cells(4), " |  |  |  | ", "bags view skips bound items")
+eq(head() .. " / " .. plain(GoldbookWindow.head.aside.text), "Bags |  | 3 items in your bags / Worth 38s 50c after the cut", "bags view totals the bags")
 
 Stub.money = 1250000
 Stub.fire("PLAYER_MONEY")
@@ -954,13 +954,13 @@ eq(plain(GoldbookWindow.purse.text), "126g 00s 00c", "the title bar shows the ac
 Stub.items[5000] = { name = "Rough Stone", quality = 1, vendor = 2, itemData = 3, cached = false }
 Stub.bags[1][2] = { hyperlink = "|Hitem:5000::::::|h[Rough Stone]|h", stackCount = 4 }
 Stub.bags[1].slots = 2
-GoldbookWindow.tabs.sell.scripts.OnClick()
+GoldbookWindow.tabs.bags.scripts.OnClick()
 eq(cells(4), "item 5000 x4 |  |  | 0c | No price", "a bag item whose name is still loading is listed by its id")
 Stub.advance(0.7)
 eq(cells(4), "Rough Stone x4 |  | 2c | 8c | Vendor", "the name and the tooltip's vendor price fill in once they arrive, not the item's data")
 Stub.bags[1][3] = { stackCount = 1 }
 Stub.bags[1].slots = 3
-GoldbookWindow.tabs.sell.scripts.OnClick()
+GoldbookWindow.tabs.bags.scripts.OnClick()
 eq(plain(GoldbookWindow.head.aside.text), "Worth 38s 58c after the cut", "a bag slot whose item has no link yet is left out")
 
 SlashCmdList.GOLDBOOK("movers")

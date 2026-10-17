@@ -248,7 +248,7 @@ end
 local GLYPHS = {
   prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
   deals = { { 8, 1, 10, 5.5, 15, 6, 11.2, 9.3, 12.3, 14.2, 8, 11.7, 3.7, 14.2, 4.8, 9.3, 1, 6, 6, 5.5, 8, 1 } },
-  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
+  bags = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
   movers = { { 1, 12, 5, 8, 8, 11, 14, 4 }, { 10, 4, 14, 4, 14, 8 } },
   -- Two coins stacked, their rims as flat hexagons.
   gold = {
@@ -662,8 +662,8 @@ local VIEWS = {
       return joinedStatus(scrollRange(rows, visible), "Click a deal to search for it")
     end,
   },
-  sell = {
-    tab = "Sell",
+  bags = {
+    tab = "Bags",
     items = true,
     icons = true,
     blocks = { "toolbar", "table" },
@@ -896,7 +896,7 @@ local VIEWS = {
     end,
   },
 }
-local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "mail", "accounting" }
+local VIEW_ORDER = { "prices", "deals", "bags", "movers", "gold", "mail", "accounting" }
 
 -- The chips a toolbar can show: what each offers, as { value, label }.
 local FILTERS = {
