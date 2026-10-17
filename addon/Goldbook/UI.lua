@@ -1,5 +1,6 @@
 local _, ns = ...
 local Codec, Database, Scanner, Advisor, Ledger, Trades = ns.Codec, ns.Database, ns.Scanner, ns.Advisor, ns.Ledger, ns.Trades
+local Mail = ns.Mail
 
 local UI = {}
 ns.UI = UI
@@ -14,6 +15,7 @@ local CARD_GAP, CARD_HEIGHT, CARD_DETAIL_HEIGHT = 8, 54, 72
 local HEADER_HEIGHT, ROW_HEIGHT, MAX_ROWS, MAX_COLUMNS = 27, 23, 20, 6
 local CELL_PAD, ICON_SIZE = 10, 18
 local SPARK_WIDTH, SPARK_HEIGHT, SPARK_DAYS = 64, 16, 7
+local TAG_HEIGHT, ACTION_WIDTH, ACTION_HEIGHT = 18, 150, 24
 local SEARCH_WIDTH, CHIP_HEIGHT, MENU_WIDTH, MENU_ROW = 240, 24, 200, 22
 local SIDE_ROW = 26
 -- The plot sits right of its axis labels and left of the latest values'
@@ -50,7 +52,7 @@ local PALETTES = {
   light = {
     bg = "f0e4c4", rail = "e2cc96", panel = "fcf7e8", line = "b19c70", edge = "a08a5c", field = "fffbf0",
     text = "211a10", muted = "4e412d", railText = "3a2e1c", gold = "8a5a06", goldhi = "684202", brand = "80520a",
-    on = "e2cd92", gain = "0f5214", loss = "8e1a10",
+    on = "e2cd92", gain = "0f5214", loss = "8e1a10", warn = "803100", info = "003ea1",
     titleTop = "e4cf98", titleBottom = "d2b574",
     buttonTop = "eed59a", buttonBottom = "d8b464", buttonEdge = "8a6a24", buttonText = "2a1e04",
     hover = 0.14, area = 0.65, bar = 1, second = "464650",
@@ -60,7 +62,7 @@ local PALETTES = {
   dark = {
     bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
     text = "f2ebdd", muted = "ab9f89", railText = "d8cdb6", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
-    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a",
+    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a", warn = "ff8000", info = "3d9bff",
     titleTop = "2c2418", titleBottom = "221c13",
     buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "8a6a24", buttonText = "ffe08a",
     hover = 0.08, area = 0.42, bar = 0.6, second = "c7c7cf",
@@ -228,6 +230,8 @@ local GLYPHS = {
     { 1.5, 5, 1.5, 10, 5, 13, 11, 13, 14.5, 10, 14.5, 5 },
     { 1.5, 7.5, 5, 10.5, 11, 10.5, 14.5, 7.5 },
   },
+  -- An envelope and its flap.
+  mail = { { 1.5, 3.5, 14.5, 3.5, 14.5, 12.5, 1.5, 12.5, 1.5, 3.5 }, { 1.5, 3.5, 8, 9, 14.5, 3.5 } },
   trades = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
 
@@ -498,16 +502,65 @@ end
 -- The column of 7 day sparklines, which has no field to sort by.
 local SPARK = { "7 days", nil, 87, spark = true }
 
+-- The mailbox as the Mail view last read it: its mails and how many more the
+-- server holds back.
+local mailbox = { mails = {}, held = 0 }
+-- Each mail category's tag colour.
+local MAIL_INKS = { sold = "gain", bought = "info", cancelled = "warn", expired = "loss", other = "muted" }
+local MAIL_LABELS, MAIL_SEGMENTS = {}, { { "all", "All" } }
+for _, category in ipairs(Mail.CATEGORIES) do
+  MAIL_LABELS[category.key] = category.label
+  MAIL_SEGMENTS[#MAIL_SEGMENTS + 1] = { category.key, category.label }
+end
+
+-- Its first item, how many, and how many other items; or its subject.
+local function mailText(mail)
+  return itemText(mail) .. ((mail.count or 1) > 1 and tint("muted", " x" .. mail.count) or "")
+    .. (#mail.items > 1 and tint("muted", " +" .. (#mail.items - 1) .. " more") or "")
+end
+
+-- Whole days left, or hours on the last day, in the warning colour from 3 days.
+local function daysLeftText(daysLeft)
+  local text = daysLeft >= 1 and (math.floor(daysLeft) .. "d") or (math.floor(daysLeft * 24) .. "h")
+  return daysLeft < 4 and tint("warn", text) or text
+end
+
+local function mailGold(mail)
+  if mail.money > 0 then
+    return stretches(palette.gain, money(mail.money))
+  elseif mail.cod > 0 then
+    return stretches(palette.loss, "COD " .. money(mail.cod))
+  end
+  return ""
+end
+
+local function collectable(rows)
+  local count = 0
+  for _, row in ipairs(rows) do
+    if Mail.Collectable(row) then
+      count = count + 1
+    end
+  end
+  return count
+end
+
 -- What the window can show, one entry per view.
 --   blocks    what stacks under the title, top to bottom; the table takes the height left over
---   columns   { label, field, width }; a header click sorts by the field
---   cells     the text of a row's columns, the sparkline column left out
+--   columns   { label, field, width }; a header click sorts by the field; `words` sets a
+--             column after the first in words, to the left; `tag` draws (row) -> text,
+--             colour from the view's `tag` as a framed tag
+--   cells     the text of a row's columns, the sparkline and tag columns left out
 --   rows      (search text, segment) -> the rows; `keep` then filters them by the toolbar's chips
---   items     rows are items to hover and click; `icons` puts the item's icon before its name
+--   items     rows are items to hover and click; `icons` puts the item's icon, or the row's
+--             own `icon`, before its name
 --   sort      { column, descending }, the order rows come in; a segment may set its own
 --   segments  { key, label } choices at the right of the title, `segment` the first one picked;
+--             `counts` (search text) -> { [key] = count } puts a count after each;
 --             `badge` instead shows a label and a value there, `aside` a line of text;
---             `rangesOnChart` puts the segments at the right of the chart's legend instead
+--             `rangesOnChart` puts the segments at the right of the chart's legend instead,
+--             `segmentsOnToolbar` at the right of the search box
+--   railCount () -> a count shown by the view's name in the rail, or nil
+--   action    (rows) -> { label, enabled, run } for a button right of the status line
 --   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line;
 --             `back` puts a button before it that returns to the view the item came from
 --   cards     (rows) -> up to four { key, value, detail }
@@ -687,6 +740,87 @@ local VIEWS = {
       return joinedStatus(scrollRange(rows, visible), "Open a mailbox or sell to a vendor to book more trades")
     end,
   },
+  mail = {
+    tab = "Mail",
+    icons = true,
+    blocks = { "toolbar", "table" },
+    search = "Search the mailbox",
+    columns = { { "Mail", "name", 270 }, { "Type", "category", 92, tag = true }, { "From", "sender", 130, words = true },
+      { "Left", "daysLeft", 62 }, { "Gold", "gold", 125 } },
+    segments = MAIL_SEGMENTS,
+    segmentsOnToolbar = true,
+    counts = function(text)
+      return Mail.Counts(mailbox.mails, text)
+    end,
+    -- Only while the mailbox is open: the client keeps the inbox it last
+    -- showed after the mailbox closes, but nothing can be taken from it.
+    rows = function(text, segment)
+      local mails, held = {}, 0
+      if Mail.open then
+        mails, held = Mail.Read()
+      end
+      mailbox = { mails = mails, held = held }
+      local rows = {}
+      for _, mail in ipairs(mails) do
+        if Mail.Matches(mail, text, segment) then
+          rows[#rows + 1] = mail
+        end
+      end
+      return rows
+    end,
+    cells = function(row)
+      return mailText(row), row.sender, daysLeftText(row.daysLeft), mailGold(row)
+    end,
+    tag = function(row)
+      return MAIL_LABELS[row.category], MAIL_INKS[row.category]
+    end,
+    head = function()
+      local items = 0
+      for _, mail in ipairs(mailbox.mails) do
+        items = items + mail.attachments
+      end
+      return { sub = Mail.open and (plural(#mailbox.mails, "mail") .. " · " .. plural(items, "item")) or "The mailbox is closed" }
+    end,
+    aside = function()
+      local total = 0
+      for _, mail in ipairs(mailbox.mails) do
+        total = total + mail.money
+      end
+      return total > 0 and (money(total) .. " to collect") or ""
+    end,
+    railCount = function()
+      return Mail.open and GetInboxNumItems and (GetInboxNumItems()) or nil
+    end,
+    action = function(rows)
+      if Mail.Collector().state ~= "idle" then
+        return { label = "Stop", enabled = true, run = Mail.Stop }
+      end
+      local count = collectable(rows)
+      return {
+        label = "Collect " .. plural(count, "mail"),
+        enabled = Mail.open and count > 0 and Mail.CanCollect(),
+        run = function()
+          Mail.Collect(window.search:GetText(), chosen.mail)
+        end,
+      }
+    end,
+    status = function(rows)
+      if not Mail.open then
+        return "Open a mailbox to list your mail"
+      end
+      local all, collector, cod = #mailbox.mails, Mail.Collector(), false
+      for _, row in ipairs(rows) do
+        cod = cod or row.cod > 0
+      end
+      local free = Mail.FreeSlots()
+      return joinedStatus(
+        collector.state ~= "idle" and "Collecting" or collector.ending and Mail.ENDINGS[collector.ending] or nil,
+        #rows == all and ("Showing all " .. plural(all, "mail")) or ("Showing " .. #rows .. " of " .. plural(all, "mail")),
+        free and ("bags have " .. plural(free, "free slot")) or nil,
+        mailbox.held > 0 and ("+" .. mailbox.held .. " more after collecting") or nil,
+        cod and "COD mails are skipped" or nil)
+    end,
+  },
   item = {
     back = true,
     blocks = { "toolbar", "chart", "cards", "table" },
@@ -715,7 +849,7 @@ local VIEWS = {
     end,
   },
 }
-local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "trades" }
+local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "mail", "trades" }
 
 -- The chips a toolbar can show: what each offers, as { value, label }.
 local FILTERS = {
@@ -824,7 +958,7 @@ local function render()
     row.icon:SetShown(item ~= nil and definition.icons == true)
     row.frame:SetShown(item ~= nil and definition.icons == true)
     if item and definition.icons then
-      row.icon:SetTexture(itemIcon(item.key))
+      row.icon:SetTexture(item.icon or itemIcon(item.key))
       -- Common and poor items get a plain frame, better ones their quality's colour.
       row.frame:SetColorTexture(hexRGB((item.quality or 1) >= 2 and qualityHex(item.quality) or palette.edge))
     end
@@ -833,10 +967,29 @@ local function render()
     if spark then
       drawSpark(row, item.key)
     end
+    local text, ink
+    if item and window.table.tag then
+      text, ink = definition.tag(item)
+    end
+    row.tag:SetShown(text ~= nil)
+    if text then
+      row.tag.label:SetText(text)
+      row.tag.label:SetTextColor(rgb(ink))
+      row.tag:SetBackdropBorderColor(rgb(ink))
+    end
     row.hit.item = item
     row.hit:SetShown(item ~= nil and definition.items == true)
   end
   placeScrollMarker(visible)
+  local action = definition.action and definition.action(results)
+  window.action:SetShown(action ~= nil)
+  if action then
+    window.action.label:SetText(action.label)
+    window.action.label:SetTextColor(rgb(action.enabled and "buttonText" or "muted"))
+    window.action:SetEnabled(action.enabled)
+    window.action.run = action.run
+  end
+  window.status:SetWidth(PAGE_WIDTH - (action and ACTION_WIDTH + GAP or 0))
   window.status:SetText(definition.status and definition.status(results, visible) or "")
 end
 
@@ -851,7 +1004,12 @@ local function sortBy(rows, field, descending)
       right = type(left) == "string" and "" or 0
     end
     if left == right then
-      return (a.key or a.name or a.day) < (b.key or b.name or b.day)
+      local first, second = a.key or a.name or a.day, b.key or b.name or b.day
+      -- Two mails alike keep the inbox's order.
+      if first == second and a.index then
+        return a.index < b.index
+      end
+      return first < second
     elseif descending then
       return left > right
     end
@@ -906,7 +1064,8 @@ local function placeChips(definition)
     previous = chip
   end
   local clear = toolbar.clear
-  clear:SetShown(filtered())
+  -- Segments on the toolbar take its room.
+  clear:SetShown(filtered() and not definition.segmentsOnToolbar)
   clear.label:SetPoint("LEFT", previous, "RIGHT", 17, 0)
 end
 
@@ -965,7 +1124,7 @@ local function layout(definition)
   end
 
   local left, cellIndex, sort = 0, 0, sorting[view]
-  tableFrame.spark = false
+  tableFrame.spark, tableFrame.tag = false, false
   for column = 1, MAX_COLUMNS do
     local spec = definition.columns[column]
     local header, button = window.headers[column], window.headerButtons[column]
@@ -973,9 +1132,10 @@ local function layout(definition)
     button:SetShown(spec ~= nil and spec[2] ~= nil)
     if spec then
       local sorted = sort and sort[1] == column
+      local words = column == 1 or spec.words or spec.tag
       header:SetText(spec[1]:upper() .. (sorted and (sort[2] and " ↓" or " ↑") or ""))
       header:SetTextColor(rgb(sorted and "goldhi" or "muted"))
-      header:SetJustifyH(column == 1 and "LEFT" or spec.spark and "CENTER" or "RIGHT")
+      header:SetJustifyH(words and "LEFT" or spec.spark and "CENTER" or "RIGHT")
       header:SetPoint("LEFT", tableFrame.columns, "TOPLEFT", left + CELL_PAD, -HEADER_HEIGHT / 2)
       header:SetWidth(spec[3] - 2 * CELL_PAD)
       button:SetPoint("TOPLEFT", tableFrame.columns, "TOPLEFT", left, 0)
@@ -983,17 +1143,21 @@ local function layout(definition)
       for _, row in ipairs(window.rows) do
         if spec.spark then
           row.spark:SetPoint("LEFT", row.hit, "LEFT", left + (spec[3] - SPARK_WIDTH) / 2, 0)
+        elseif spec.tag then
+          row.tag.label:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + 6, 0)
         else
           local cell = row.cells[cellIndex + 1]
           local inset = column == 1 and definition.icons and ICON_SIZE + 7 or 0
           cell:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + inset, 0)
           cell:SetWidth(spec[3] - 2 * CELL_PAD - inset)
-          cell:SetJustifyH(column == 1 and "LEFT" or "RIGHT")
-          cell:SetFontObject(FONT[column == 1 and "body" or "number"])
+          cell:SetJustifyH(words and "LEFT" or "RIGHT")
+          cell:SetFontObject(FONT[words and "body" or "number"])
         end
       end
       if spec.spark then
         tableFrame.spark = true
+      elseif spec.tag then
+        tableFrame.tag = true
       else
         cellIndex = cellIndex + 1
       end
@@ -1052,8 +1216,9 @@ local function drawHead(definition)
 
   if definition.segments then
     local labels, on = {}, 1
+    local counts = definition.counts and definition.counts(window.search:GetText() or "")
     for index, segment in ipairs(definition.segments) do
-      labels[index] = segment[2]
+      labels[index] = counts and (segment[2] .. " " .. tint("muted", counts[segment[1]] or 0)) or segment[2]
       if segment[1] == chosen[view] then
         on = index
       end
@@ -1073,6 +1238,9 @@ local function drawHead(definition)
   if definition.rangesOnChart then
     control:SetParent(window.chart)
     control:SetPoint("RIGHT", window.chart, "TOPRIGHT", -1 - CHART_PAD, -1 - LEGEND_TOP / 2)
+  elseif definition.segmentsOnToolbar then
+    control:SetParent(window.filters)
+    control:SetPoint("RIGHT", window.filters, "RIGHT", 0, 0)
   else
     control:SetParent(head)
     control:SetPoint("RIGHT", head, "RIGHT", 0, 0)
@@ -1432,6 +1600,10 @@ function refresh()
     for _, line in ipairs(tab.glyph) do
       line:SetColorTexture(rgb(active and "goldhi" or "railText", 0.85))
     end
+    local count = VIEWS[name].railCount and VIEWS[name].railCount()
+    tab.count:SetText(count and tostring(count) or "")
+    tab.count:SetShown(count ~= nil)
+    tab.pill:SetShown(count ~= nil)
   end
   local scanned = ns.db.scanned[ns.RealmKey()]
   window.lastScan:SetText(scanned and ("Last scan " .. tint("text", Codec.Age(time() - scanned))) or "No scan yet")
@@ -1754,7 +1926,7 @@ local function addHead()
   fill:SetPoint("BOTTOMRIGHT", control.edge, "BOTTOMRIGHT", -1, 1)
   UI.Fill(fill, "bg")
   control.buttons = {}
-  for index = 1, 4 do
+  for index = 1, 6 do
     local button = CreateFrame("Button", nil, control)
     button.label = label(button, "status", "muted")
     button:SetPoint("LEFT", button.label, "LEFT", -11, 0)
@@ -1824,6 +1996,13 @@ local function addRow(columns, index)
       searchAuctionHouse(self.item.name)
     end
   end)
+  -- Its text sizes the frame around it; the table places the text.
+  local tag = addChip(columns, "")
+  tag.label:SetFontObject(FONT.status)
+  tag:SetPoint("LEFT", tag.label, "LEFT", -6, 0)
+  tag:SetPoint("RIGHT", tag.label, "RIGHT", 6, 0)
+  tag:SetHeight(TAG_HEIGHT)
+  tag:EnableMouse(false)
 
   local rule = columns:CreateTexture(nil, "BORDER")
   rule:SetPoint("TOPLEFT", hit, "BOTTOMLEFT")
@@ -1847,7 +2026,7 @@ local function addRow(columns, index)
       spark.lines[segment] = line
     end
   end
-  return { cells = cells, rule = rule, icon = icon, frame = frame, spark = spark, hit = hit }
+  return { cells = cells, rule = rule, icon = icon, frame = frame, spark = spark, tag = tag, hit = hit }
 end
 
 local function addTable()
@@ -2034,6 +2213,12 @@ local function addRail()
         end
       end
     end
+    tab.count = label(tab, "header", "bg")
+    tab.count:SetPoint("RIGHT", -16, 0)
+    tab.pill = tab:CreateTexture(nil, "ARTWORK")
+    tab.pill:SetPoint("TOPLEFT", tab.count, "TOPLEFT", -6, 3)
+    tab.pill:SetPoint("BOTTOMRIGHT", tab.count, "BOTTOMRIGHT", 6, -3)
+    UI.Fill(tab.pill, "goldhi")
     tab:SetScript("OnClick", function()
       UI.Show(name)
     end)
@@ -2231,6 +2416,12 @@ local function createWindow()
   window.status:SetPoint("BOTTOMLEFT", PAGE_LEFT, PAGE_BOTTOM + 2)
   window.status:SetWidth(PAGE_WIDTH)
   window.status:SetJustifyH("LEFT")
+
+  window.action = UI.Button(window, "", ACTION_WIDTH, ACTION_HEIGHT)
+  window.action:SetPoint("BOTTOMRIGHT", -(WINDOW_WIDTH - PAGE_LEFT - PAGE_WIDTH), PAGE_BOTTOM - 3)
+  window.action:SetScript("OnClick", function(self)
+    self.run()
+  end)
 end
 
 -- Opens the window on a view. Without `text` the search box keeps its text.
@@ -2287,6 +2478,13 @@ function UI.Back()
   end
   offset = math.max(0, math.min(back.offset or 0, #results - visibleRows()))
   render()
+end
+
+-- Hides the window if it shows the view `name`.
+function UI.Close(name)
+  if window and window:IsShown() and view == name then
+    window:Hide()
+  end
 end
 
 function UI.Toggle()

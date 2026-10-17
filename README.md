@@ -352,6 +352,7 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | `/gb sell` | Your bags: what to auction, at what price, and what to vendor instead |
 | `/gb movers` | The prices that rose and fell most since the day before. Top gains first |
 | `/gb gold` | Your account: gold per character, gains, a 30 day chart and net worth |
+| `/gb mail [text]`, or open a mailbox | The open mailbox: every mail with its items, sender, days left and gold, and a button that collects the mails shown. See [Mail](#mail) |
 | `/gb trades` | Your auction house sales and purchases and your sales to vendors, newest first, with what each added to your gold. See [Trades](#trades) |
 | Alt+click an item, or `/gb item <link or name>` | The item's price history. Works on items in bags, the bank, chat links, loot, the auction house and the Goldbook lists |
 | Click a column header | Sorts the list by that column. Click again to reverse |
@@ -462,6 +463,44 @@ in an alt is not booked as a gain.
 price differs from the day before it was last seen, with the change in
 percent. It needs two days of scans. Prices under a silver on both days are
 left out.
+
+### Mail
+
+When you open a mailbox, the Goldbook window opens on **Mail** and closes
+again with the mailbox. To keep it shut, clear **Open the Mail view when a
+mailbox opens** in Options > AddOns > Goldbook. `/gb mail` opens the view at
+any time, but it lists mail only while a mailbox is open. While it is open,
+the rail shows how many mails it holds.
+
+Each row is one mail: its first item in its quality's colour and how many,
+`+1 more` when it holds other items too, or its subject when it holds none.
+A sale names the item it sold. The tag says what the mail is:
+
+| Tag | The mail |
+|---|---|
+| Sold | The money from an auction that sold |
+| Bought | An item you won at auction |
+| Cancelled | An item from an auction you cancelled |
+| Expired | An item from an auction that did not sell |
+| Other | Anything else: mail from players, the postmaster, COD mail |
+
+The next columns show the sender, the days left before the mail is returned or
+deleted (orange at 3 days or less), and the gold it holds in green or the COD
+it asks in red. The title counts the mails and items and says how much gold
+waits. The segments filter by tag and count each tag; the search box matches
+item names, subjects and senders. Click a column header to sort.
+
+**Collect N mails** takes the money and items of the mails shown, so pick a
+segment or search first to collect only those. It takes the oldest mail first,
+one take at a time, and waits for the mailbox to answer each one. While it
+runs, the button reads **Stop**. It skips COD mails and stops when your bags
+have no free slot left, when you close the mailbox, or when you click
+**Stop**. With full bags it still takes the gold. Chat then says what it took.
+The mailbox shows at most 50 mails; the status line says how many more arrive
+after you collect some.
+
+Goldbook books auction house sales and purchases from the invoices in the
+mailbox as soon as it opens, so collecting does not change your trades.
 
 ### Trades
 

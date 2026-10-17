@@ -222,6 +222,9 @@ local COMMANDS = {
   movers = function(argument)
     ns.UI.Show("movers", argument)
   end,
+  mail = function(argument)
+    ns.UI.Show("mail", argument)
+  end,
   -- A link, an exact name, or else the first name containing the text.
   item = function(argument)
     if argument:find("item:", 1, true) then
@@ -296,7 +299,7 @@ SlashCmdList.GOLDBOOK = function(input)
   if run then
     run(argument)
   else
-    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb trades  |  /gb show [text]")
+    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb mail  |  /gb trades  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
     ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end

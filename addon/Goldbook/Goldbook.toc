@@ -19,6 +19,7 @@ Ledger.lua
 Trades.lua
 Scanner.lua
 Sellers.lua
+Mail.lua
 Core.lua
 Tooltip.lua
 UI.lua
