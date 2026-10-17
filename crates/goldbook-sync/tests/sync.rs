@@ -631,7 +631,30 @@ async fn export_server(
                             .into_response();
                     }
                     match mock.bodies.get(&format!("{realm}-{faction}")) {
-                        Some(body) => Json(body.clone()).into_response(),
+                        // The mock serves only gzip, so a client that does not ask for it fails.
+                        Some(body) => {
+                            let asked = headers
+                                .get("accept-encoding")
+                                .and_then(|value| value.to_str().ok())
+                                .is_some_and(|value| value.contains("gzip"));
+                            if !asked {
+                                return StatusCode::NOT_ACCEPTABLE.into_response();
+                            }
+                            let mut encoder = flate2::write::GzEncoder::new(
+                                Vec::new(),
+                                flate2::Compression::default(),
+                            );
+                            std::io::Write::write_all(&mut encoder, body.to_string().as_bytes())
+                                .unwrap();
+                            (
+                                [
+                                    ("content-type", "application/json"),
+                                    ("content-encoding", "gzip"),
+                                ],
+                                encoder.finish().unwrap(),
+                            )
+                                .into_response()
+                        }
                         None => (
                             StatusCode::NOT_FOUND,
                             Json(json!({"error":"no scans for this realm and faction"})),

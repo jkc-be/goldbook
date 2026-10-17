@@ -1,11 +1,12 @@
-use crate::{App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, now};
+use crate::{App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header, now};
 use axum::http::Method;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use flate2::{Compression, write::GzEncoder};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, path::Path, sync::LazyLock};
+use std::{collections::BTreeMap, io::Write, path::Path, sync::LazyLock};
 use subtle::ConstantTimeEq;
 
 const SCANS: &str = "SELECT id, scanned_at AS scannedAt, mode, item_count AS itemCount, scanner FROM scans WHERE realm=?1 AND faction=?2";
@@ -560,12 +561,38 @@ fn export(input: &Input, db: &Connection) -> Result<Reply> {
             item.quality = Some(row.get(2)?);
         }
     }
-    Ok(Reply::json(Export {
+    let mut reply = Reply::json(Export {
         realm,
         faction,
         scanned_at: newest,
         items,
-    }))
+    });
+    reply.headers.push(("vary", "accept-encoding".into()));
+    if accepts_gzip(header(&input.headers, "accept-encoding")) {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(&reply.body)
+            .map_err(anyhow::Error::from)?;
+        reply.body = encoder.finish().map_err(anyhow::Error::from)?;
+        reply.headers.push(("content-encoding", "gzip".into()));
+    }
+    Ok(reply)
+}
+// Only an explicit gzip counts, so "gzip;q=0" refuses it.
+fn accepts_gzip(accept: &str) -> bool {
+    accept.split(',').any(|coding| {
+        let mut parts = coding.split(';');
+        parts
+            .next()
+            .is_some_and(|name| name.trim().eq_ignore_ascii_case("gzip"))
+            && !parts.any(|parameter| {
+                parameter
+                    .trim()
+                    .strip_prefix("q=")
+                    .and_then(|q| q.trim().parse::<f64>().ok())
+                    == Some(0.0)
+            })
+    })
 }
 // Rows arrive oldest first, so a row belongs to the last bucket or starts a new one.
 fn add_to_bucket(buckets: &mut Vec<[i64; 4]>, period: i64, min: i64, qty: i64, mv: i64) {

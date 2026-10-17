@@ -310,6 +310,49 @@ async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
             }
         })
     );
+    let target = "/api/export?realm=Faramon&faction=Horde";
+    let (_, headers, gzipped) = raw(
+        &f.app,
+        "GET",
+        target,
+        vec![],
+        &[("accept-encoding", "br, GZIP;q=0.5")],
+    )
+    .await;
+    assert_eq!(
+        (&headers["content-encoding"], &headers["vary"]),
+        (
+            &"gzip".parse().unwrap(),
+            &"accept-encoding".parse().unwrap()
+        )
+    );
+    assert_eq!(
+        headers["content-length"],
+        gzipped.len().to_string().as_str()
+    );
+    let mut unzipped = String::new();
+    std::io::Read::read_to_string(
+        &mut flate2::read::GzDecoder::new(&gzipped[..]),
+        &mut unzipped,
+    )
+    .unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&unzipped).unwrap(), export);
+    for refused in ["gzip;q=0", "deflate", ""] {
+        let (_, headers, plain) = raw(
+            &f.app,
+            "GET",
+            target,
+            vec![],
+            &[("accept-encoding", refused)],
+        )
+        .await;
+        assert!(!headers.contains_key("content-encoding"), "{refused}");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&plain).unwrap(),
+            export,
+            "{refused}"
+        );
+    }
     for (target, expected) in [
         (
             "/api/export?realm=Faramon",
