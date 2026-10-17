@@ -48,3 +48,4 @@ jobs:
   publish:
     needs: package
     uses: ./.github/workflows/publish-updates.yml
+    secrets: inherit
