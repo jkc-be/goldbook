@@ -7,7 +7,7 @@
   "scripts": {
     "test": "python3 scripts/test.py",
     "preview": "luajit addon/tests/preview.lua fixtures/preview",
-    "e2e": "cargo build --locked && python3 scripts/verify-migration.py && python3 scripts/verify-sellers.py && python3 scripts/verify-trades.py && python3 scripts/verify-professions.py",
+    "e2e": "cargo build --locked && python3 scripts/verify-migration.py && python3 scripts/verify-sellers.py && python3 scripts/verify-trades.py && python3 scripts/verify-professions.py && python3 scripts/verify-server-data.py",
     "check": "cargo fmt --all --check && cargo clippy --locked --all-targets -- -D warnings",
     "desktop": "cd desktop && tauri dev",
     "desktop:pack": "cd desktop && tauri build",
