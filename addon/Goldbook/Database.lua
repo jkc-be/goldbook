@@ -40,7 +40,8 @@ local PARK_MILLER = 2147483647
 --                                until a scan here prices the item again
 --   serverMerged[realmKey]     = the scannedAt of the server data merged last, see Database.MergeServer
 --   settings                   = { lastReplicate, minProfit, autoScan, minimapAngle, hideMinimap, altClick, theme, scale,
---                                  window = { point, relativePoint, x, y } where the window was dropped }
+--                                  window = { point, relativePoint, x, y } where the window was dropped,
+--                                  hubViews[hub] = the view each hub of the window's rail showed last }
 
 -- Schema 1 records were "min,mv,avg,qty,seen".
 local function upgradeFromSchema1(db)
