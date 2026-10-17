@@ -85,6 +85,7 @@ local TYPE = {
   small = { FRIZ, 12 },
   status = { FRIZ, 12 },
   label = { FRIZ, 11 },
+  header = { NARROW, 12 },
   axis = { NARROW, 12 },
   close = { NARROW, 20 },
   caret = { NARROW, 8 },
@@ -1633,7 +1634,7 @@ local function addTable()
   UI.Fill(frame.rule, "edge")
   window.headers, window.headerButtons = {}, {}
   for column = 1, MAX_COLUMNS do
-    window.headers[column] = label(frame.columns, "label", "muted")
+    window.headers[column] = label(frame.columns, "header", "muted")
     local button = CreateFrame("Button", nil, frame.columns)
     button:SetScript("OnClick", function()
       sortColumn(column)
