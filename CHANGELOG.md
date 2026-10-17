@@ -11,6 +11,8 @@ were released with.
 
 ### Addon
 
+- The minimap button and the window's title bar show Goldbook's crest, the
+  gold coin of the website, drawn by the addon itself.
 - Vendor prices come from the sell price the game's tooltip shows, for every
   item, so they are right before you sell one. They no longer come from the
   game's item data or the merchant's buyback list, and `/gb deals` no longer
@@ -40,6 +42,7 @@ were released with.
 
 ### Desktop app
 
+- The app icon is Goldbook's crest, the gold coin of the website.
 - A development build (`make run`) always installs the addon of its checkout,
   and no longer installs a published addon update over it.
 - `make build` also installs this checkout's addon into the World of Warcraft

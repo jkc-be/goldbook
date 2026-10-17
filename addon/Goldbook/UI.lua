@@ -191,6 +191,29 @@ local function disc(texture, size)
   texture:SetSize(size, size)
 end
 
+-- Goldbook's crest, as the website draws it: a gold coin lit from the top left
+-- in a darker rim, with a faint glow. The same in both themes. Returns its rim,
+-- to anchor it by; `layer` is the draw layer of the coin.
+function UI.Crest(parent, size, layer)
+  layer = layer or "ARTWORK"
+  local glow = parent:CreateTexture(nil, layer, nil, -1)
+  local rim = parent:CreateTexture(nil, layer, nil, 0)
+  local coin = parent:CreateTexture(nil, layer, nil, 1)
+  local light = parent:CreateTexture(nil, layer, nil, 2)
+  disc(glow, size * 1.16)
+  glow:SetPoint("CENTER", rim)
+  glow:SetVertexColor(0.91, 0.73, 0.29, 0.18)
+  disc(rim, size)
+  rim:SetVertexColor(0.66, 0.46, 0.1, 1)
+  disc(coin, size * 0.84)
+  coin:SetPoint("CENTER", rim)
+  setGradient(coin, "VERTICAL", 0.54, 0.37, 0.06, 1, 0.91, 0.73, 0.29, 1)
+  disc(light, size * 0.62)
+  light:SetPoint("CENTER", rim, "CENTER", -size * 0.07, size * 0.09)
+  setGradient(light, "VERTICAL", 1, 0.95, 0.7, 0, 1, 0.95, 0.7, 0.6)
+  return rim
+end
+
 local function fillDisc(texture, key)
   paint(function()
     texture:SetVertexColor(rgb(key))
@@ -2374,14 +2397,8 @@ end
 
 local function addTitleBar()
   local bar = UI.TitleBar(window, TITLE_HEIGHT)
-  local rim = bar:CreateTexture(nil, "ARTWORK")
-  disc(rim, 22)
+  local rim = UI.Crest(bar, 22)
   rim:SetPoint("LEFT", 14, 0)
-  rim:SetVertexColor(0.66, 0.46, 0.1, 1)
-  local coin = bar:CreateTexture(nil, "ARTWORK", nil, 1)
-  disc(coin, 18)
-  coin:SetPoint("CENTER", rim)
-  setGradient(coin, "VERTICAL", 0.6, 0.4, 0.07, 1, 1, 0.94, 0.7, 1)
 
   local brand = label(bar, "brand", "brand")
   brand:SetPoint("LEFT", rim, "RIGHT", 12, 0)

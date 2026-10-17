@@ -4,7 +4,6 @@ local Scanner = ns.Scanner
 local MinimapButton = {}
 ns.MinimapButton = MinimapButton
 
-local ICON = "Interface\\Icons\\INV_Misc_Coin_01"
 local DEFAULT_ANGLE = math.rad(225)
 local EDGE_OFFSET = 5
 
@@ -61,10 +60,8 @@ local function create()
   background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
   background:SetPoint("TOPLEFT", 7, -5)
 
-  local icon = button:CreateTexture(nil, "ARTWORK")
-  icon:SetSize(17, 17)
-  icon:SetTexture(ICON)
-  icon:SetPoint("TOPLEFT", 7, -6)
+  local crest = ns.UI.Crest(button, 15)
+  crest:SetPoint("CENTER", background)
 
   local border = button:CreateTexture(nil, "OVERLAY")
   border:SetSize(53, 53)
