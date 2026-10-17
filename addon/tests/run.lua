@@ -1003,6 +1003,16 @@ eq(cells(1) .. " / " .. cells(2), "Thu 09 Oct | 10g 00s 00c |  | 1 | 0.0% / Wed 
   "a change that rounds to nothing has no sign, up or down")
 eq(plain(GoldbookWindow.head.tags[1].label.text), "1 day 0.0%", "nor in the title")
 
+-- In game, rail icons drawn from strokes of about 2 lost them; 4 draws.
+local shortest, strokes = math.huge, 0
+for _, tab in pairs(GoldbookWindow.tabs) do
+  for _, line in ipairs(tab.glyph) do
+    local from, to = line.startPoint, line.endPoint
+    shortest, strokes = math.min(shortest, math.sqrt((to[3] - from[3]) ^ 2 + (to[4] - from[4]) ^ 2)), strokes + 1
+  end
+end
+eq(("%d strokes, the shortest %.1f"):format(strokes, shortest), "49 strokes, the shortest 4.0", "every rail icon stroke is long enough for the client to draw")
+
 eq(ns.UI.Theme(), "light", "the window starts on parchment")
 SlashCmdList.GOLDBOOK("theme dark")
 eq(lastPrint() .. " " .. GoldbookDB.settings.theme, "Goldbook The window is dark. Change it with /gb theme light or /gb theme dark. dark",

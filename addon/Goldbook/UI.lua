@@ -192,38 +192,19 @@ function UI.Button(parent, text, width, height, name)
   return button
 end
 
--- A list of { x, y, x, y, ... } points around an ellipse, from one angle to
--- another in degrees, y growing downward.
-local function arc(cx, cy, rx, ry, from, to, steps)
-  local points = {}
-  for step = 0, steps do
-    local angle = math.rad(from + (to - from) * step / steps)
-    points[#points + 1] = cx + rx * math.cos(angle)
-    points[#points + 1] = cy + ry * math.sin(angle)
-  end
-  return points
-end
-
-local function joined(...)
-  local points = {}
-  for _, part in ipairs({ ... }) do
-    for _, value in ipairs(part) do
-      points[#points + 1] = value
-    end
-  end
-  return points
-end
-
--- The rail's icons as strokes in a 16 by 16 box, y growing downward.
+-- The rail's icons as strokes in a 16 by 16 box, y growing downward. The
+-- client leaves out lines much shorter than 4, so curves are a few long
+-- strokes rather than many short ones.
 local GLYPHS = {
-  prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 }, arc(11, 5, 1.2, 1.2, 0, 360, 6) },
+  prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
   deals = { { 8, 1, 10, 5.5, 15, 6, 11.2, 9.3, 12.3, 14.2, 8, 11.7, 3.7, 14.2, 4.8, 9.3, 1, 6, 6, 5.5, 8, 1 } },
-  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, joined({ 5.5, 5 }, arc(8, 4, 2.5, 2.5, 180, 360, 6), { 10.5, 5 }) },
+  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
   movers = { { 1, 12, 5, 8, 8, 11, 14, 4 }, { 10, 4, 14, 4, 14, 8 } },
+  -- Two coins stacked, their rims as flat hexagons.
   gold = {
-    arc(8, 4.5, 5.5, 2.5, 0, 360, 16),
-    joined({ 13.5, 4.5 }, arc(8, 11.5, 5.5, 2.5, 0, 180, 8), { 2.5, 4.5 }),
-    arc(8, 8, 5.5, 2.5, 0, 180, 8),
+    { 1.5, 5, 5, 2, 11, 2, 14.5, 5, 11, 8, 5, 8, 1.5, 5 },
+    { 1.5, 5, 1.5, 10, 5, 13, 11, 13, 14.5, 10, 14.5, 5 },
+    { 1.5, 7.5, 5, 10.5, 11, 10.5, 14.5, 7.5 },
   },
   trades = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
