@@ -489,17 +489,27 @@ Buy a Jagged Star of the Eagle for 23s and sell it to a vendor for 31s, and
 that is a profit of 8s; sell it for 19s, and a loss of 4s. Type in the search box to filter by item or character.
 Goldbook keeps 180 days and at most 1,000 trades per character.
 
-On the web page, after the next sync, **Characters** shows the trades of the
-whole account and each character page shows its own:
+On the web page, after the next sync, **Characters** shows the **Accounting**
+of the whole account and each character page shows its own:
 
-- auction sales, vendor sales, purchases, the auction house cut, the net,
-  and the profit or loss;
-- **By item**: units bought and sold, at auction or to a vendor, the average
-  cost and the average sale after the cut, and the profit or loss on the units
-  that were both bought and sold;
-- **History**: every trade, the newest 20 until you show them all.
+- **Revenue** after the auction house cut, **Expenses**, the **Net** of the
+  two, and the **Realized profit** on goods;
+- **By item**: units bought and sold, the average cost and the average sale
+  after the cut, and the profit or loss on the units that were both bought and
+  sold. Sales count at auction, to vendors and in player trades; purchases at
+  auction, from merchants, in player trades and by cash on delivery;
+- **History**: every entry with its source, such as "Auction sale", "Trade
+  sale to Mirelle", "Mail gold in from Mirelle", "Quest reward" or "Repairs",
+  and what it added to the gold or took from it. **All**, **Revenue** and
+  **Expenses** above it filter the list. It shows the newest 20 until you show
+  them all.
 
-The server keeps every trade it receives, also after the addon drops it.
+Entries between two of your own characters, such as gold mailed to an alt,
+show on the account page twice: once as revenue and once as an expense. They
+cancel out in the net.
+
+The server keeps every entry it receives, also after the addon drops it,
+together with the other player of a trade or mail.
 
 ### Price history
 
