@@ -1020,7 +1020,11 @@ This repository contains the desktop, server, web UI, and `addon/` sources.
 addon changes on `main` and requires approval of the `addon-mirror` environment.
 The mirror records its source commit in `upstream.json` and publishes a
 `Goldbook-<version>.zip` release asset with `Goldbook/Goldbook.toc` at its root.
-Use that asset for CurseForge uploads or manual installs. GitHub's automatic
+The mirror's release workflow uploads that exact ZIP to CurseForge project
+`1747971` after approval of its protected `curseforge` environment. The API
+token is an environment secret, and a release receipt prevents repeat uploads
+of an already recorded ZIP. See [addon publishing](addon/README.md#publish-to-curseforge).
+Use the release asset for manual installs. GitHub's automatic
 **Source code** archives contain an extra repository folder and cannot be
 uploaded as an addon. Build the same archive locally with:
 

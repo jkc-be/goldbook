@@ -114,3 +114,29 @@ publish an installable ZIP. It does not have production or signing secrets.
 The workflow verifies byte-for-byte equality on retries and rejects overwriting
 an existing version with different contents. Source ZIPs from GitHub have an
 extra directory and must not be uploaded to CurseForge.
+
+The mirror stores `CURSEFORGE_API_TOKEN` only in its `curseforge` environment.
+That environment permits the `main` branch, requires approval by `jkc-be`, and
+disables administrator bypass. There are no repository-level secrets. The
+release workflow accepts only runs initiated and rerun by `jkc-be`; the
+existing mirror key's pushes are attributed to that account. Tests and GitHub
+packaging run before the separate job can receive the CurseForge token.
+
+Only `jkc-be` is a collaborator, and the mirror key is the only write deploy
+key. Public contributors can fork and propose pull requests, but cannot push
+to this repository, merge changes, edit secrets, or approve publishing jobs.
+External pull-request workflows require approval and receive no CurseForge
+secret. GitHub Actions has read-only permissions by default and cannot approve
+pull requests.
+
+Public workflow logs remain readable. Keep secrets out of commands, source,
+artifacts, and error messages even though GitHub masks registered secret
+values. The uploader sends the token in a header, suppresses HTTP response
+bodies and network error details, and refuses redirects. Review publishing
+code before approving a run; approved code can use the environment secret.
+
+Read back the mirror's access controls and secret placement with:
+
+```sh
+python3 scripts/check-addon-github.py
+```
