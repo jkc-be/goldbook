@@ -732,7 +732,7 @@ local VIEWS = {
       return (filters.character == nil or row.character == filters.character)
         and (filters.source == nil or row.side == filters.source)
     end,
-    columns = { { "Entry", "name", 290 }, { "Source", "source", 128, words = true }, { "Net", "net", 108 }, { "Character", "character", 88 }, { "When", "at", 65 } },
+    columns = { { "Entry", "name", 268 }, { "Source", "source", 150, words = true }, { "Net", "net", 108 }, { "Character", "character", 88 }, { "When", "at", 65 } },
     sort = { 5, true },
     segments = { { "all", "All" }, { "revenue", "Revenue" }, { "expenses", "Expenses" } },
     rows = function(text, segment)
