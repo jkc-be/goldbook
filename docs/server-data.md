@@ -54,6 +54,8 @@ The fields mean the following:
 
 In an `hours` or `days` entry, `min` is the lowest buyout any scan saw in that hour or day, and `qty` is the quantity of the row that had it. When rows tie on `min`, the earlier row wins. `mv` is the market value of the newest row in that hour or day whose market value is above 0, or 0 when there is none.
 
+Rows are ordered by scan time. Two scans can have the same time, and then the scan that the server stored first counts as the earlier one. "Newest" and "earlier" in this section follow that order.
+
 All prices are in copper. The export reads only the scans from the day of `scannedAt` and the 60 days before it. An item that none of those scans saw is not in `items`.
 
 ## The file the app writes
