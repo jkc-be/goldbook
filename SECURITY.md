@@ -38,6 +38,16 @@ operation. The test profile compiles GLib with optimization level 2, where
 the original implementation fails. The Linux desktop test job runs it on
 pull requests without building installers or using production secrets.
 
+CodeQL alert [7](https://github.com/jkc-be/goldbook/security/code-scanning/7)
+reports a write after `drop_in_place` in `PtrSlice::truncate`. The drop releases
+the element's object, while the slice still owns the allocation holding its
+pointer slots. The following `ptr::write` sets a slot to null without reading or
+dropping its previous value, as permitted by Rust's
+[`drop_in_place` contract](https://doc.rust-lang.org/std/ptr/fn.drop_in_place.html#safety).
+`desktop/src-tauri/tests/glib_ptr_slice.rs` checks object lifetimes, null
+termination, and reuse of the same allocation after truncation. This finding is
+a false positive; the upstream collection implementation is unchanged.
+
 Remove the vendored copy, Cargo patch, and test profile override when Tauri's
 supported dependency chain can use a patched registry release. Do not replace
 the copy with unpatched 0.18.5 or suppress the advisory without verifying the
