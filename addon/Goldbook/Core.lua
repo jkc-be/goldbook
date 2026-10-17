@@ -243,6 +243,12 @@ local COMMANDS = {
   web = function()
     ns.WebLogin.Show()
   end,
+  theme = function(argument)
+    if argument ~= "" and not ns.UI.SetTheme(argument:lower()) then
+      ns.Print("There is no \"" .. argument .. "\" theme.")
+    end
+    ns.Print("The window is " .. ns.UI.Theme() .. ". Change it with /gb theme light or /gb theme dark.")
+  end,
   status = function()
     local known = 0
     for _ in pairs(ns.db.prices[ns.RealmKey()] or {}) do
@@ -268,7 +274,7 @@ SlashCmdList.GOLDBOOK = function(input)
   else
     ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb trades  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
-    ns.Print("/gb status  |  /gb minimap  |  /gb web")
+    ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark")
   end
 end
 

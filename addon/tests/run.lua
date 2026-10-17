@@ -383,7 +383,7 @@ options.checks.minimap.checked = true
 options.checks.minimap.scripts.OnClick(options.checks.minimap)
 
 SlashCmdList.GOLDBOOK("")
-eq(lastPrint(), "Goldbook /gb status  |  /gb minimap  |  /gb web", "/gb lists /gb web")
+eq(lastPrint(), "Goldbook /gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark", "/gb lists /gb web and /gb theme")
 
 GoldbookDB.account = { id = "K7Q2M9PX", key = "7KQ2M9PXABCDEFGHJKMN" }
 SlashCmdList.GOLDBOOK("web")
@@ -1003,13 +1003,21 @@ eq(cells(1) .. " / " .. cells(2), "Thu 09 Oct | 10g 00s 00c |  | 1 | 0.0% / Wed 
   "a change that rounds to nothing has no sign, up or down")
 eq(plain(GoldbookWindow.head.tags[1].label.text), "1 day 0.0%", "nor in the title")
 
-eq(ns.UI.Theme() .. " " .. tostring(ns.UI.SetTheme("dark")) .. " " .. GoldbookDB.settings.theme, "light true dark",
-  "the window starts on parchment and keeps the theme chosen")
+eq(ns.UI.Theme(), "light", "the window starts on parchment")
+SlashCmdList.GOLDBOOK("theme dark")
+eq(lastPrint() .. " " .. GoldbookDB.settings.theme, "Goldbook The window is dark. Change it with /gb theme light or /gb theme dark. dark",
+  "/gb theme dark switches the window and keeps the choice")
 eq(("%.2f %s"):format(GoldbookWindow.version.textColor[1], GoldbookWindow.head.tags[1].label.text:sub(1, 10)), "0.61 |cff9b8f7a",
   "the frames already drawn are painted again, and the view redrawn, in the dark palette")
-eq(tostring(ns.UI.SetTheme("sepia")) .. " " .. ns.UI.Theme(), "false dark", "an unknown theme changes nothing")
-ns.UI.SetTheme("light")
-eq(("%.2f"):format(GoldbookWindow.version.textColor[1]), "0.48", "and back to parchment")
+SlashCmdList.GOLDBOOK("theme sepia")
+eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. lastPrint(),
+  "Goldbook There is no \"sepia\" theme. / Goldbook The window is dark. Change it with /gb theme light or /gb theme dark.",
+  "an unknown theme says so and changes nothing")
+options.scripts.OnShow()
+eq(options.checks.dark.checked, true, "the options show the dark window")
+options.checks.dark.checked = false
+options.checks.dark.scripts.OnClick(options.checks.dark)
+eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.48", "the options switch back to parchment")
 
 Stub.fire("AUCTION_HOUSE_SHOW")
 Stub.ah.silent = true

@@ -96,6 +96,7 @@ These are recorded sell listings, not a live feed or standing buy orders.
 | `/gb status` | The addon's version, items priced and scans waiting for sync |
 | `/gb web` | The website's address, and the ID and key that log you in to its character pages |
 | `/gb minimap` | Hides or shows the minimap button |
+| `/gb theme light`, `/gb theme dark` | Draws the window on light parchment, the default, or dark ink |
 
 ## Build a release ZIP
 
