@@ -124,5 +124,6 @@ local function showSettings()
   end
 end
 panel:SetScript("OnShow", showSettings)
+ns.UI.Watch(showSettings)
 
 Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(panel, "Goldbook"))

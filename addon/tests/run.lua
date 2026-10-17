@@ -1065,9 +1065,20 @@ eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. lastPrint(),
   "an unknown theme says so and changes nothing")
 options.scripts.OnShow()
 eq(options.checks.light.checked, true, "the options show the light window")
-options.checks.light.checked = false
+local toggle = GoldbookWindow.themeToggle
+GameTooltip.lines = {}
+toggle.scripts.OnEnter(toggle)
+eq(table.concat(GameTooltip.lines, " / "), "Dark window / Click to draw Goldbook in dark ink. / /gb theme and the Options panel switch it too.",
+  "the title bar's theme button says what a click does")
+GameTooltip.lines = {}
+toggle.scripts.OnClick(toggle)
+eq(("%s %.2f %s / %s"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1], tostring(options.checks.light.checked), GameTooltip.lines[1]),
+  "dark 0.67 false / Light window", "the theme button draws the window dark, the options follow, and its tooltip offers light again")
+options.checks.light.checked = true
 options.checks.light.scripts.OnClick(options.checks.light)
-eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "dark 0.67", "the options switch back to dark")
+eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.31", "the options switch to parchment")
+SlashCmdList.GOLDBOOK("theme dark")
+eq(tostring(options.checks.light.checked), "false", "/gb theme dark unticks the options' light box")
 ns.UI.ShowItem("99999")
 eq(plain(GoldbookWindow.chart.grid[1].label.text .. " " .. GoldbookWindow.chart.grid[2].label.text .. " " .. GoldbookWindow.chart.grid[5].label.text)
   .. " " .. tostring(GoldbookWindow.chart.grid[6].label.shown), "0c 1c 4c false", "an item without prices gets an axis in whole coppers")

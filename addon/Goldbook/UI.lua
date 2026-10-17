@@ -1861,6 +1861,48 @@ function UI.TitleBar(frame, height, text)
   return bar
 end
 
+local function showThemeTip(self)
+  GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+  GameTooltip:AddLine(UI.Theme() == "dark" and "Light window" or "Dark window")
+  GameTooltip:AddLine("Click to draw Goldbook " .. (UI.Theme() == "dark" and "on light parchment." or "in dark ink."), 1, 1, 1)
+  GameTooltip:AddLine("/gb theme and the Options panel switch it too.", 1, 1, 1)
+  GameTooltip:Show()
+end
+
+-- Left of the close button, a half-filled ring: the usual sign for light and
+-- dark. Drawn from discs, as the client draws them in any size.
+local function addThemeToggle(bar)
+  local toggle = CreateFrame("Button", nil, bar, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  toggle:SetSize(24, 24)
+  toggle:SetPoint("RIGHT", bar.close, "LEFT", -8, 0)
+  UI.Box(toggle, "bg", "edge")
+  local ring = toggle:CreateTexture(nil, "ARTWORK")
+  disc(ring, 14)
+  ring:SetPoint("CENTER")
+  fillDisc(ring, "railText")
+  local hole = toggle:CreateTexture(nil, "ARTWORK", nil, 1)
+  disc(hole, 10)
+  hole:SetPoint("CENTER")
+  fillDisc(hole, "bg")
+  local half = toggle:CreateTexture(nil, "ARTWORK", nil, 2)
+  disc(half, 10)
+  half:SetWidth(5)
+  half:SetTexCoord(0, 0.5, 0, 1)
+  half:SetPoint("RIGHT", hole, "CENTER")
+  fillDisc(half, "railText")
+  local glow = toggle:CreateTexture(nil, "HIGHLIGHT")
+  glow:SetPoint("TOPLEFT", 1, -1)
+  glow:SetPoint("BOTTOMRIGHT", -1, 1)
+  UI.Fill(glow, "gold", 0.15)
+  toggle:SetScript("OnClick", function(self)
+    UI.SetTheme(UI.Theme() == "dark" and "light" or "dark")
+    showThemeTip(self)
+  end)
+  toggle:SetScript("OnEnter", showThemeTip)
+  toggle:SetScript("OnLeave", GameTooltip_Hide)
+  return toggle
+end
+
 local function addTitleBar()
   local bar = UI.TitleBar(window, TITLE_HEIGHT)
   local rim = bar:CreateTexture(nil, "ARTWORK")
@@ -1879,11 +1921,12 @@ local function addTitleBar()
   window.version:SetPoint("BOTTOMLEFT", brand, "BOTTOMRIGHT", 12, 2)
   window.version:SetText(ns.VERSION)
   window.close = bar.close
+  window.themeToggle = addThemeToggle(bar)
 
   -- The account's gold in a box sized to it.
   local purse = panel(bar, "field", "edge")
   window.purse = label(purse, "number", "text")
-  window.purse:SetPoint("RIGHT", bar.close, "LEFT", -23, 0)
+  window.purse:SetPoint("RIGHT", window.themeToggle, "LEFT", -21, 0)
   local caption = label(purse, "label", "muted")
   caption:SetPoint("RIGHT", window.purse, "LEFT", -8, 0)
   caption:SetText("ACCOUNT")
@@ -1993,6 +2036,19 @@ function UI.RefreshSoon()
   end)
 end
 
+-- Whatever shows the window's settings elsewhere, such as the Options panel,
+-- hears of each change made from the window or a command.
+local watchers = {}
+function UI.Watch(watcher)
+  watchers[#watchers + 1] = watcher
+end
+
+local function changed()
+  for _, watcher in ipairs(watchers) do
+    watcher()
+  end
+end
+
 -- Repaints every Goldbook frame in the light or dark palette and keeps the
 -- choice. Returns false for a theme it does not know.
 function UI.SetTheme(name)
@@ -2005,6 +2061,7 @@ function UI.SetTheme(name)
     apply()
   end
   UI.Refresh()
+  changed()
   return true
 end
 
