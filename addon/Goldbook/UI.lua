@@ -429,17 +429,23 @@ end
 
 -- The shown item's prices over the chosen range of days, as the web's item
 -- chart has them: the lowest buyout over an area, the market value, and the
--- amount listed below. The time axis starts at the first price in the
--- range, so that an item seen on a few days fills the plot.
+-- amount listed below, by the hour for the last week and by the day before.
+-- The time axis starts at the first price in the range, so that an item
+-- seen on a few days fills the plot.
 local function itemChart(range)
   local now = time()
   local today = math.floor(now / DAY)
   local start = range == 1 and now - DAY or (today - range + 1) * DAY
   local points = {}
-  for _, entry in ipairs(shownHistory()) do
-    local at = entry.day * DAY
-    if at >= start then
-      points[#points + 1] = { at = at, values = { entry.min, entry.mv > 0 and entry.mv or nil }, amount = entry.qty, when = dayText(entry.day) }
+  for _, entry in ipairs(Database.Points(ns.db, ns.RealmKey(), shownItem.key)) do
+    if entry.at >= start then
+      local day = math.floor(entry.at / DAY)
+      points[#points + 1] = {
+        at = entry.at,
+        values = { entry.min, entry.mv > 0 and entry.mv or nil },
+        amount = entry.qty,
+        when = dayText(day) .. (entry.hourly and date("! %H:%M", entry.at) or ""),
+      }
     end
   end
   local to = math.max(today * DAY, points[#points] and points[#points].at or 0)

@@ -1107,6 +1107,14 @@ eq(plain(chart.lines[1].value.text) .. " " .. tostring(chart.lines[2].value.show
 GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
 marks = plotted()
 eq(table.concat(marks, " ") .. " / " .. segments(), "1@51 / [1D] 1W 1M 2M", "1D charts the last day")
+local woolen = GoldbookDB.history["Faramon-Horde"]["2997"]
+GoldbookDB.history["Faramon-Horde"]["2997"] = "20369:100040:1:0,h488880:100000:2:0,h488886:99000:3:101000"
+SlashCmdList.GOLDBOOK("item woolen")
+marks = plotted()
+eq(table.concat(marks, " ") .. " / " .. hoverPoint(2), "1@51 2@0 / Thu 09 Oct 06:00 / Min buyout = 9g 90s 00c / Market value = 10g 10s 00c / Listed = 3",
+  "the last day is charted by the hour, and an hour's tooltip gives its time")
+eq(("%.0f %.0f"):format(chart.hits[1].x, chart.hits[2].x), "401 563", "hours sit on the time axis: midnight 15 hours into the last 21, the newest scan at the right edge")
+GoldbookDB.history["Faramon-Horde"]["2997"] = woolen
 GoldbookWindow.segments.buttons[3].scripts.OnClick(GoldbookWindow.segments.buttons[3])
 
 -- Each palette's pairs keep their contrast plainly and as the client measured
