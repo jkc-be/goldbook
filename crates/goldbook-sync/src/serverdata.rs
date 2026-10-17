@@ -2,6 +2,7 @@ use crate::{
     api_url,
     paths::{flavor_saved_variables, SERVER_DATA},
     read_saved_variables,
+    savedvars::normalized_realm,
     sync::file_lock,
     Logger, SavedVariables,
 };
@@ -147,7 +148,8 @@ fn realm_keys(saved: &SavedVariables) -> BTreeSet<String> {
         for character in characters.values() {
             let field = |name| character.get(name).and_then(Value::as_str);
             if let (Some(realm), Some(faction)) = (field("realm"), field("faction")) {
-                keys.insert(format!("{realm}-{faction}"));
+                // Older addons saved the realm's display name, with spaces.
+                keys.insert(format!("{}-{faction}", normalized_realm(realm)));
             }
         }
     }
@@ -393,7 +395,7 @@ GoldbookServerData = data
             vec![
                 "Area 52-Alliance",
                 "Faramon-Horde",
-                "Pyrewood Village-Alliance"
+                "PyrewoodVillage-Alliance"
             ]
         );
         assert_eq!(

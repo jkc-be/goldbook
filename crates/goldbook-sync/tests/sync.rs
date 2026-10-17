@@ -694,9 +694,9 @@ async fn server_data_is_written_for_every_realm_in_the_flavor_and_kept_on_failur
     let (api, mock, task) = export_server(HashMap::from([
         ("Faramon-Horde".to_owned(), faramon_export()),
         (
-            "Pyrewood Village-Alliance".to_owned(),
+            "PyrewoodVillage-Alliance".to_owned(),
             json!({
-                "realm": "Pyrewood Village",
+                "realm": "PyrewoodVillage",
                 "faction": "Alliance",
                 "scannedAt": 1760000000,
                 "items": {
@@ -728,7 +728,7 @@ async fn server_data_is_written_for_every_realm_in_the_flavor_and_kept_on_failur
     assert_eq!(
         write_server_data(&flavor, &api, &log).await.unwrap(),
         ServerData::Written {
-            realms: vec!["Faramon-Horde".into(), "Pyrewood Village-Alliance".into()],
+            realms: vec!["Faramon-Horde".into(), "PyrewoodVillage-Alliance".into()],
             items: 3,
             path: path.clone(),
         }
@@ -754,14 +754,14 @@ fill(data.realms["Faramon-Horde"].days, function(t)
 t["2589"] = "20371:100:100:105"
 t["2592"] = "20371:250:20:0"
 end)
-data.realms["Pyrewood Village-Alliance"] = {{ scannedAt = 1760000000, prices = {{}}, hours = {{}}, days = {{}} }}
-fill(data.realms["Pyrewood Village-Alliance"].prices, function(t)
+data.realms["PyrewoodVillage-Alliance"] = {{ scannedAt = 1760000000, prices = {{}}, hours = {{}}, days = {{}} }}
+fill(data.realms["PyrewoodVillage-Alliance"].prices, function(t)
 t["9775:584"] = "5000,1,1,1760000000,4800,1759990000"
 end)
-fill(data.realms["Pyrewood Village-Alliance"].hours, function(t)
+fill(data.realms["PyrewoodVillage-Alliance"].hours, function(t)
 t["9775:584"] = "488888:5000:1:4800"
 end)
-fill(data.realms["Pyrewood Village-Alliance"].days, function(t)
+fill(data.realms["PyrewoodVillage-Alliance"].days, function(t)
 t["9775:584"] = "20370:5000:1:4800"
 end)
 GoldbookServerData = data
@@ -773,14 +773,14 @@ GoldbookServerData = data
         vec![
             ("Area 52".to_owned(), "Alliance".to_owned(), false),
             ("Faramon".to_owned(), "Horde".to_owned(), false),
-            ("Pyrewood Village".to_owned(), "Alliance".to_owned(), false),
+            ("PyrewoodVillage".to_owned(), "Alliance".to_owned(), false),
         ]
     );
     let modified = fs::metadata(&path).unwrap().modified().unwrap();
     assert_eq!(
         write_server_data(&flavor, &api, &log).await.unwrap(),
         ServerData::Unchanged {
-            realms: vec!["Faramon-Horde".into(), "Pyrewood Village-Alliance".into()],
+            realms: vec!["Faramon-Horde".into(), "PyrewoodVillage-Alliance".into()],
         }
     );
     assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
@@ -796,8 +796,8 @@ GoldbookServerData = data
     assert_eq!(
         *lines.lock().unwrap(),
         vec![
-            format!("server prices for Faramon-Horde, Pyrewood Village-Alliance written to {shown}: 3 items"),
-            format!("server prices for Faramon-Horde, Pyrewood Village-Alliance unchanged in {shown}"),
+            format!("server prices for Faramon-Horde, PyrewoodVillage-Alliance written to {shown}: 3 items"),
+            format!("server prices for Faramon-Horde, PyrewoodVillage-Alliance unchanged in {shown}"),
             format!(
                 "server prices for {} failed: export of Area 52-Alliance answered 500 database is down",
                 flavor.display()

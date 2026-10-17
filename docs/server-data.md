@@ -101,7 +101,7 @@ The app writes `ServerData.lua` after a sync pass that uploaded without errors. 
 
 For each flavor folder, the app does the following:
 
-1. Reads every `WTF/Account/*/SavedVariables/Goldbook.lua` in the flavor. It collects the realm keys of `GoldbookDB.prices`, `GoldbookDB.scanned`, and the `realm` and `faction` of each entry in `GoldbookDB.characters`.
+1. Reads every `WTF/Account/*/SavedVariables/Goldbook.lua` in the flavor. It collects the realm keys of `GoldbookDB.prices`, `GoldbookDB.scanned`, and the `realm` and `faction` of each entry in `GoldbookDB.characters`. It removes spaces from a character's realm, because older addon versions saved the realm's display name.
 2. Fetches `/api/export` for each realm key, in sorted order. A realm that answers 404 is left out of the file.
 3. Writes nothing when the flavor has no `Interface/AddOns/Goldbook` folder, when the server has data for none of the realms, or when any export fails. A failed export keeps the previous file, so a network error does not remove realms from it.
 4. Builds the file with sorted keys and escapes every string. It writes the file only when its bytes differ from the installed file. It writes a temporary file in the addon folder and renames it over `ServerData.lua`, so the game never reads half a file.
