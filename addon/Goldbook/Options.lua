@@ -6,9 +6,19 @@ if not (Settings and Settings.RegisterCanvasLayoutCategory) then
   return
 end
 
+local INTRO = "Scans the auction house, shows prices in tooltips, and tells you what to buy, sell and vendor."
+
+local ABOUT = {
+  "The Goldbook desktop app syncs both ways. It uploads your scans, characters and accounting when you type /reload"
+    .. " or log out, and brings the latest prices everyone scanned on your realm back into Goldbook, so tooltips,"
+    .. " deals and movers are current without a scan of your own.",
+  "It also keeps this addon up to date, in every game in your World of Warcraft folder.",
+  "The Goldbook website shows the prices, deals and movers of every realm Goldbook players scan, and your"
+    .. " characters' gold, bags and accounting, in any browser, also on your phone.",
+  "Get the app from the website's Download page. /gb web shows the site's address.",
+}
+
 local HELP = {
-  "Scans the auction house, shows prices in tooltips, and queues scans for cloud sync.",
-  "",
   "Goldbook scan button at the auction house: left click for a quick scan, right click for a full scan.",
   "/gb scan and /gb scan full do the same from chat.",
   "/gb deals lists what is listed below its resale or vendor value.",
@@ -21,23 +31,46 @@ local HELP = {
   "/gb status shows what is priced and what is waiting for sync.",
   "/gb web shows the Goldbook site's address, and the ID and key to log in there.",
   "/gb theme dark or /gb theme light draws the window in dark ink, the default, or on light parchment, as does the button by its close button.",
-  "/gb scale 0.7 to /gb scale 1.4 sizes the window, apart from the game's UI scale; so does the slider below.",
+  "/gb scale 0.7 to /gb scale 1.4 sizes the window, apart from the game's UI scale; so does the slider above.",
   "",
   "Type /reload or log out after a scan so Goldbook can upload it.",
 }
 
+local WIDTH = 560
+
 local panel = CreateFrame("Frame")
 panel.checks = {}
 
-local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+-- The panel is shorter than its page, so the page scrolls.
+local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+scroll:SetPoint("TOPLEFT", 0, -4)
+scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+local page = CreateFrame("Frame", nil, scroll)
+page:SetSize(WIDTH + 32, 1)
+scroll:SetScrollChild(page)
+panel.page = page
+
+local function heading(anchor, text, offset)
+  local label = page:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+  label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, offset or -24)
+  label:SetText(text)
+  return label
+end
+
+local function paragraph(anchor, text, offset)
+  local label = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+  label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, offset or -8)
+  label:SetWidth(WIDTH)
+  label:SetJustifyH("LEFT")
+  label:SetText(text)
+  return label
+end
+
+local title = page:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 title:SetPoint("TOPLEFT", 16, -16)
 title:SetText("Goldbook " .. ns.VERSION)
-
-local help = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-help:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
-help:SetWidth(560)
-help:SetJustifyH("LEFT")
-help:SetText(table.concat(HELP, "\n"))
+local intro = paragraph(title, INTRO, -12)
+local settings = heading(intro, "Settings")
 
 local CHECKS = {
   {
@@ -92,14 +125,14 @@ local CHECKS = {
   },
 }
 
-local anchor, offset = help, -16
+local anchor, offset = settings, -6
 for _, definition in ipairs(CHECKS) do
-  local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-  check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == help and -2 or 0, offset)
+  local check = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+  check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == settings and -2 or 0, offset)
   check:SetScript("OnClick", function(self)
     definition.set(self:GetChecked())
   end)
-  local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+  local label = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   label:SetPoint("LEFT", check, "RIGHT", 4, 0)
   label:SetText(definition.label)
   panel.checks[definition.name] = check
@@ -107,9 +140,9 @@ for _, definition in ipairs(CHECKS) do
 end
 
 -- The window's size, apart from the game's own UI scale.
-local scaleLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+local scaleLabel = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 scaleLabel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 4, -14)
-local scale = CreateFrame("Slider", "GoldbookScaleSlider", panel, "OptionsSliderTemplate")
+local scale = CreateFrame("Slider", "GoldbookScaleSlider", page, "OptionsSliderTemplate")
 scale:SetPoint("TOPLEFT", scaleLabel, "BOTTOMLEFT", 4, -10)
 scale:SetWidth(220)
 scale:SetMinMaxValues(ns.UI.MIN_SCALE, ns.UI.MAX_SCALE)
@@ -133,7 +166,7 @@ scale:SetScript("OnValueChanged", function(_, value, userInput)
 end)
 panel.scale = scale
 
-local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+local open = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
 open:SetSize(160, 22)
 open:SetPoint("TOPLEFT", scale, "BOTTOMLEFT", -6, -24)
 open:SetText("Open Goldbook")
@@ -141,20 +174,31 @@ open:SetScript("OnClick", function()
   ns.UI.Show("prices", "")
 end)
 
-local webHeading = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-webHeading:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -24)
-webHeading:SetText("Web login")
+panel.about = paragraph(heading(open, "Website and desktop app"), table.concat(ABOUT, "\n\n"))
 
-local webHelp = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-webHelp:SetPoint("TOPLEFT", webHeading, "BOTTOMLEFT", 0, -8)
-webHelp:SetText("The Goldbook site's address, and your ID and key for its character pages.")
+local webHelp = paragraph(heading(panel.about, "Web login"),
+  "The Goldbook site's address, and your ID and key for its character pages.")
 
-panel.webLogin = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+panel.webLogin = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
 panel.webLogin:SetSize(160, 22)
 panel.webLogin:SetPoint("TOPLEFT", webHelp, "BOTTOMLEFT", 0, -10)
 panel.webLogin:SetText("Show ID and key")
 panel.webLogin:SetScript("OnClick", function()
   ns.WebLogin.Show()
+end)
+
+local help = paragraph(heading(panel.webLogin, "Commands"), table.concat(HELP, "\n"))
+
+-- The page is as tall as what it holds, once the client has laid out its text.
+local function fit()
+  local top, bottom = page:GetTop(), help:GetBottom()
+  if top and bottom then
+    page:SetHeight(top - bottom + 16)
+  end
+end
+scroll:SetScript("OnSizeChanged", function(_, width)
+  page:SetWidth(width)
+  fit()
 end)
 
 local function showSettings()
@@ -163,6 +207,7 @@ local function showSettings()
   end
   scale:SetValue(ns.UI.Scale())
   showScale(ns.UI.Scale())
+  fit()
 end
 panel:SetScript("OnShow", showSettings)
 ns.UI.Watch(showSettings)

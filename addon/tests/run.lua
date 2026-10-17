@@ -477,6 +477,9 @@ options.scripts.OnShow()
 eq(options.checks.minimap.checked, true, "options checkbox reflects the button")
 eq(options.checks.autoScan.checked, false, "automatic scanning starts off")
 eq(options.checks.altClick.checked, true, "Alt+click starts on")
+eq(tostring(options.checks.minimap.stubParent == options.page) .. " " .. tostring(options.webLogin.stubParent == options.page),
+  "true true", "the options sit on a page that scrolls")
+eq(options.about.text:match("^[^.]*%."), "The Goldbook desktop app syncs both ways.", "the options say what the desktop app adds")
 options.checks.minimap.checked = false
 options.checks.minimap.scripts.OnClick(options.checks.minimap)
 eq(GoldbookMinimapButton.shown, false, "options checkbox hides the button")

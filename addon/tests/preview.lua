@@ -184,6 +184,11 @@ function recorders.SetPoint(self, original, ...)
   }
   return original(self, ...)
 end
+-- The client places a scroll frame's child at its top left, scrolled to the top.
+function recorders.SetScrollChild(self, original, child)
+  recorders.SetPoint(child, function() end, "TOPLEFT", self, "TOPLEFT", 0, 0)
+  return original(self, child)
+end
 function recorders.ClearAllPoints(self, original)
   records[self].points = {}
   return original(self)

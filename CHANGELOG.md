@@ -11,6 +11,10 @@ were released with.
 
 ### Addon
 
+- The Options panel scrolls, so the web login at its bottom is always within
+  reach. It now says what the desktop app and the website add: the app syncs
+  both ways, uploading your scans and bringing back the prices others scanned
+  on your realm.
 - The minimap button and the window's title bar show Goldbook's crest, the
   gold coin of the website, drawn by the addon itself.
 - Vendor prices come from the sell price the game's tooltip shows, for every
