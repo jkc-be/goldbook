@@ -16,7 +16,7 @@ def main():
     if args.check:
         commands.append(["cargo", "fmt", "--all", "--check"])
     commands.extend(["luajit", f"addon/tests/{name}.lua"]
-                    for name in ("run", "scanner", "sellers", "orderbook", "professions", "trades", "mail"))
+                    for name in ("run", "scanner", "sellers", "orderbook", "professions", "trades", "mail", "accounting"))
     commands.append([sys.executable, "-m", "unittest", "discover", "-s", "addon/tests", "-p", "test_*.py"])
     commands.append(["cargo", "test", "--locked"])
     if args.check:

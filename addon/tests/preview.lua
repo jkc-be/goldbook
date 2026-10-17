@@ -1016,22 +1016,40 @@ local function seededDB()
     end
     db.gold[name] = hours
   end
-  -- { character, hours ago, side, item, key, count, price, cut }
+  -- An entry of every side: { character, hours ago, side, item, key, count, price, cut, party }.
   local now = time()
   db.trades = {}
   for _, trade in ipairs({
     { "Sultan-Faramon", 1, "sell", "Runecloth", "14047", 20, 13800, 690 },
+    { "Sultan-Faramon", 1.5, "tradeBuy", "Arcanite Bar", "12360", 2, 240000, 0, "Kargath" },
+    { "Sultan-Faramon", 2, "repair", "Repairs", nil, 1, 4320, 0 },
+    { "Sultan-Faramon", 2.5, "quest", "The Battle of Darrowshire", nil, 1, 9000, 0 },
     { "Sultan-Faramon", 3, "vendor", "Jagged Star of the Eagle", nil, 1, 3100, 0 },
+    { "Mirelle-Faramon", 4, "tradeSell", "Thorium Ore", "10620", 20, 150000, 0, "Kargath" },
+    { "Mirelle-Faramon", 4.5, "travel", "Everlook, Winterspring", nil, 1, 4000, 0 },
     { "Mirelle-Faramon", 5, "buy", "Essence of Undeath", "12808", 3, 39000, 0 },
+    { "Sultan-Faramon", 5.5, "deposit", "Runecloth", nil, 1, 1260, 0 },
+    { "Sultan-Faramon", 6, "postage", "Postage", nil, 1, 30, 0 },
+    { "Sultan-Faramon", 6, "mailOut", "Gold", nil, 1, 500000, 0, "Mirelle" },
+    { "Mirelle-Faramon", 6.5, "mailIn", "For the bags", nil, 1, 500000, 0, "Sultan" },
+    { "Mirelle-Faramon", 7, "cod", "Large Brilliant Shard", "14344", 4, 220000, 0, "Grokk" },
+    { "Mirelle-Faramon", 9, "merchant", "Simple Flour", nil, 10, 500, 0 },
+    { "Sultan-Faramon", 10, "loot", "Looted gold", nil, 46, 18250, 0 },
+    { "Sultan-Faramon", 11, "training", "Mining (Artisan)", nil, 1, 50000, 0 },
+    { "Sultan-Faramon", 12, "tradeIn", "Gold", nil, 1, 20000, 0, "Kargath" },
+    { "Sultan-Faramon", 13, "tradeOut", "Gold", nil, 1, 5000, 0, "Grokk" },
+    { "Sultan-Faramon", 14, "respec", "Talent reset", nil, 1, 100000, 0 },
+    { "Sultan-Faramon", 15, "otherIn", "Other", nil, 3, 1240, 0 },
+    { "Sultan-Faramon", 16, "otherOut", "Other", nil, 2, 300, 0 },
     { "Sultan-Faramon", 20, "buy", "Jagged Star of the Eagle", nil, 1, 2300, 0 },
     { "Sultan-Faramon", 26, "sell", "Major Healing Potion", "13446", 5, 13000, 650 },
     { "Mirelle-Faramon", 30, "buy", "Runecloth", "14047", 40, 24800, 0 },
     { "Sultan-Faramon", 52, "sell", "Bandit Cinch of the Monkey", "9775:584", 1, 21000, 1050 },
   }) do
-    local character, hours, side, item, key, count, price, cut = unpack(trade, 1, 8)
+    local character, hours, side, item, key, count, price, cut, party = unpack(trade, 1, 9)
     db.trades[character] = db.trades[character] or {}
     table.insert(db.trades[character], 1,
-      { at = now - hours * 3600, side = side, item = item, key = key, count = count, price = price, fee = cut })
+      { at = now - math.floor(hours * 3600), side = side, item = item, key = key, count = count, price = price, fee = cut, party = party })
   end
   return db
 end
@@ -1142,10 +1160,19 @@ local function captureViews(suffix)
   hover(GoldbookWindow.rows[1].hit, true)
   captureWindow("deals" .. suffix)
   hover(GoldbookWindow.rows[1].hit, false)
-  for _, view in ipairs({ "sell", "movers", "trades" }) do
+  for _, view in ipairs({ "sell", "movers", "accounting" }) do
     run(view)
     captureWindow(view .. suffix)
   end
+  local expenses = GoldbookWindow.segments.buttons[3]
+  expenses.scripts.OnClick(expenses)
+  captureWindow("accounting-expenses" .. suffix)
+  local sources = GoldbookWindow.filters.controls.source
+  sources.scripts.OnClick(sources)
+  captureWindow("accounting-sources" .. suffix)
+  sources.scripts.OnClick(sources)
+  local all = GoldbookWindow.segments.buttons[1]
+  all.scripts.OnClick(all)
   -- The mailbox opens the Mail view, and closing it closes the window. Its
   -- invoices book trades; the seeded ones are kept, so both themes match.
   local trades = ns.db.trades

@@ -29,8 +29,10 @@ local PARK_MILLER = 2147483647
 --                                  saved at logout for the sync agent, rows as Advisor.Sell gives them, no bank
 --                                  until the bank was seen open
 --   bank[character]            = { at, items = { { key, count }, ... } }, the unbound items in the bank when last open
---   trades[character][]        = { at, side, item, key, count, price, fee }, auction house sales and purchases,
+--   trades[character][]        = { at, side, item, key, count, price, fee, party }, revenue and expenses,
 --                                  oldest first, see Trades
+--   accruing[character][side]  = the entry of gold added up this hour, booked once the hour has ended,
+--                                  see Trades.Accrue
 --   scans[]                    = scans waiting for the sync agent
 --   linkSamples[]              = links of variants the last full scan left out
 --   account                    = { id, key }, the login to the Goldbook web page, see Codec.RandomCode
@@ -148,6 +150,7 @@ function Database.Init(saved)
   db.characters = db.characters or {}
   db.bank = db.bank or {}
   db.trades = db.trades or {}
+  db.accruing = db.accruing or {}
   db.account = db.account or newAccount()
   db.fromServer = db.fromServer or {}
   db.serverMerged = db.serverMerged or {}

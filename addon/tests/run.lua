@@ -919,8 +919,8 @@ eq(GoldbookWindow.rows[1].cells[3].text, "|cff5fd35a+25|r|cffffd34dg|r|cff5fd35a
 eq(GoldbookWindow.head.link.shown, false, "the gold title is not an item to hover")
 eq(segments(), "1W [1M] 2M", "the gold chart starts on a month")
 eq(plain(GoldbookWindow.side.lines[1].key.text .. " " .. GoldbookWindow.side.lines[1].value.text .. " / "
-  .. GoldbookWindow.side.lines[5].key.text .. " " .. GoldbookWindow.side.lines[5].value.text), "Sold, after the cut 0c / Best sale –",
-  "the month's trades sit beside the characters")
+  .. GoldbookWindow.side.lines[5].key.text .. " " .. GoldbookWindow.side.lines[5].value.text), "Revenue 0c / Best sale –",
+  "the month's accounting sits beside the characters")
 local marks, lines, dots = plotted()
 eq(#marks .. " " .. #lines .. " " .. table.concat(dots, " ") .. " " .. marks[1] .. " " .. marks[29] .. " " .. marks[30], "30 29 1 1@0 29@0 30@127",
   "the gold line has a point per day, from the bottom of the axis to the highest total, and a dot on today's")
@@ -946,7 +946,7 @@ for _ = 1, 10 do
   Stub.fire("PLAYER_MONEY")
 end
 eq(cells(1), "Sultan | 125g 00s 00c | +25g 00s 00c | today", "the window is not redrawn on the spot for each gold change")
-eq(#Stub.timers - timers, 1, "ten gold changes in a row queue one redraw")
+eq(#Stub.timers - timers, 2, "ten gold changes in a row queue one redraw, and one wait for what explains the change")
 Stub.advance(0.2)
 eq(cells(1), "Sultan | 126g 00s 00c | +26g 00s 00c | today", "the redraw a moment later shows the new balance")
 eq(plain(GoldbookWindow.purse.text), "126g 00s 00c", "the title bar shows the account's gold")

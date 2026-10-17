@@ -21,6 +21,7 @@ Scanner.lua
 Sellers.lua
 Mail.lua
 Core.lua
+Accounting.lua
 Tooltip.lua
 UI.lua
 WebLogin.lua
