@@ -1,10 +1,11 @@
 const { invoke } = window.__TAURI__.core;
-const siteLayout = () => ({
-  viewportHeight: window.innerHeight,
-  barHeight: document.querySelector(".masthead").getBoundingClientRect().bottom,
-});
+const siteLayout = () => {
+  const stage = document.querySelector(".stage").getBoundingClientRect();
+  return { viewportHeight: window.innerHeight, left: stage.left, top: stage.top };
+};
 window.goldbook = {
   layoutSite: () => invoke("layout_site", siteLayout()),
+  setTheme: (theme) => invoke("set_theme", { theme }),
   getUpdates: () => invoke("get_updates"),
   checkUpdates: () => invoke("check_updates"),
   installUpdate: () => invoke("install_update"),

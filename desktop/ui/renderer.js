@@ -36,7 +36,33 @@ const layoutObserver = new ResizeObserver(() => {
   window.goldbook.layoutSite().catch(() => notify("Goldbook could not resize that view."));
 });
 layoutObserver.observe(document.documentElement);
-layoutObserver.observe(document.querySelector(".masthead"));
+layoutObserver.observe(document.querySelector(".rail"));
+
+function drawTheme() {
+  for (const button of document.querySelectorAll("[data-theme-choice]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.themeChoice === document.documentElement.dataset.theme));
+  }
+}
+
+function shareTheme() {
+  window.goldbook.setTheme(document.documentElement.dataset.theme)
+    .catch(() => notify("Goldbook could not change the theme of the website view."));
+}
+
+for (const button of document.querySelectorAll("[data-theme-choice]")) {
+  button.addEventListener("click", () => {
+    document.documentElement.dataset.theme = button.dataset.themeChoice;
+    try {
+      localStorage.setItem("goldbook-theme", button.dataset.themeChoice);
+    } catch {
+      // Without storage the choice lasts until the app restarts.
+    }
+    drawTheme();
+    shareTheme();
+  });
+}
+drawTheme();
+shareTheme();
 
 field("settings-toggle").addEventListener("click", () => {
   const form = field("settings");
@@ -206,6 +232,7 @@ fill().catch(() => {
 
 function showUpdates(status) {
   field("client-version").textContent = `Goldbook ${status.version}`;
+  field("topbar-version").textContent = status.version;
   field("addon-update").textContent = status.addon;
   const update = status.client;
   const text = {
