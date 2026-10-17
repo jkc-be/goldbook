@@ -1,12 +1,11 @@
 use crate::{
-    api_url,
-    paths::{flavor_saved_variables, SERVER_DATA},
+    Logger, SavedVariables, api_url,
+    paths::{SERVER_DATA, flavor_saved_variables},
     read_saved_variables,
     savedvars::normalized_realm,
     sync::file_lock,
-    Logger, SavedVariables,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{

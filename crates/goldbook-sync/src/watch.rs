@@ -1,12 +1,12 @@
-use crate::{flavor_of, sync_file, write_server_data, Logger, ServerData, SyncOptions, SyncResult};
+use crate::{Logger, ServerData, SyncOptions, SyncResult, flavor_of, sync_file, write_server_data};
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
 use std::{
     collections::{BTreeSet, HashMap},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -147,13 +147,13 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
                 },
             );
             let mut watcher = watcher.ok();
-            if let Some(watcher) = &mut watcher {
-                if let Err(e) = watcher.watch(
+            if let Some(watcher) = &mut watcher
+                && let Err(e) = watcher.watch(
                     options.file.parent().unwrap_or(Path::new(".")),
                     RecursiveMode::NonRecursive,
-                ) {
-                    (options.log)(&format!("{}: {e}", options.file.display()))
-                }
+                )
+            {
+                (options.log)(&format!("{}: {e}", options.file.display()))
             }
             (options.log)(&format!("watching {}", options.file.display()));
             // Periodic passes also recover when a directory did not exist at startup or
@@ -170,10 +170,10 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
                         false
                     }
                 };
-                if let Some(flavor) = flavor.as_deref().filter(|_| healthy) {
-                    if claim_refresh(&refreshed, flavor, interval.max(SERVER_DATA_INTERVAL)) {
-                        let _ = write_server_data(flavor, &options.api, &options.log).await;
-                    }
+                if let Some(flavor) = flavor.as_deref().filter(|_| healthy)
+                    && claim_refresh(&refreshed, flavor, interval.max(SERVER_DATA_INTERVAL))
+                {
+                    let _ = write_server_data(flavor, &options.api, &options.log).await;
                 }
                 let wait = if healthy {
                     interval

@@ -1,5 +1,5 @@
 use crate::{extract_account, extract_scans, extract_seller_snapshots, read_saved_variables};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use fs2::FileExt;
 use goldbook_core::sha256;
 use serde::{Deserialize, Serialize};

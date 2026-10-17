@@ -1,8 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use goldbook_sync::{
-    default_state_path, flavor_of, saved_variables_files, sync_file, watch_files,
-    write_server_data, SyncOptions, WatchFile, WatchOptions,
+    SyncOptions, WatchFile, WatchOptions, default_state_path, flavor_of, saved_variables_files,
+    sync_file, watch_files, write_server_data,
 };
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
 #[derive(Subcommand)]

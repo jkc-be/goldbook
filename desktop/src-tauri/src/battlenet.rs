@@ -1,5 +1,5 @@
-use anyhow::{bail, Result};
-use serde_json::{json, Value};
+use anyhow::{Result, bail};
+use serde_json::{Value, json};
 use std::time::Duration;
 use url::Url;
 
@@ -107,7 +107,9 @@ pub async fn start(api: &str) -> Result<Login> {
         })?;
     let (status, value) = response(reply).await?;
     if status != 200 {
-        bail!("Battle.net sign-in is unavailable on this server. Ask its administrator to enable it, or try again later.");
+        bail!(
+            "Battle.net sign-in is unavailable on this server. Ask its administrator to enable it, or try again later."
+        );
     }
     let authorization_url = value["authorizationUrl"]
         .as_str()
@@ -168,7 +170,7 @@ pub async fn finish(api: &str, login: Login, cancelled: impl Fn() -> bool) -> Re
             200 => {
                 return secret(&value, "sessionToken").ok_or_else(|| {
                     anyhow::anyhow!("The server returned an invalid sign-in response.")
-                })
+                });
             }
             202 => {}
             410 => bail!("Battle.net sign-in expired. Sign in again."),
@@ -183,13 +185,13 @@ pub async fn finish(api: &str, login: Login, cancelled: impl Fn() -> bool) -> Re
 mod tests {
     use super::*;
     use axum::{
+        Json, Router,
         extract::State,
         routing::{get, post},
-        Json, Router,
     };
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
 
     #[tokio::test]
@@ -221,20 +223,24 @@ mod tests {
         let login = start(&api).await.unwrap();
         assert_eq!(login.user_code, "ABCD2345");
         assert!(!login.authorization_url.contains("ABCD2345"));
-        assert!(login
-            .authorization_url
-            .contains("/goldbook/api/auth/battlenet/authorize?"));
+        assert!(
+            login
+                .authorization_url
+                .contains("/goldbook/api/auth/battlenet/authorize?")
+        );
         assert_eq!(
             finish(&api, login, || false).await.unwrap(),
             "goldbook-enrollment-session"
         );
         assert_eq!(polls.load(Ordering::SeqCst), 2);
         let login = start(&api).await.unwrap();
-        assert!(finish(&api, login, || true)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("cancelled"));
+        assert!(
+            finish(&api, login, || true)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("cancelled")
+        );
         assert_eq!(polls.load(Ordering::SeqCst), 2);
         server.abort();
     }

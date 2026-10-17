@@ -7,6 +7,12 @@ were released with.
 
 ## Unreleased
 
+## 0.2.1 - 2026-10-17
+
+- Build the desktop app and server with Rust 1.99.1 and align their shared
+  crate versions. All Rust crates now use edition 2024, with the same pinned
+  toolchain for local builds, CI and the server image.
+
 ## 0.2.0 - 2026-10-17
 
 ### Addon

@@ -36,7 +36,7 @@ Run the full automated suite without an OVH connection or production database:
 make test
 ```
 
-Install Rust 1.94.1, Python 3.11 or newer, LuaJIT, curl and the Docker Compose
+Install Rust 1.99.1, Python 3.11 or newer, LuaJIT, curl and the Docker Compose
 CLI first. The suite needs neither Node.js nor a running Docker daemon. `npm test` runs the same command. `make check`
 also runs Rust formatting and clippy checks, and runs in the Check workflow on
 pull requests and pushes to main. Installer builds remain manual.
@@ -126,7 +126,7 @@ This runs everything on your own machine. Nothing leaves it until you
 - World of Warcraft with the modern auction house API (`C_AuctionHouse`). The
   addon declares interface 16001, the 1.60 "Forever" client. On another client
   version the game lists it as out of date.
-- Rust 1.94.1, installed through [rustup](https://rustup.rs).
+- Rust 1.99.1, installed through [rustup](https://rustup.rs).
 - For the desktop app, Node.js 22.18 or newer and the
   [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/).
 - For verification, LuaJIT, Python 3.11 or newer, curl and the Docker Compose CLI.
@@ -867,6 +867,12 @@ Tauri app is a separate workspace member so server builds need no desktop
 system libraries. `cargo test --locked -p goldbook-desktop` checks desktop
 settings and the one-use browser login handoff. The root `npm test` runs the
 full local suite described above.
+
+All four crates use Rust edition 2024 and inherit their minimum Rust version
+and shared dependency versions from the root `Cargo.toml`. Local builds and CI
+read `rust-toolchain.toml`. When upgrading Rust, update that pin, the workspace
+minimum, and the builder image in `server/Dockerfile` together. Commit any
+dependency resolution changes in the shared `Cargo.lock`.
 
 The CLI supports `--file`, `--wow`, `--api`, `--token`, `--state`, and `--once`.
 Run `cargo run -p goldbook-sync -- --help` for details. It reads `GOLDBOOK_API`

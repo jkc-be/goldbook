@@ -1,5 +1,5 @@
-use anyhow::{bail, Context, Result};
-use base64::{engine::general_purpose::STANDARD, Engine};
+use anyhow::{Context, Result, bail};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use minisign_verify::{PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -161,18 +161,18 @@ fn newer_than_bundled(bundle: &AddonBundle) -> bool {
     bundle.sequence >= env!("GOLDBOOK_ADDON_SEQUENCE").parse::<u64>().unwrap()
 }
 pub fn source(app: &tauri::AppHandle) -> Result<PathBuf> {
-    if let Ok((bundle, _)) = cached_bundle(app) {
-        if newer_than_bundled(&bundle) {
-            let directory = cache(app)?.join("files");
-            if directory.exists() {
-                fs::remove_dir_all(&directory)?;
-            }
-            fs::create_dir_all(&directory)?;
-            for (name, content) in bundle.files {
-                fs::write(directory.join(name), content)?;
-            }
-            return Ok(directory);
+    if let Ok((bundle, _)) = cached_bundle(app)
+        && newer_than_bundled(&bundle)
+    {
+        let directory = cache(app)?.join("files");
+        if directory.exists() {
+            fs::remove_dir_all(&directory)?;
         }
+        fs::create_dir_all(&directory)?;
+        for (name, content) in bundle.files {
+            fs::write(directory.join(name), content)?;
+        }
+        return Ok(directory);
     }
     if cfg!(debug_assertions) {
         return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../addon/Goldbook"));
@@ -377,12 +377,14 @@ mod tests {
             .decode(vectors["valid"]["payload"].as_str().unwrap())
             .unwrap();
         bytes[10] ^= 1;
-        assert!(verified_addon(
-            &bytes,
-            vectors["valid"]["signature"].as_str().unwrap().as_bytes(),
-            key
-        )
-        .is_err());
+        assert!(
+            verified_addon(
+                &bytes,
+                vectors["valid"]["signature"].as_str().unwrap().as_bytes(),
+                key
+            )
+            .is_err()
+        );
         assert!(verified_addon(&[], b"bad-signature", key).is_err());
         assert!(verified_addon(&vec![0; MAX_ADDON + 1], b"", key).is_err());
     }

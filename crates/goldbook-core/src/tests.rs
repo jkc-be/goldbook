@@ -70,7 +70,10 @@ fn account_is_canonical_and_drops_raw_keys() {
     v["key"] = json!("secret");
     let parsed = parse_account_upload(&v).unwrap();
     let encoded = serde_json::to_string(&parsed).unwrap();
-    assert_eq!(encoded,"{\"id\":\"K7Q2M9PX\",\"keyHash\":\"1f2a4b22637651b9c0e4169e248acbe887d2e3d0ea98321f1bf1452f9b6ecb79\",\"characters\":[{\"name\":\"Sultan\",\"realm\":\"Faramon\",\"faction\":null,\"class\":null,\"level\":null,\"updatedAt\":null,\"gold\":[[1791932400,5000]],\"bags\":null,\"bank\":null}]}");
+    assert_eq!(
+        encoded,
+        "{\"id\":\"K7Q2M9PX\",\"keyHash\":\"1f2a4b22637651b9c0e4169e248acbe887d2e3d0ea98321f1bf1452f9b6ecb79\",\"characters\":[{\"name\":\"Sultan\",\"realm\":\"Faramon\",\"faction\":null,\"class\":null,\"level\":null,\"updatedAt\":null,\"gold\":[[1791932400,5000]],\"bags\":null,\"bank\":null}]}"
+    );
 }
 #[test]
 fn account_rejects_missing_nullable_fields_and_old_day_numbers() {
@@ -85,7 +88,10 @@ fn account_rejects_missing_nullable_fields_and_old_day_numbers() {
     );
     v = account();
     v["characters"][0]["gold"][0][0] = json!(20738);
-    assert_eq!(parse_account_upload(&v).unwrap_err(),"characters[0].gold[0] must be [time, copper]: a unix time on the hour and a non-negative integer");
+    assert_eq!(
+        parse_account_upload(&v).unwrap_err(),
+        "characters[0].gold[0] must be [time, copper]: a unix time on the hour and a non-negative integer"
+    );
     v = account();
     v["previousKeyHash"] = Value::Null;
     assert_eq!(
@@ -96,31 +102,127 @@ fn account_rejects_missing_nullable_fields_and_old_day_numbers() {
 #[test]
 fn account_rejections_keep_original_field_messages() {
     let base = json!({"id":"K7Q2M9PX","keyHash":key_hash("7KQ2M9PXABCDEFGHJKMN"),"characters":[{"name":"Sultan","realm":"Faramon","faction":"Horde","class":"WARRIOR","level":60,"updatedAt":1791970261,"gold":[[1791932400u64,5000]],"bags":{"at":null,"rows":[{"key":"2589","name":"Linen Cloth","quality":1,"count":20,"action":"auction","post":40,"vendor":13,"value":760}]},"bank":null}]});
-    let cases=vec![
-        ("/id",json!("K7Q2M9PU"),"id must be 8 characters of the login code alphabet"),
-        ("/keyHash",json!("RAWKEY"),"keyHash must be 64 lowercase hex characters"),
-        ("/characters",json!(vec![base["characters"][0].clone();51]),"characters must be an array of at most 50 entries"),
-        ("/characters/0",json!("Sultan"),"characters[0] must be an object"),
-        ("/characters/0/name",json!(""),"characters[0].name must be a string of 1 to 64 characters"),
-        ("/characters/0/realm",json!("R".repeat(65)),"characters[0].realm must be a string of 1 to 64 characters"),
-        ("/characters/0/faction",json!("Goblin"),"characters[0].faction must be one of Alliance, Horde, Neutral or null"),
-        ("/characters/0/class",json!("M".repeat(21)),"characters[0].class must be a string of 1 to 20 characters or null"),
-        ("/characters/0/level",json!(60.5),"characters[0].level must be an integer from 1 to 100 or null"),
-        ("/characters/0/updatedAt",json!(-1),"characters[0].updatedAt must be a non-negative integer or null"),
-        ("/characters/0/gold",json!(vec![json!([1791932400u64,1]);1501]),"characters[0].gold must be an array of at most 1500 entries"),
-        ("/characters/0/gold/0",json!([1791932401u64,1]),"characters[0].gold[0] must be [time, copper]: a unix time on the hour and a non-negative integer"),
-        ("/characters/0/bags",json!("full"),"characters[0].bags must be an object or null"),
-        ("/characters/0/bags/at",json!(1.5),"characters[0].bags.at must be a non-negative integer or null"),
-        ("/characters/0/bags/rows",json!(vec![base["characters"][0]["bags"]["rows"][0].clone();1001]),"characters[0].bags.rows must be an array of at most 1000 entries"),
-        ("/characters/0/bags/rows/0",json!("2589"),"characters[0].bags.rows[0] must be an object"),
-        ("/characters/0/bags/rows/0/key",json!("Linen Cloth"),"characters[0].bags.rows[0].key must look like \"2589\" or \"9775:584\""),
-        ("/characters/0/bags/rows/0/name",json!("L".repeat(201)),"characters[0].bags.rows[0].name must be a string of 0 to 200 characters or null"),
-        ("/characters/0/bags/rows/0/quality",json!(9),"characters[0].bags.rows[0].quality must be an integer from 0 to 8"),
-        ("/characters/0/bags/rows/0/count",json!(0),"characters[0].bags.rows[0].count must be a positive integer"),
-        ("/characters/0/bags/rows/0/action",json!("sell"),"characters[0].bags.rows[0].action must be one of auction, vendor, unknown"),
-        ("/characters/0/bags/rows/0/post",json!(-1),"characters[0].bags.rows[0].post must be a non-negative integer or null"),
-        ("/characters/0/bags/rows/0/vendor",json!(null),"characters[0].bags.rows[0].vendor must be a non-negative integer"),
-        ("/characters/0/bags/rows/0/value",json!(9_007_199_254_740_992u64),"characters[0].bags.rows[0].value must be a non-negative integer"),
+    let cases = vec![
+        (
+            "/id",
+            json!("K7Q2M9PU"),
+            "id must be 8 characters of the login code alphabet",
+        ),
+        (
+            "/keyHash",
+            json!("RAWKEY"),
+            "keyHash must be 64 lowercase hex characters",
+        ),
+        (
+            "/characters",
+            json!(vec![base["characters"][0].clone(); 51]),
+            "characters must be an array of at most 50 entries",
+        ),
+        (
+            "/characters/0",
+            json!("Sultan"),
+            "characters[0] must be an object",
+        ),
+        (
+            "/characters/0/name",
+            json!(""),
+            "characters[0].name must be a string of 1 to 64 characters",
+        ),
+        (
+            "/characters/0/realm",
+            json!("R".repeat(65)),
+            "characters[0].realm must be a string of 1 to 64 characters",
+        ),
+        (
+            "/characters/0/faction",
+            json!("Goblin"),
+            "characters[0].faction must be one of Alliance, Horde, Neutral or null",
+        ),
+        (
+            "/characters/0/class",
+            json!("M".repeat(21)),
+            "characters[0].class must be a string of 1 to 20 characters or null",
+        ),
+        (
+            "/characters/0/level",
+            json!(60.5),
+            "characters[0].level must be an integer from 1 to 100 or null",
+        ),
+        (
+            "/characters/0/updatedAt",
+            json!(-1),
+            "characters[0].updatedAt must be a non-negative integer or null",
+        ),
+        (
+            "/characters/0/gold",
+            json!(vec![json!([1791932400u64, 1]); 1501]),
+            "characters[0].gold must be an array of at most 1500 entries",
+        ),
+        (
+            "/characters/0/gold/0",
+            json!([1791932401u64, 1]),
+            "characters[0].gold[0] must be [time, copper]: a unix time on the hour and a non-negative integer",
+        ),
+        (
+            "/characters/0/bags",
+            json!("full"),
+            "characters[0].bags must be an object or null",
+        ),
+        (
+            "/characters/0/bags/at",
+            json!(1.5),
+            "characters[0].bags.at must be a non-negative integer or null",
+        ),
+        (
+            "/characters/0/bags/rows",
+            json!(vec![base["characters"][0]["bags"]["rows"][0].clone(); 1001]),
+            "characters[0].bags.rows must be an array of at most 1000 entries",
+        ),
+        (
+            "/characters/0/bags/rows/0",
+            json!("2589"),
+            "characters[0].bags.rows[0] must be an object",
+        ),
+        (
+            "/characters/0/bags/rows/0/key",
+            json!("Linen Cloth"),
+            "characters[0].bags.rows[0].key must look like \"2589\" or \"9775:584\"",
+        ),
+        (
+            "/characters/0/bags/rows/0/name",
+            json!("L".repeat(201)),
+            "characters[0].bags.rows[0].name must be a string of 0 to 200 characters or null",
+        ),
+        (
+            "/characters/0/bags/rows/0/quality",
+            json!(9),
+            "characters[0].bags.rows[0].quality must be an integer from 0 to 8",
+        ),
+        (
+            "/characters/0/bags/rows/0/count",
+            json!(0),
+            "characters[0].bags.rows[0].count must be a positive integer",
+        ),
+        (
+            "/characters/0/bags/rows/0/action",
+            json!("sell"),
+            "characters[0].bags.rows[0].action must be one of auction, vendor, unknown",
+        ),
+        (
+            "/characters/0/bags/rows/0/post",
+            json!(-1),
+            "characters[0].bags.rows[0].post must be a non-negative integer or null",
+        ),
+        (
+            "/characters/0/bags/rows/0/vendor",
+            json!(null),
+            "characters[0].bags.rows[0].vendor must be a non-negative integer",
+        ),
+        (
+            "/characters/0/bags/rows/0/value",
+            json!(9_007_199_254_740_992u64),
+            "characters[0].bags.rows[0].value must be a non-negative integer",
+        ),
     ];
     for (path, value, message) in cases {
         let mut input = base.clone();

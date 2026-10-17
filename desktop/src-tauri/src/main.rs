@@ -12,16 +12,16 @@ use settings::Settings;
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 use tauri::{
+    Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     webview::{PageLoadEvent, WebviewBuilder},
-    Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
 };
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
@@ -46,8 +46,12 @@ impl Theme {
     // later pages in the view open in the app's theme.
     fn script(self) -> &'static str {
         match self {
-            Theme::Light => "document.documentElement.dataset.theme = 'light'; try { localStorage.setItem('goldbook-theme', 'light'); } catch {}",
-            Theme::Dark => "document.documentElement.dataset.theme = 'dark'; try { localStorage.setItem('goldbook-theme', 'dark'); } catch {}",
+            Theme::Light => {
+                "document.documentElement.dataset.theme = 'light'; try { localStorage.setItem('goldbook-theme', 'light'); } catch {}"
+            }
+            Theme::Dark => {
+                "document.documentElement.dataset.theme = 'dark'; try { localStorage.setItem('goldbook-theme', 'dark'); } catch {}"
+            }
         }
     }
 }
@@ -363,7 +367,9 @@ async fn check_upload(settings: &Settings) -> anyhow::Result<()> {
         .map_err(|_| anyhow::anyhow!("Goldbook cannot reach that server."))?;
     match response.status().as_u16() {
         400 | 200..=299 => Ok(()),
-        401 => anyhow::bail!("The server refused this app's upload access. Check Settings or contact the server administrator."),
+        401 => anyhow::bail!(
+            "The server refused this app's upload access. Check Settings or contact the server administrator."
+        ),
         503 => anyhow::bail!("That server has no upload token configured."),
         code => anyhow::bail!("The server answered {code}."),
     }
@@ -658,7 +664,7 @@ async fn show_view(
             ),
             (None, 1) => Some(0),
             (None, _) => {
-                return Err("Choose the World of Warcraft account you want to open.".into())
+                return Err("Choose the World of Warcraft account you want to open.".into());
             }
         };
         if let Some(index) = index {
@@ -735,7 +741,8 @@ fn main() {
     // (Error 71) on some Mesa setups. Must be set before GTK starts.
     #[cfg(target_os = "linux")]
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        // SAFETY: this runs before GTK, Tauri, or the async runtime starts any threads.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
     }
 
     let config = settings::config_path().expect("Cannot find the Goldbook settings folder");
@@ -883,11 +890,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.app_handle().tray_by_id("goldbook").is_some() {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.app_handle().tray_by_id("goldbook").is_some()
+            {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
@@ -981,10 +988,10 @@ mod tests {
             None
         );
         assert_eq!(
-            describe_log("server prices for /Applications/World of Warcraft/_classic_ failed: export of Faramon-Horde answered 502 uploaded account written to unreadable another key"),
-            Some(
-                "Goldbook could not download prices from the server. It will try again.".into()
-            )
+            describe_log(
+                "server prices for /Applications/World of Warcraft/_classic_ failed: export of Faramon-Horde answered 502 uploaded account written to unreadable another key"
+            ),
+            Some("Goldbook could not download prices from the server. It will try again.".into())
         );
         assert_eq!(
             describe_log("uploaded account K7Q2-M9PX: 3 characters"),
