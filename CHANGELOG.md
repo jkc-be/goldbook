@@ -7,6 +7,23 @@ were released with.
 
 ## Unreleased
 
+### Addon
+
+- Trades becomes Accounting (`/gb accounting`; `/gb trades` still opens it):
+  every gold movement as revenue or expense, by source. Besides auction and
+  vendor sales and auction purchases it books merchant purchases, trades
+  with players (each item given or got, the gold shared by market value, and
+  the player's name), mail gold in and out, cash on delivery, quest rewards,
+  looted gold, repairs, postage, auction deposits, flights, training and
+  talent resets. Gold nothing explains is other income or expense. Looted
+  and other gold are added up per hour.
+- The Accounting view has All, Revenue and Expenses, a source chip beside the
+  character chip, and Revenue, Expenses, Net and Realized profit cards. The
+  realized profit counts goods bought and sold by any means. The Gold view's
+  side panel shows the same totals for the month.
+- Keep 3,000 entries per character instead of 1,000, and never drop one the
+  mailbox may still show.
+
 ## 0.2.1 - 2026-10-17
 
 - Build the desktop app and server with Rust 1.99.1 and align their shared

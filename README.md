@@ -352,7 +352,7 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | `/gb sell` | Your bags: what to auction, at what price, and what to vendor instead |
 | `/gb movers` | The prices that rose and fell most since the day before. Top gains first |
 | `/gb gold` | Your account: gold per character, gains, a 30 day chart and net worth |
-| `/gb trades` | Your auction house sales and purchases and your sales to vendors, newest first, with what each added to your gold. See [Trades](#trades) |
+| `/gb accounting` | Your revenue and expenses, newest first: auction and vendor sales, purchases, trades with players, mail, repairs, flights and every other gold movement, with what each did to your gold. `/gb trades` opens it too. See [Accounting](#accounting) |
 | Alt+click an item, or `/gb item <link or name>` | The item's price history. Works on items in bags, the bank, chat links, loot, the auction house and the Goldbook lists |
 | Click a column header | Sorts the list by that column. Click again to reverse |
 | `/gb show [text]`, or left click the minimap button | Price list, filtered by item name |
@@ -388,7 +388,7 @@ The game's item data says what a vendor pays, but for some items the server
 pays less: the data says 9s 62c for Rough Bronze Leggings, a vendor pays 5s 77c.
 Goldbook therefore reads what a vendor really paid from the merchant's buyback
 list whenever a merchant is open, and from the vendor sales booked under
-`/gb trades`. That price replaces the item data's from then on. In `/gb deals`,
+`/gb accounting`. That price replaces the item data's from then on. In `/gb deals`,
 a vendor deal whose price was not seen paid yet says `Vendor?` instead of
 `Vendor`. Sell one to a vendor to confirm it.
 
@@ -466,28 +466,61 @@ price differs from the day before it was last seen, with the change in
 percent. It needs two days of scans. Prices under a silver on both days are
 left out.
 
-### Trades
+### Accounting
 
-Goldbook books every auction house sale and purchase, and every sale to a
-vendor, like a broker's statement. The auction house mails an invoice for each one: a sale with its
-price and the 5% cut, a purchase with what you paid. Each time you open a
+Goldbook books where your gold comes from and where it goes, per character,
+like a broker's statement. Each entry has a source:
+
+| Source | Booked when |
+|---|---|
+| Auction sale, Auction purchase | You open a mailbox with the auction house invoice. See below |
+| Vendor sale | The item appears in the merchant's buyback list, with what the vendor paid. Buying it back takes the sale off again |
+| Merchant purchase | You buy from a merchant, with the item and how many |
+| Trade sale, Trade purchase | A trade with a player completes: what you gave and what you got, see below |
+| Trade gold in, Trade gold out | A trade moves gold and no items the other way |
+| Mail gold in, Mail gold out | You take gold from a player's mail, or send gold, with the subject and the player |
+| Cash on delivery | You pay for an item mailed cash on delivery |
+| Quest reward | You turn in a quest that pays gold, with its title |
+| Looted gold | You loot gold or get your share of a group's, added up per hour |
+| Repairs, Postage, Auction deposit, Flight, Training, Talent reset | You pay for them; a flight names where to, training the spell and rank, a deposit the item posted |
+| Other income, Other expense | Gold moves and nothing above explains it, added up per hour |
+
+The auction house mails an invoice for each sale and purchase: a sale with
+its price and the 5% cut, a purchase with what you paid. Each time you open a
 mailbox, Goldbook reads those invoices and books the new ones under the
 character whose mailbox it is. Chat says how many it booked. You do not have
 to take the mail out first, and opening the mailbox again does not book a
-trade twice.
+sale twice. The gold you collect from that mail, a bid you placed, and a bid
+the auction house returns are not booked again. When the merchant closes,
+chat says how many vendor sales it booked.
 
-A sale to a vendor is booked when it appears in the merchant's buyback list,
-with what the vendor paid. Buying it back takes the sale off again. When the
-merchant closes, chat says how many vendor sales it booked.
+A trade with a player is booked when the game says "Trade complete". Each
+item you gave is a trade sale, each item you got a trade purchase, both with
+the player's name. The gold you got is shared over the items you gave in
+proportion to their market value, or to their count when one of them has no
+market value; the gold you paid is shared over the items you got the same
+way. An item given for no gold is a sale at 0. Chat says when a trade is
+booked.
 
-`/gb trades` lists them, newest first: the item and how many, the price each,
-the net (the sale less the cut in green, or the price paid in red), the
-character and when. A vendor sale is marked `vendor`. The status line totals
-the trades shown: what the sales brought in after the cut, what the purchases
-cost, the net, and the profit or loss realized on items both bought and sold.
-Buy a Jagged Star of the Eagle for 23s and sell it to a vendor for 31s, and
-that is a profit of 8s; sell it for 19s, and a loss of 4s. Type in the search box to filter by item or character.
-Goldbook keeps 180 days and at most 1,000 trades per character.
+Looted gold and other income and expense are added up per character and
+hour, and booked when the hour has ended. Until then the view lists the hour
+so far.
+
+`/gb accounting` lists the entries, newest first: what the entry is (the
+item and how many, or what the gold was for, and the player it went to or
+came from), its source, the net (green for revenue after the auction house
+cut, red for an expense), the character and when. **All**, **Revenue** and
+**Expenses** switch between them. The source and character chips filter the
+list, and the search box matches the item, the character, the source and the
+player. The cards total the entries shown: revenue, expenses, the net, and
+the profit or loss realized on goods both bought and sold, however they were
+bought and sold. Buy a Jagged Star of the Eagle for 23s and sell it to a
+vendor for 31s, and that is a profit of 8s; sell it for 19s, and a loss of
+4s. The Gold view shows the same totals for the last 30 days.
+
+Goldbook keeps 180 days and at most 3,000 entries per character, never
+dropping one less than 30 days old, so that an invoice still in the mailbox is
+not booked again.
 
 On the web page, after the next sync, **Characters** shows the trades of the
 whole account and each character page shows its own:
@@ -1019,14 +1052,21 @@ files, so update those before deploying the Rust image through Actions.
   starts each item's history from its newest day.
 - Web search ignores case for ASCII letters only and takes at most 100
   characters.
-- Trades come from the auction house invoices in the mailbox, so a sale is
-  booked only once its mail arrives and the mailbox is opened. A mail that
-  expires or is deleted unopened is never booked. A trade is dated by the days
-  its mail has left, which is when the auction house sent it. Two identical
-  sales sent within two minutes of each other, where the first mail was taken
-  before the second arrived, count as one. A vendor sale is noticed through
-  the buyback list, which holds 12 items: with it full, selling the same stack
-  as its oldest entry is booked only when the gold gained equals that price. Mail between characters and deposits are not trades.
+- Auction sales and purchases come from the auction house invoices in the
+  mailbox, so a sale is booked only once its mail arrives and the mailbox is
+  opened. A mail that expires or is deleted unopened is never booked. A sale
+  is dated by the days its mail has left, which is when the auction house
+  sent it. Two identical sales sent within two minutes of each other, where
+  the first mail was taken before the second arrived, count as one. A vendor
+  sale is noticed through the buyback list, which holds 12 items: with it
+  full, selling the same stack as its oldest entry is booked only when the
+  gold gained equals that price.
+- The game says only that your gold changed, not why. Goldbook books a change
+  by what you did within 10 seconds of it, so two things done at once can be
+  booked under the wrong source, and a change it cannot explain is other
+  income or expense. A sold auction's mail returns its deposit with the sale,
+  and that deposit is booked as other income. Gold sent between your own
+  characters is mail gold out on one and mail gold in on the other.
   Profit or loss is per item name
   and per character on character pages, so an item bought on one character
   and sold on another has a cost only on the account page.
