@@ -1,0 +1,12 @@
+package-as: Goldbook
+enable-nolib-creation: no
+license-output: LICENSE
+move-folders:
+  Goldbook/Goldbook: Goldbook
+ignore:
+  - README.md
+  - package.py
+  - upload-curseforge.py
+  - tests
+  - upstream.json
+  - dist
