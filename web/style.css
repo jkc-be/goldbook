@@ -927,6 +927,11 @@ td.item button {
   border-color: var(--edge);
 }
 
+/* Small enough that a three-coin price fits a quarter of the item panel. */
+.panel .stat dd {
+  font-size: 15px;
+}
+
 .stat dt {
   color: var(--muted);
   font-size: 11px;
