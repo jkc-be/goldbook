@@ -43,7 +43,7 @@ def main():
     replace("desktop/src-tauri/tauri.conf.json", rf'(^  "version": "){VERSION}(")', version, 1)
     replace("addon/Goldbook/Goldbook.toc", rf"(^## Version: ){VERSION}()$", version, 1)
     for name, manifest in CRATES.items():
-        replace(manifest, rf'(\A\[package\]\nname = "{name}"\nversion = "){VERSION}(")', version, 1)
+        replace(manifest, rf'(\A\[package\]\n(?:\w[\w-]* = .*\n)*?name = "{name}"\nversion = "){VERSION}(")', version, 1)
         replace("Cargo.lock", rf'(^name = "{name}"\nversion = "){VERSION}(")', version, 1)
     # Fails if Cargo.lock still disagrees with a manifest.
     subprocess.run(["cargo", "metadata", "--locked", "--offline", "--format-version", "1"],
