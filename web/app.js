@@ -1267,15 +1267,50 @@ function holdings(title, snapshot, seen, missing) {
   ]);
 }
 
-// Trades as the addon booked them: auction house sales ("sell") and
-// purchases ("buy") from the mailbox, and sales to vendors ("vendor"):
-// [{ name, realm, at, side, item, itemKey, quality, count, price, fee }],
-// newest first. `price` is the whole stack's and `fee` the auction house cut.
+// The gold the addon booked, newest first:
+// [{ name, realm, at, side, item, itemKey, quality, count, price, fee, party }].
+// `price` is the whole stack's and never negative, `fee` the auction house cut
+// and `party` the other player of a trade, mail or cash on delivery, or null.
 const NEWEST_TRADES = 20;
-const SIDES = { sell: "Sold", buy: "Bought", vendor: "Vendor" };
 
-// What a trade added to the gold: the sale less the cut, or minus the price.
-const tradeNet = (trade) => (trade.side === "buy" ? -trade.price : trade.price - trade.fee);
+// Every side an entry can have. Revenue adds its price less the cut to the
+// gold and an expense takes its price away. A goods side moves an item and
+// counts towards that item's profit; the others move gold alone, and `detail`
+// marks those whose `item` says more than the label. `party` joins the label
+// to the other player, as in "Trade sale to Mirelle".
+const SIDES = {
+  sell: { label: "Auction sale", revenue: true, goods: true },
+  buy: { label: "Auction purchase", revenue: false, goods: true },
+  vendor: { label: "Vendor sale", revenue: true, goods: true },
+  merchant: { label: "Merchant purchase", revenue: false, goods: true },
+  tradeSell: { label: "Trade sale", revenue: true, goods: true, party: "to" },
+  tradeBuy: { label: "Trade purchase", revenue: false, goods: true, party: "from" },
+  tradeIn: { label: "Trade gold in", revenue: true, goods: false, party: "from" },
+  tradeOut: { label: "Trade gold out", revenue: false, goods: false, party: "to" },
+  mailIn: { label: "Mail gold in", revenue: true, goods: false, party: "from", detail: true },
+  mailOut: { label: "Mail gold out", revenue: false, goods: false, party: "to" },
+  cod: { label: "Cash on delivery", revenue: false, goods: true, party: "from" },
+  quest: { label: "Quest reward", revenue: true, goods: false, detail: true },
+  loot: { label: "Looted gold", revenue: true, goods: false },
+  repair: { label: "Repairs", revenue: false, goods: false },
+  postage: { label: "Postage", revenue: false, goods: false },
+  deposit: { label: "Auction deposit", revenue: false, goods: false, detail: true },
+  travel: { label: "Flight", revenue: false, goods: false, detail: true },
+  training: { label: "Training", revenue: false, goods: false, detail: true },
+  respec: { label: "Talent reset", revenue: false, goods: false },
+  otherIn: { label: "Other income", revenue: true, goods: false },
+  otherOut: { label: "Other expense", revenue: false, goods: false },
+};
+
+const ENTRY_FILTERS = {
+  all: { label: "All", keep: () => true },
+  revenue: { label: "Revenue", keep: (side) => side.revenue },
+  expenses: { label: "Expenses", keep: (side) => !side.revenue },
+};
+let entryFilter = "all";
+
+// What an entry added to the gold: its price less the cut, or minus its price.
+const tradeNet = (trade) => (SIDES[trade.side].revenue ? trade.price - trade.fee : -trade.price);
 
 // A gain in green with a plus, a loss in red with a minus.
 function signedMoney(copper, options) {
@@ -1286,21 +1321,22 @@ function signedMoney(copper, options) {
   return element("span", { className: `trend ${kind}` }, [copper > 0 ? "+" : "−", money(Math.abs(copper), options)]);
 }
 
-// One row per item, the most recently traded first. Sales count at auction
-// and to vendors. Profit or loss is realized on the units both bought and
-// sold, at the average sale less the average cost, so an item never bought,
-// or never sold, has none.
+// One row per item moved, the most recently traded first. Every goods side
+// counts: sales at auction, to vendors and in player trades, and purchases at
+// auction, from merchants, in player trades and by cash on delivery. Profit
+// or loss is realized on the units both bought and sold, at the average sale
+// less the average cost, so an item never bought, or never sold, has none.
 function tradedItems(trades) {
   const items = new Map();
-  for (const trade of trades) {
+  for (const trade of trades.filter(({ side }) => SIDES[side].goods)) {
     const item = items.get(trade.item) ?? { name: trade.item, quality: null, bought: 0, cost: 0, sold: 0, proceeds: 0 };
     item.quality ??= trade.quality;
-    if (trade.side === "buy") {
-      item.bought += trade.count;
-      item.cost += trade.price;
-    } else {
+    if (SIDES[trade.side].revenue) {
       item.sold += trade.count;
       item.proceeds += trade.price - trade.fee;
+    } else {
+      item.bought += trade.count;
+      item.cost += trade.price;
     }
     items.set(trade.item, item);
   }
@@ -1317,23 +1353,26 @@ function tradedItems(trades) {
   });
 }
 
+const entries = (count) => `${count.toLocaleString("en")} ${count === 1 ? "entry" : "entries"}`;
+
 function tradeTotals(trades, items) {
-  const sold = trades.filter(({ side }) => side === "sell");
-  const vendored = trades.filter(({ side }) => side === "vendor");
-  const bought = trades.filter(({ side }) => side === "buy");
-  const count = (list) => `${list.length} ${list.length === 1 ? "trade" : "trades"}`;
+  const revenue = trades.filter(({ side }) => SIDES[side].revenue);
+  const expenses = trades.filter(({ side }) => !SIDES[side].revenue);
   const sum = (list, value) => list.reduce((total, trade) => total + value(trade), 0);
+  const cut = sum(revenue, ({ fee }) => fee);
   const realized = items.filter(({ profit }) => profit !== null);
   return [
-    stat("Auction sales", money(sum(sold, ({ price }) => price)), count(sold)),
-    stat("Vendor sales", money(sum(vendored, ({ price }) => price)), count(vendored)),
-    stat("Purchases", money(sum(bought, ({ price }) => price)), count(bought)),
-    stat("Auction cut", money(sum(sold, ({ fee }) => fee))),
-    stat("Net", signedMoney(sum(trades, tradeNet)), "sales less cut and purchases"),
     stat(
-      "Profit or loss",
+      "Revenue",
+      money(sum(revenue, ({ price, fee }) => price - fee)),
+      cut > 0 ? `${entries(revenue.length)} · after ${moneyText(cut)} auction cut` : entries(revenue.length),
+    ),
+    stat("Expenses", money(sum(expenses, ({ price }) => price)), entries(expenses.length)),
+    stat("Net", signedMoney(sum(trades, tradeNet)), "revenue less expenses"),
+    stat(
+      "Realized profit",
       realized.length > 0 ? signedMoney(sum(realized, ({ profit }) => profit)) : "–",
-      "on items both bought and sold",
+      "on goods both bought and sold",
     ),
   ];
 }
@@ -1375,31 +1414,46 @@ function tradedItemsTable(items) {
   );
 }
 
+// "Trade sale to Mirelle": the side's label, and the other player when known.
+function sourceCell(trade) {
+  const side = SIDES[trade.side];
+  const party = side.party && trade.party ? [` ${side.party} `, element("span", { className: "party", textContent: trade.party })] : [];
+  return element("td", { className: "source" }, [side.label, ...party]);
+}
+
 function tradesTable(trades, withCharacter) {
-  const rows = trades.map((trade, index) => {
+  const rows = trades.map((trade) => {
+    const side = SIDES[trade.side];
     const character = element("a", {
       href: routeHash({ view: "character", name: trade.name, realm: trade.realm }),
       textContent: trade.name,
     });
-    const row = element("tr", {}, [
+    const goods = side.goods
+      ? [
+          tradedItemCell(trade.item, trade.quality),
+          element("td", { className: "number", textContent: trade.count.toLocaleString("en") }),
+          element("td", { className: "number each" }, [money(Math.round(trade.price / trade.count), { aligned: true })]),
+        ]
+      : [
+          element("td", { className: "detail", textContent: side.detail ? trade.item : "" }),
+          element("td", { className: "number" }),
+          element("td", { className: "number each" }),
+        ];
+    return element("tr", {}, [
       element("td", { className: "when", textContent: when(trade.at) }),
       ...(withCharacter ? [element("td", { className: "character" }, [character])] : []),
-      element("td", { className: `side ${trade.side}`, textContent: SIDES[trade.side] }),
-      tradedItemCell(trade.item, trade.quality),
-      element("td", { className: "number", textContent: trade.count.toLocaleString("en") }),
-      element("td", { className: "number each" }, [money(Math.round(trade.price / trade.count), { aligned: true })]),
+      sourceCell(trade),
+      ...goods,
       element("td", { className: "number" }, [signedMoney(tradeNet(trade), { aligned: true })]),
     ]);
-    row.hidden = index >= NEWEST_TRADES;
-    return row;
   });
   return ledgerTable(
     "trade-list",
     [
       ["When", "when"],
       ...(withCharacter ? [["Character", "character"]] : []),
-      ["", "side"],
-      ["Item", ""],
+      ["Source", "source"],
+      ["Detail", ""],
       ["Qty", "number"],
       ["Each", "number each"],
       ["Net", "number"],
@@ -1408,10 +1462,11 @@ function tradesTable(trades, withCharacter) {
   );
 }
 
-// The ledger of `trades` into `container`: totals, each item's profit, and the
-// trades themselves, the newest NEWEST_TRADES until the rest are asked for.
+// The accounting of `trades` into `container`: totals, each item's profit, and
+// the entries themselves, those of the chosen filter, the newest
+// NEWEST_TRADES until the rest are asked for.
 function drawTrades(container, trades, { withCharacter = false } = {}) {
-  const heading = element("h3", { textContent: "Trades" });
+  const heading = element("h3", { textContent: "Accounting" });
   if (trades === null) {
     container.replaceChildren();
     return;
@@ -1421,30 +1476,52 @@ function drawTrades(container, trades, { withCharacter = false } = {}) {
       heading,
       element("p", {
         className: "muted",
-        textContent: "No auction sales or purchases yet. Open a mailbox in game to book them, then /reload or log out.",
+        textContent: "Nothing booked yet. Goldbook books the gold each character earns and spends in game. Type /reload or log out to save it.",
       }),
     );
     return;
   }
   const items = tradedItems(trades);
   const list = tradesTable(trades, withCharacter);
-  const toggle = element("button", { className: "disclosure", type: "button", hidden: trades.length <= NEWEST_TRADES });
-  toggle.setAttribute("aria-expanded", "false");
-  toggle.textContent = `All ${trades.length} trades`;
-  toggle.onclick = () => {
-    const expanded = toggle.getAttribute("aria-expanded") !== "true";
-    toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.textContent = expanded ? `Newest ${NEWEST_TRADES} trades` : `All ${trades.length} trades`;
-    [...list.tBodies[0].rows].forEach((row, index) => {
-      row.hidden = !expanded && index >= NEWEST_TRADES;
+  const rows = [...list.tBodies[0].rows];
+  let expanded = false;
+  const toggle = element("button", { className: "disclosure", type: "button" });
+  const buttons = Object.entries(ENTRY_FILTERS).map(([name, { label }]) => {
+    const button = element("button", { type: "button", textContent: label });
+    button.dataset.filter = name;
+    button.onclick = () => {
+      entryFilter = name;
+      show();
+    };
+    return button;
+  });
+  const show = () => {
+    const { keep } = ENTRY_FILTERS[entryFilter];
+    let kept = 0;
+    trades.forEach((trade, index) => {
+      const shown = keep(SIDES[trade.side]);
+      rows[index].hidden = !shown || (!expanded && kept >= NEWEST_TRADES);
+      kept += shown ? 1 : 0;
     });
+    for (const button of buttons) {
+      button.setAttribute("aria-pressed", String(button.dataset.filter === entryFilter));
+    }
+    toggle.hidden = kept <= NEWEST_TRADES;
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.textContent = expanded ? `Newest ${NEWEST_TRADES} entries` : `All ${entries(kept)}`;
   };
+  toggle.onclick = () => {
+    expanded = !expanded;
+    show();
+  };
+  show();
+  const filter = element("div", { className: "segmented", role: "group" }, buttons);
+  filter.setAttribute("aria-label", "Entries");
   container.replaceChildren(
     heading,
     element("dl", { className: "summary" }, tradeTotals(trades, items)),
-    element("h4", { textContent: "By item" }),
-    tradedItemsTable(items),
-    element("h4", { textContent: "History" }),
+    ...(items.length > 0 ? [element("h4", { textContent: "By item" }), tradedItemsTable(items)] : []),
+    element("div", { className: "panel-head history-head" }, [element("h4", { textContent: "History" }), filter]),
     list,
     toggle,
   );

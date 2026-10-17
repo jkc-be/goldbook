@@ -650,7 +650,7 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
         }
     }
     {
-        let mut insert = tx.prepare("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy,item_key) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT (account_id,name,realm,at,side,item,count,price,fee,copy) DO UPDATE SET item_key=COALESCE(item_key,excluded.item_key)")?;
+        let mut insert = tx.prepare("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy,item_key,party) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12) ON CONFLICT (account_id,name,realm,at,side,item,count,price,fee,copy) DO UPDATE SET item_key=COALESCE(item_key,excluded.item_key),party=COALESCE(party,excluded.party)")?;
         let mut copies: BTreeMap<_, i64> = BTreeMap::new();
         for t in &account.trades {
             let copy = copies
@@ -669,7 +669,8 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
                 t.price as i64,
                 t.fee as i64,
                 *copy,
-                t.item_key
+                t.item_key,
+                t.party
             ])?;
             *copy += 1;
         }
@@ -923,7 +924,7 @@ fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     let rows = db::query(
         db,
         &format!(
-            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy FROM trades WHERE account_id IN ({GROUP}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
+            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee,t.party FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy,MAX(party) AS party FROM trades WHERE account_id IN ({GROUP}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
         ),
         &[&owner, &name, &realm],
     )?;

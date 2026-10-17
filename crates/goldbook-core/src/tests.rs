@@ -230,3 +230,76 @@ fn account_rejections_keep_original_field_messages() {
         assert_eq!(parse_account_upload(&input).unwrap_err(), message, "{path}");
     }
 }
+fn entry(side: &str, item: &str, price: i64) -> Value {
+    json!({"name":"Sultan","realm":"Faramon","at":1760000000,"side":side,"item":item,"itemKey":null,"count":1,"price":price,"fee":0})
+}
+#[test]
+fn trades_book_every_accounting_side() {
+    let sides = "sell buy vendor merchant tradeSell tradeBuy tradeIn tradeOut mailIn mailOut cod \
+        quest loot repair postage deposit travel training respec otherIn otherOut";
+    for side in sides.split_whitespace() {
+        assert_eq!(
+            parse_trade(&entry(side, "Gold", 500), "t")
+                .map(|t| t.side)
+                .as_deref(),
+            Ok(side)
+        );
+    }
+    assert_eq!(
+        parse_trade(&entry("gift", "Gold", 500), "t").unwrap_err(),
+        "t.side must be one of sell, buy, vendor, merchant, tradeSell, tradeBuy, tradeIn, tradeOut, mailIn, mailOut, cod, quest, loot, repair, postage, deposit, travel, training, respec, otherIn, otherOut"
+    );
+}
+#[test]
+fn only_an_item_in_a_player_trade_goes_for_nothing() {
+    for side in ["tradeSell", "tradeBuy"] {
+        assert_eq!(
+            parse_trade(&entry(side, "Linen Cloth", 0), "t").map(|t| t.price),
+            Ok(0)
+        );
+        assert_eq!(
+            parse_trade(&entry(side, "Linen Cloth", -1), "t").unwrap_err(),
+            "t.price must be a non-negative integer"
+        );
+    }
+    for side in ["sell", "merchant", "cod", "mailIn", "loot"] {
+        assert_eq!(
+            parse_trade(&entry(side, "Gold", 0), "t").unwrap_err(),
+            "t.price must be a positive integer",
+            "{side}"
+        );
+    }
+    let mut cut = entry("tradeSell", "Linen Cloth", 2000);
+    cut["fee"] = json!(100);
+    assert_eq!(
+        parse_trade(&cut, "t").unwrap_err(),
+        "t.fee must not exceed the price, and only an auction sale has one"
+    );
+}
+#[test]
+fn a_party_is_optional_text_that_travels_only_when_known() {
+    let mut mail = entry("mailIn", "Thanks for the help", 12000);
+    assert_eq!(
+        serde_json::to_string(&parse_trade(&mail, "t").unwrap()).unwrap(),
+        "{\"name\":\"Sultan\",\"realm\":\"Faramon\",\"at\":1760000000,\"side\":\"mailIn\",\"item\":\"Thanks for the help\",\"itemKey\":null,\"count\":1,\"price\":12000,\"fee\":0}"
+    );
+    mail["party"] = json!("Mirelle");
+    assert_eq!(
+        serde_json::to_string(&parse_trade(&mail, "t").unwrap()).unwrap(),
+        "{\"name\":\"Sultan\",\"realm\":\"Faramon\",\"at\":1760000000,\"side\":\"mailIn\",\"item\":\"Thanks for the help\",\"itemKey\":null,\"count\":1,\"price\":12000,\"fee\":0,\"party\":\"Mirelle\"}"
+    );
+    mail["party"] = Value::Null;
+    assert_eq!(parse_trade(&mail, "t").unwrap().party, None);
+    mail["party"] = json!("M".repeat(64));
+    assert_eq!(
+        parse_trade(&mail, "t").unwrap().party.map(|p| p.len()),
+        Some(64)
+    );
+    for party in [json!(""), json!("M".repeat(65)), json!(7)] {
+        mail["party"] = party;
+        assert_eq!(
+            parse_trade(&mail, "t").unwrap_err(),
+            "t.party must be a string of 1 to 64 characters"
+        );
+    }
+}

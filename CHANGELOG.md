@@ -15,6 +15,25 @@ were released with.
   marks vendor deals as `Vendor?`. Vendor prices saved before are read again
   the next time an item is scanned or in your bags.
 
+### Server
+
+- Accept and keep every kind of accounting entry the addon books: merchant
+  purchases, player trades, cash on delivery, gold mailed, quest rewards,
+  looted gold, repairs, postage, auction deposits, flights, training, talent
+  resets and other income and expenses. An item in a player trade may book
+  for 0. Migration `0012_accounting.sql` rebuilds the trades table with the
+  same rows.
+- Keep the other player of a trade or mail as `party`, and return it from
+  `/api/trades`. Deploy the server before the app: an older server refuses an
+  account upload with the new entries.
+
+### Website
+
+- Rename the Trades section Accounting. It totals revenue, expenses, the net
+  and the profit realized on goods, and filters the history to all, revenue
+  or expenses. Each entry names its source, such as "Trade sale to Mirelle"
+  or "Mail gold in from Mirelle".
+
 ## 0.2.1 - 2026-10-17
 
 - Build the desktop app and server with Rust 1.99.1 and align their shared

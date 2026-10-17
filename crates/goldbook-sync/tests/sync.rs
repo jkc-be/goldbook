@@ -153,6 +153,33 @@ fn account_extraction_carries_valid_trades_and_leaves_them_out_when_there_are_no
     );
 }
 #[test]
+fn addon_fixture_carries_accounting_entries_with_their_party() {
+    let account = extract_account(&parse_saved_variables(FIXTURE).unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&account.trades).unwrap(),
+        json!([
+            {"name":"Mirelle","realm":"Faramon","at":1760000300,"side":"tradeBuy","item":"Linen Cloth","itemKey":"2589","count":20,"price":0,"fee":0,"party":"Sultan"},
+            {"name":"Mirelle","realm":"Faramon","at":1760000350,"side":"tradeOut","item":"Gold","itemKey":null,"count":1,"price":50000,"fee":0,"party":"Sultan"},
+            {"name":"Sultan","realm":"Faramon","at":1759996800,"side":"loot","item":"Looted gold","itemKey":null,"count":37,"price":8120,"fee":0},
+            {"name":"Sultan","realm":"Faramon","at":1760000300,"side":"tradeSell","item":"Linen Cloth","itemKey":"2589","count":20,"price":0,"fee":0,"party":"Mirelle"},
+            {"name":"Sultan","realm":"Faramon","at":1760000350,"side":"tradeIn","item":"Gold","itemKey":null,"count":1,"price":50000,"fee":0,"party":"Mirelle"},
+            {"name":"Sultan","realm":"Faramon","at":1760000400,"side":"mailIn","item":"Thanks for the help","itemKey":null,"count":1,"price":12000,"fee":0,"party":"Mirelle"},
+            {"name":"Sultan","realm":"Faramon","at":1760000500,"side":"repair","item":"Repairs","itemKey":null,"count":1,"price":3456,"fee":0}
+        ]),
+        "a party travels when booked, a missing fee is no cut, and gold mailed for nothing is left out"
+    );
+    let mut saved = parse_saved_variables(FIXTURE).unwrap();
+    saved["GoldbookDB"]["trades"]["Sultan-Faramon"][1]["side"] = json!("sell");
+    let sales = extract_account(&saved).unwrap().unwrap().trades;
+    assert_eq!(
+        sales.iter().filter(|t| t.price == 50000).count(),
+        1,
+        "an auction sale without its fee is left out"
+    );
+}
+#[test]
 fn urls_and_install_preserve_subpath_and_original_addon() {
     assert_eq!(
         api_url("https://app.example/goldbook", "/api/scans")

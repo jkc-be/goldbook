@@ -256,6 +256,83 @@ GoldbookDB = {
 700, -- [4]
 },
 },
+["trades"] = {
+["Mirelle-Faramon"] = {
+{
+["at"] = 1760000300,
+["count"] = 20,
+["fee"] = 0,
+["item"] = "Linen Cloth",
+["key"] = "2589",
+["party"] = "Sultan",
+["price"] = 0,
+["side"] = "tradeBuy",
+}, -- [1]
+{
+["at"] = 1760000350,
+["count"] = 1,
+["fee"] = 0,
+["item"] = "Gold",
+["party"] = "Sultan",
+["price"] = 50000,
+["side"] = "tradeOut",
+}, -- [2]
+},
+["Sultan-Faramon"] = {
+{
+["at"] = 1760000300,
+["count"] = 20,
+["fee"] = 0,
+["item"] = "Linen Cloth",
+["key"] = "2589",
+["party"] = "Mirelle",
+["price"] = 0,
+["side"] = "tradeSell",
+}, -- [1]
+{
+["at"] = 1760000350,
+["count"] = 1,
+["item"] = "Gold",
+["party"] = "Mirelle",
+["price"] = 50000,
+["side"] = "tradeIn",
+}, -- [2]
+{
+["at"] = 1760000400,
+["count"] = 1,
+["fee"] = 0,
+["item"] = "Thanks for the help",
+["party"] = "Mirelle",
+["price"] = 12000,
+["side"] = "mailIn",
+}, -- [3]
+{
+["at"] = 1759996800,
+["count"] = 37,
+["fee"] = 0,
+["item"] = "Looted gold",
+["price"] = 8120,
+["side"] = "loot",
+}, -- [4]
+{
+["at"] = 1760000500,
+["count"] = 1,
+["fee"] = 0,
+["item"] = "Repairs",
+["price"] = 3456,
+["side"] = "repair",
+}, -- [5]
+{
+["at"] = 1760000600,
+["count"] = 1,
+["fee"] = 0,
+["item"] = "Gold",
+["party"] = "Mirelle",
+["price"] = 0,
+["side"] = "mailOut",
+}, -- [6]
+},
+},
 ["vendor"] = {
 [2589] = 13,
 [2592] = 0,
