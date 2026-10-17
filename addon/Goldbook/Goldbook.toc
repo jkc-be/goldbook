@@ -8,6 +8,7 @@
 ## SavedVariables: GoldbookDB
 ## X-Website: https://app.jkc-be.com/goldbook
 
+ServerData.lua
 Stats.lua
 Codec.lua
 ProfessionData.lua
