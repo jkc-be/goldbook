@@ -691,7 +691,8 @@ fn set_theme(app: tauri::AppHandle, theme: Theme) -> Result<(), String> {
     }
 }
 
-// Once the website view joins it, the window is no longer a webview window.
+// Not get_webview_window: once the website view is added the window holds two
+// webviews, and Tauri then no longer returns it as a webview window.
 fn show(app: &tauri::AppHandle) {
     if let Some(window) = app.get_window("main") {
         let _ = window.show();
