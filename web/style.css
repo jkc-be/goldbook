@@ -1719,3 +1719,14 @@ code {
     white-space: normal;
   }
 }
+
+/* The desktop app marks the page it embeds and draws its own rail and brand beside it. */
+:root[data-embed="desktop"] .rail,
+:root[data-embed="desktop"] .brand {
+  display: none;
+}
+
+:root[data-embed="desktop"] .shell {
+  display: block;
+  background: none;
+}
