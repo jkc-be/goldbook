@@ -105,6 +105,12 @@ end
 function methods:SetThickness(thickness)
   self.thickness = thickness
 end
+function methods:SetTexture(texture)
+  self.texture = texture
+end
+function methods:SetTextColor(r, g, b)
+  self.textColor = { r, g, b }
+end
 function methods:LockHighlight()
   self.highlighted = true
 end
@@ -220,6 +226,12 @@ end
 
 function CreateFrame(_, name)
   return Stub.widget(name)
+end
+function CreateFont(name)
+  return Stub.widget(name)
+end
+function CreateColor(r, g, b, a)
+  return { r = r, g = g, b = b, a = a or 1 }
 end
 
 -- Loads the addon in `folder` as the client does: the files its .toc lists,
@@ -435,6 +447,11 @@ SlashCmdList = {}
 UISpecialFrames = {}
 tinsert = table.insert
 GameTooltip_Hide = noop
+STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+NumberFontNormal = Stub.widget("NumberFontNormal")
+function NumberFontNormal.GetFont()
+  return "Fonts\\ARIALN.TTF", 14, "OUTLINE"
+end
 UIParent = Stub.widget("UIParent")
 AuctionHouseFrame = Stub.widget("AuctionHouseFrame")
 AuctionHouseFrame.SearchBar = Stub.widget()

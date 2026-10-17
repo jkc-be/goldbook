@@ -166,17 +166,24 @@ function Codec.Grouped(code, size)
   return (code:gsub(("."):rep(size), "%0-"):gsub("-$", ""))
 end
 
-function Codec.Money(copper)
+-- The colours of the coin letters, as chat and tooltips show them.
+local COINS = { gold = "ffd700", silver = "c7c7cf", copper = "eda55f" }
+
+-- "1,763g 05s 00c": a unit after a larger one has two digits. `coins`
+-- recolours the letters, for a window drawn on another background.
+function Codec.Money(copper, coins)
+  coins = coins or COINS
   local gold = math.floor(copper / 10000)
   local silver = math.floor(copper / 100) % 100
   local parts = {}
   if gold > 0 then
-    parts[#parts + 1] = int(gold) .. "|cffffd700g|r"
+    local digits = int(gold):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+    parts[#parts + 1] = digits .. "|cff" .. coins.gold .. "g|r"
   end
   if gold > 0 or silver > 0 then
-    parts[#parts + 1] = silver .. "|cffc7c7cfs|r"
+    parts[#parts + 1] = (gold > 0 and ("%02d"):format(silver) or silver) .. "|cff" .. coins.silver .. "s|r"
   end
-  parts[#parts + 1] = (copper % 100) .. "|cffeda55fc|r"
+  parts[#parts + 1] = (#parts > 0 and ("%02d"):format(copper % 100) or (copper % 100)) .. "|cff" .. coins.copper .. "c|r"
   return table.concat(parts, " ")
 end
 

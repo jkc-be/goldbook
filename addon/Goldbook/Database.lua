@@ -33,7 +33,7 @@ local PARK_MILLER = 2147483647
 --   scans[]                    = scans waiting for the sync agent
 --   linkSamples[]              = links of variants the last full scan left out
 --   account                    = { id, key }, the login to the Goldbook web page, see Codec.RandomCode
---   settings                   = { lastReplicate, minProfit, autoScan, minimapAngle, hideMinimap, altClick,
+--   settings                   = { lastReplicate, minProfit, autoScan, minimapAngle, hideMinimap, altClick, theme,
 --                                  window = { point, relativePoint, x, y } where the window was dropped }
 
 -- Schema 1 records were "min,mv,avg,qty,seen".

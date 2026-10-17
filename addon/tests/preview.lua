@@ -55,10 +55,8 @@ local SETTERS = {
   SetHeight = "height",
   SetJustifyH = "justifyH",
   SetWordWrap = "wordWrap",
-  SetFontObject = "font",
-  SetNormalFontObject = "font",
   SetTextColor = "textColor",
-  SetColorTexture = "color",
+  SetTextInsets = "insets",
   SetVertexColor = "vertexColor",
   SetTexture = "texture",
   SetDrawLayer = "layer",
@@ -75,6 +73,34 @@ for method, field in pairs(SETTERS) do
     records[self][field] = select("#", ...) > 1 and { ... } or (...)
     return original(self, ...)
   end
+end
+-- A font object is kept as its widget's id, a template font as its name.
+local function fontRecorder(self, original, font)
+  records[self].font = idOf(font) or font
+  return original(self, font)
+end
+recorders.SetFontObject = fontRecorder
+recorders.SetNormalFontObject = fontRecorder
+function recorders.SetFont(self, original, file, size, flags)
+  records[self].face = { file = file, size = size }
+  return original(self, file, size, flags)
+end
+-- Colour objects or, from older clients, plain numbers, kept as two { r, g, b, a }.
+function recorders.SetGradient(self, original, orientation, from, to, ...)
+  local function rgba(color)
+    return { color.r, color.g, color.b, color.a or 1 }
+  end
+  records[self].gradient = { orientation = orientation, from = rgba(from), to = rgba(to) }
+  return original(self, orientation, from, to, ...)
+end
+function recorders.SetGradientAlpha(self, original, orientation, ...)
+  local r1, g1, b1, a1, r2, g2, b2, a2 = ...
+  records[self].gradient = { orientation = orientation, from = { r1, g1, b1, a1 }, to = { r2, g2, b2, a2 } }
+  return original(self, orientation, ...)
+end
+function recorders.SetColorTexture(self, original, ...)
+  records[self].color, records[self].gradient = { ... }, nil
+  return original(self, ...)
 end
 function recorders.SetParent(self, original, parent)
   records[self].parent = idOf(parent)
@@ -144,10 +170,10 @@ end
 
 -- The stub may not make a kind of region yet (lines); the preview then makes it.
 local function region(kind)
-  return function(self, original, name, layer, template)
-    local widget = original(self, name, layer, template) or Stub.widget()
+  return function(self, original, name, layer, template, sublevel)
+    local widget = original(self, name, layer, template, sublevel) or Stub.widget()
     local rec = records[widget]
-    rec.kind, rec.parent, rec.layer, rec.template = kind, records[self].id, layer, template
+    rec.kind, rec.parent, rec.layer, rec.template, rec.sublevel = kind, records[self].id, layer, template, sublevel
     return widget
   end
 end
@@ -240,6 +266,8 @@ end
 
 -- The parts of the screen the stub leaves out.
 UIParent:SetSize(SCREEN_WIDTH, SCREEN_HEIGHT)
+AuctionHouseFrame:SetSize(800, 450)
+AuctionHouseFrame:SetPoint("CENTER")
 Minimap:SetSize(140, 140)
 Minimap:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -17, -22)
 GameTooltip:SetFrameStrata("TOOLTIP")
@@ -292,6 +320,9 @@ function layout(snapshot, screen) {
   const STRATA = ["BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP"];
   const GOLD = "rgb(255,209,0)", WHITE = "rgb(255,255,255)", GREY = "rgb(128,128,128)";
   const FACE = '"Friz Quadrata TT", Georgia, serif';
+  // Marcellus stands in for Friz Quadrata, which a browser does not have.
+  const FACES = { friz: '"Marcellus", "Friz Quadrata TT", Georgia, serif', narrow: '"Arial Narrow", "Roboto Condensed", sans-serif' };
+  const LAYERS = ["BACKGROUND", "BORDER", "ARTWORK", "OVERLAY", "HIGHLIGHT"];
   const PANEL = { background: "rgba(0,0,0,0.85)", border: "2px solid rgb(150,135,100)", borderRadius: "4px" };
   const TEMPLATE_SIZE = { UIPanelCloseButton: [24, 24], UICheckButtonTemplate: [20, 20] };
   const SCREEN_RECT = { left: 0, bottom: 0, right: W, top: H };
@@ -302,13 +333,20 @@ function layout(snapshot, screen) {
   const escape = s => s.replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]);
   const isIcon = w => typeof w.texture === "number" || /^Interface[\\/]Icons[\\/]/i.test(w.texture || "");
 
+  // A template font by its name, or a font object made with CreateFont by
+  // its id: that one has its own face and size, white and without a shadow.
   function font(name = "GameFontNormal") {
+    const object = typeof name === "number" ? byId.get(name) : null;
+    if (object && object.face) {
+      const family = /FRIZ/i.test(object.face.file) ? FACES.friz : FACES.narrow;
+      return { size: object.face.size, color: WHITE, family, flat: true };
+    }
     const size = /Small/.test(name) ? 10 : /Large/.test(name) ? 16 : 12;
     const color = /Disable/.test(name) ? GREY : /Highlight|Chat|Tooltip/.test(name) ? WHITE : GOLD;
     return { size, color };
   }
-  function setFont(el, size, color) {
-    Object.assign(el.style, { font: `${size}px/${size + 2}px ${FACE}`, color, textShadow: "1px 1px 0 #000" });
+  function setFont(el, size, color, family = FACE, flat = false) {
+    Object.assign(el.style, { font: `${size}px/${size + 2}px ${family}`, color, textShadow: flat ? "none" : "1px 1px 0 #000" });
   }
   // |T path or fileID:height[:width...]|t. A height of 0 follows the text.
   // Money icons are coins; anything else is an icon square.
@@ -334,7 +372,7 @@ function layout(snapshot, screen) {
   }
   function text(el, w, fontName, color) {
     const f = font(fontName);
-    setFont(el, f.size, color || f.color);
+    setFont(el, f.size, color || f.color, f.family, f.flat);
     const inner = document.createElement("div");
     inner.style.whiteSpace = "pre";
     inner.innerHTML = markup(w.text);
@@ -344,6 +382,7 @@ function layout(snapshot, screen) {
   function frame(el, w) {
     if (!w.backdrop) return;
     Object.assign(el.style, PANEL);
+    if (/WHITE8X8/i.test(w.backdrop.edgeFile || "")) Object.assign(el.style, { border: `${w.backdrop.edgeSize}px solid`, borderRadius: "0" });
     if (w.backdropColor) el.style.background = rgba(w.backdropColor);
     if (w.borderColor) el.style.borderColor = rgba(w.borderColor);
   }
@@ -358,8 +397,17 @@ function layout(snapshot, screen) {
         Object.assign(inner.style, { overflow: "hidden", textOverflow: "ellipsis" });
       }
     },
+    // A highlight shows only on the frame the preview hovers. The portrait
+    // mask is a white disc, tinted by its vertex colour or gradient.
     Texture(el, w) {
-      if (w.color) el.style.background = rgba(w.color);
+      const owner = byId.get(w.parent);
+      if (w.layer === "HIGHLIGHT" && !(owner && (owner.hover || owner.highlight))) { el.style.display = "none"; return; }
+      const disc = /AlphaMask/i.test(w.texture || "");
+      if (disc) el.style.borderRadius = "50%";
+      const g = w.gradient;
+      if (g) el.style.background = `linear-gradient(${g.orientation === "HORIZONTAL" ? "to right" : "to top"}, ${rgba(g.from)}, ${rgba(g.to)})`;
+      else if (disc) el.style.background = rgba(w.vertexColor || [1, 1, 1]);
+      else if (w.color) el.style.background = rgba(w.color);
       else if (isIcon(w)) Object.assign(el.style, { background: "linear-gradient(135deg,#7a6440,#2b2116)", border: `1px solid ${w.vertexColor ? rgba(w.vertexColor) : GREY}` });
       else if (w.texture) Object.assign(el.style, { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.35)" });
     },
@@ -392,6 +440,12 @@ function layout(snapshot, screen) {
       Object.assign(el.style, centred, { background: "#8e1d12", border: "1px solid #d4b05a", borderRadius: "3px", fontWeight: "bold" });
       setFont(el, 14, WHITE);
       el.textContent = "X";
+    },
+    // An edit box without a template: its backdrop, and its text past the insets.
+    EditBox(el, w) {
+      frame(el, w);
+      Object.assign(el.style, { display: "flex", alignItems: "center", paddingLeft: `${(w.insets || [0])[0]}px` });
+      text(el, w, w.font, w.textColor && rgba(w.textColor));
     },
     // The template's border reaches 5px left of the box; its text starts at the box's edge.
     InputBoxTemplate(el, w) {
@@ -488,7 +542,7 @@ function layout(snapshot, screen) {
     const el = document.createElement("div");
     el.title = describe(w);
     Object.assign(el.style, { position: "absolute", boxSizing: "border-box", visibility: "hidden" });
-    (DRAW[w.kind] || DRAW[w.template] || frame)(el, w);
+    (DRAW[w.template] || DRAW[w.kind] || frame)(el, w);
     if (w.alpha !== undefined) el.style.opacity = w.alpha;
     screen.append(el);
     elements.set(w.id, el);
@@ -498,10 +552,12 @@ function layout(snapshot, screen) {
       measured.set(w.id, [Math.ceil(box.width), Math.ceil(box.height)]);
     }
   }
-  const stacking = w => [STRATA.indexOf(strata(w)), level(w), w.id];
+  // Regions draw over their frame's backdrop, by layer and sublevel.
+  const layer = w => ["Texture", "FontString", "Line"].includes(w.kind) ? LAYERS.indexOf(w.layer || "ARTWORK") : -1;
+  const stacking = w => [STRATA.indexOf(strata(w)), level(w), layer(w), w.sublevel ?? 0, w.id];
   const below = (a, b) => {
     const [x, y] = [stacking(a), stacking(b)];
-    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || x[3] - y[3] || x[4] - y[4];
   };
   [...drawn].sort(below).forEach((w, index) => {
     const el = elements.get(w.id);
@@ -524,8 +580,12 @@ local function page(view, data)
     '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>Goldbook preview: ', view, "</title>\n",
     "<style>body { margin: 0; background: #777; } #screen { position: relative; overflow: hidden; width: ",
     SCREEN_WIDTH, "px; height: ", SCREEN_HEIGHT, "px; }</style>\n",
-    '</head><body><div id="screen"></div>\n<script>\n', LAYOUT, "\nlayout(", (data:gsub("</", "<\\/")),
-    ', document.getElementById("screen"));\n</script></body></html>\n',
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=block">\n',
+    '</head><body><div id="screen"></div>\n<script>\n', LAYOUT,
+    -- Text is measured for the layout, so the faces must have loaded first.
+    '\nPromise.all([document.fonts.load(\'16px "Marcellus"\'), document.fonts.load(\'14px "Arial Narrow"\')])',
+    '.catch(() => {}).then(() => layout(', (data:gsub("</", "<\\/")),
+    ', document.getElementById("screen")));\n</script></body></html>\n',
   })
 end
 
@@ -551,7 +611,8 @@ local function output(command)
   return text
 end
 
-local CHROME = ("google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=%d,%d "):format(SCREEN_WIDTH, SCREEN_HEIGHT)
+local CHROME = ("google-chrome --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=10000 --window-size=%d,%d ")
+  :format(SCREEN_WIDTH, SCREEN_HEIGHT)
 local root = outdir:sub(1, 1) == "/" and outdir or (output("pwd"):match("[^\n]+") .. "/" .. outdir)
 sh("mkdir -p " .. quote(root))
 
@@ -577,6 +638,9 @@ local function snapshot(roots, focus)
     local rec = records[widget]
     if rec.parent then
       include(order[rec.parent])
+    end
+    if type(rec.font) == "number" then
+      include(order[rec.font])
     end
     for _, point in pairs({ rec.startPoint, rec.endPoint, unpack(rec.points) }) do
       if point.relativeTo then
@@ -888,35 +952,77 @@ local function captureWindow(view, extra)
   capture(view, { GoldbookWindow, GoldbookMinimapButton, extra }, { GoldbookWindow, extra })
 end
 
-run("show")
-captureWindow("prices")
+-- Drawn as if the mouse were over it: its highlight shows.
+local function hover(widget, on)
+  records[widget].hover = on or nil
+end
+
+-- The chart's marker on a day, without the tooltip that comes with it.
+local function hoverDay(index)
+  local hit = GoldbookWindow.chart.days[index].hit
+  hit.scripts.OnEnter(hit)
+  GameTooltip:Hide()
+end
+
+-- Every view, the web login and its confirmation, as <name><suffix>.png.
+local function captureViews(suffix)
+  run("show")
+  local lotus = rowFor("Black Lotus")
+  hover(lotus, true)
+  captureWindow("prices" .. suffix)
+  hover(lotus, false)
+  local chip = GoldbookWindow.filters.controls.profession
+  chip.scripts.OnClick(chip)
+  captureWindow("menu" .. suffix)
+  chip.scripts.OnClick(chip)
+  run("deals")
+  hover(GoldbookWindow.rows[1].hit, true)
+  captureWindow("deals" .. suffix)
+  hover(GoldbookWindow.rows[1].hit, false)
+  for _, view in ipairs({ "sell", "movers", "trades" }) do
+    run(view)
+    captureWindow(view .. suffix)
+  end
+  run("gold")
+  hoverDay(22)
+  captureWindow("gold" .. suffix)
+  run("item Black Lotus")
+  hoverDay(28)
+  captureWindow("item" .. suffix)
+  GoldbookWindow:Hide()
+
+  run("web")
+  capture("web" .. suffix, { GoldbookWebLogin }, { GoldbookWebLogin })
+  GoldbookWebLogin.newKey.scripts.OnClick(GoldbookWebLogin.newKey)
+  capture("web-confirm" .. suffix, { GoldbookWebLogin }, { GoldbookWebLogin })
+  GoldbookWebLogin:Hide()
+
+  Stub.fire("AUCTION_HOUSE_SHOW")
+  capture("scan" .. suffix, { GoldbookScanButton }, { GoldbookScanButton })
+end
+
+captureViews("")
 -- An item tooltip goes right of the window, or left where the screen ends
 -- first. The addon asks how far right the window and the screen reach and
 -- how wide the tooltip is; the stub lays nothing out, so the preview answers.
 -- 310 is about what the page measures for this tooltip.
+run("show")
 UIParent.right, GameTooltip.width = SCREEN_WIDTH, 310
 local hovered = rowFor("Black Lotus")
+hover(hovered, true)
 for _, place in ipairs({ { "tooltip", -260 }, { "tooltip-left", 260 } }) do
   GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", place[2], 0)
   GoldbookWindow.right = (SCREEN_WIDTH + GoldbookWindow.width) / 2 + place[2]
   hovered.scripts.OnEnter(hovered)
   captureWindow(place[1], GameTooltip)
 end
+hover(hovered, false)
 GameTooltip:Hide()
 GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-for _, view in ipairs({ "deals", "sell", "movers", "gold", "trades" }) do
-  run(view)
-  captureWindow(view)
-end
-run("item Black Lotus")
-captureWindow("item")
 GoldbookWindow:Hide()
 
-run("web")
-capture("web", { GoldbookWebLogin }, { GoldbookWebLogin })
-GoldbookWebLogin.newKey.scripts.OnClick(GoldbookWebLogin.newKey)
-capture("web-confirm", { GoldbookWebLogin }, { GoldbookWebLogin })
-GoldbookWebLogin:Hide()
+ns.UI.SetTheme("dark")
+captureViews("-dark")
 
 -- Options > AddOns puts the panel in a canvas of about this size.
 local canvas = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")

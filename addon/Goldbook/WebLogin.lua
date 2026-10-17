@@ -6,12 +6,13 @@ local Codec, Database = ns.Codec, ns.Database
 local WebLogin = {}
 ns.WebLogin = WebLogin
 
-local WIDTH, HEIGHT = 330, 156
+local WIDTH, HEIGHT = 340, 180
 local LEFT = 14
+local TITLE_HEIGHT = 40
 local BOX_LEFT = 50
 local BOX_WIDTH = WIDTH - BOX_LEFT - LEFT
-local ROW = 26
-local BUTTON_WIDTH, BUTTON_GAP = 110, 6
+local ROW = 28
+local BUTTON_WIDTH, BUTTON_GAP = 110, 8
 -- Characters per group as the codes are shown.
 local GROUPS = { id = 4, key = 5 }
 local LOGIN_TEXT = "Open the Goldbook site and log in under Characters."
@@ -43,13 +44,17 @@ end
 -- selects all of it for Ctrl+C and puts it back when typed over. `text` gives
 -- what the box shows.
 local function addCopyBox(label, y, text)
-  local caption = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  local caption = ns.UI.Label(dialog, "small", "muted")
   caption:SetPoint("TOPLEFT", LEFT, y)
   caption:SetText(label)
-  local box = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-  box:SetSize(BOX_WIDTH, 20)
+  local box = CreateFrame("EditBox", nil, dialog, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  box:SetSize(BOX_WIDTH, 24)
   box:SetPoint("LEFT", caption, "LEFT", BOX_LEFT - LEFT, 0)
+  box:SetFontObject("GoldbookFontBody")
+  box:SetTextInsets(8, 8, 0, 0)
   box:SetAutoFocus(false)
+  ns.UI.Box(box, "field", "edge")
+  ns.UI.Ink(box, "text")
   -- Both handlers get more than the box, which HighlightText would take for
   -- where the selection starts.
   local function selectAll(self)
@@ -70,10 +75,8 @@ local function addCopyBox(label, y, text)
 end
 
 local function addButton(text, x, onClick)
-  local button = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  button:SetSize(BUTTON_WIDTH, 22)
+  local button = ns.UI.Button(dialog, text, BUTTON_WIDTH, 24)
   button:SetPoint("BOTTOMLEFT", x, 12)
-  button:SetText(text)
   button:SetScript("OnClick", onClick)
   return button
 end
@@ -84,20 +87,14 @@ local function create()
   dialog:SetPoint("CENTER")
   dialog:SetFrameStrata("DIALOG")
   dialog:SetToplevel(true)
-  dialog:SetBackdrop(ns.UI.BACKDROP)
+  ns.UI.Box(dialog, "bg", "edge")
   dialog:EnableMouse(true)
   dialog:Hide()
   tinsert(UISpecialFrames, "GoldbookWebLogin")
-
-  local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", LEFT, -12)
-  title:SetText("Web login")
-
-  local close = CreateFrame("Button", nil, dialog, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -2, -2)
+  ns.UI.TitleBar(dialog, TITLE_HEIGHT, "Web login")
 
   dialog.boxes = {}
-  local top = -44
+  local top = -TITLE_HEIGHT - 16
   if WEBSITE then
     dialog.site = addCopyBox("Site", top, function()
       return WEBSITE
@@ -111,8 +108,8 @@ local function create()
     return grouped("key")
   end)
 
-  dialog.message = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  dialog.message:SetPoint("TOPLEFT", LEFT, top - 54)
+  dialog.message = ns.UI.Label(dialog, "status", "muted")
+  dialog.message:SetPoint("TOPLEFT", LEFT, top - 2 * ROW - 6)
   dialog.message:SetWidth(WIDTH - 2 * LEFT)
   dialog.message:SetJustifyH("LEFT")
 

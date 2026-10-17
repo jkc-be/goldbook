@@ -13,12 +13,13 @@ local HELP = {
   "/gb scan and /gb scan full do the same from chat.",
   "/gb deals lists what is listed below its resale or vendor value.",
   "/gb sell says what to auction and what to vendor from your bags.",
-  "/gb movers lists the prices that rose and fell most since the day before.",
-  "/gb gold shows your account: gold per character, gains, a 30 day chart and net worth.",
+  "/gb movers lists the prices that rose most since the day before, and under Fallers those that fell.",
+  "/gb gold shows your account: gold per character, gains, net worth, a chart and this month's trades.",
   "/gb show [text] opens the price list.",
   "/gb item <link or name>, or Alt+click any item, shows how its price moved day by day.",
   "/gb status shows what is priced and what is waiting for sync.",
   "/gb web shows the Goldbook site's address, and the ID and key to log in there.",
+  "/gb theme light or /gb theme dark draws the window on parchment or dark ink.",
   "",
   "Type /reload or log out after a scan so Goldbook can upload it.",
 }
@@ -55,6 +56,16 @@ local CHECKS = {
     end,
     set = function(checked)
       ns.db.settings.autoScan = checked or nil
+    end,
+  },
+  {
+    name = "dark",
+    label = "Draw the Goldbook window dark",
+    get = function()
+      return ns.UI.Theme() == "dark"
+    end,
+    set = function(checked)
+      ns.UI.SetTheme(checked and "dark" or "light")
     end,
   },
   {
