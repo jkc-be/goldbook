@@ -7,6 +7,8 @@ const AH_CUT: f64 = 0.05;
 const DEAL_RATIO: f64 = 0.7;
 const MIN_HISTORY: usize = 3;
 const MOVER_MIN_PRICE: u64 = 100;
+/// The days a price record keeps, HISTORY_DAYS of addon/Goldbook/Database.lua.
+pub const HISTORY_DAYS: usize = 14;
 
 /// Goods merchants sell without limit: drinks, spices, thread, vials, flux,
 /// dyes, trade supplies, class reagents and fishing supplies. This is
@@ -31,8 +33,8 @@ pub struct PriceRecord {
     pub min: u64,
     /// The newest scan's market value, when that scan was a full one.
     pub market: Option<u64>,
-    /// The lowest buyout of each of the last 14 days the item was seen,
-    /// oldest first. The last is the newest scan's day.
+    /// The lowest buyout of each of the last HISTORY_DAYS days the item was
+    /// seen, oldest first. The last is the newest scan's day.
     pub days: Vec<u64>,
 }
 

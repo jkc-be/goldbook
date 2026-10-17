@@ -1,5 +1,5 @@
 mod advisor;
-pub use advisor::{Flip, Mover, PriceRecord, flip, median, merchant_sells, mover};
+pub use advisor::{Flip, HISTORY_DAYS, Mover, PriceRecord, flip, median, merchant_sells, mover};
 
 mod professions;
 pub use professions::{Profession, profession_items, professions};
