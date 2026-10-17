@@ -2,7 +2,7 @@
 publish = false
 license-file = "../../LICENSE"
 name = "goldbook-desktop"
-version = "0.1.13"
+version = "0.2.0"
 edition = "2021"
 description = "Uploads World of Warcraft auction scans and character snapshots"
 authors = ["jkc-be"]

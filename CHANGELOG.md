@@ -7,6 +7,25 @@ were released with.
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-17
+
+### Addon
+
+- Restyle the Goldbook window in the Ledger design: a light parchment theme by
+  default and a dark ledger theme with `/gb theme dark` or the Options panel.
+  Views move to a side rail, with the last scan, scans waiting to sync and
+  Reload at its foot.
+- Show a 7-day price line on Prices, Deals, Sell and Movers.
+- Gold shows cards for total, today, 30 days and net worth, a 1W/1M/2M chart,
+  and this month's trades. Trades shows totals and filters by kind and
+  character. Movers switches between risers and fallers.
+- Show money with thousands separators, such as 1,763g 50s 00c.
+
+### Desktop app
+
+- Restyle the masthead and the Sync page in the Ledger design, light by
+  default, with a Light/Dark switch in the masthead.
+
 ### Website
 
 - Restyle the site in the Ledger design: a light parchment theme by default

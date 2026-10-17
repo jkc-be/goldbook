@@ -1,6 +1,6 @@
 {
   "name": "goldbook",
-  "version": "0.1.13",
+  "version": "0.2.0",
   "description": "World of Warcraft auction scans and character snapshots",
   "private": true,
   "type": "module",
