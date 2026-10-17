@@ -10,10 +10,16 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    if: github.repository == 'jkc-be/goldbook-addon' && github.ref == 'refs/heads/main'
+    if: github.repository == 'jkc-be/goldbook-addon' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
+    outputs:
+      archive: ${{ steps.archive.outputs.name }}
+      tag: ${{ steps.archive.outputs.tag }}
+      sha256: ${{ steps.archive.outputs.sha256 }}
+      upload: ${{ steps.release.outputs.upload }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -24,13 +30,16 @@ jobs:
           for suite in run scanner sellers orderbook professions trades; do
             luajit "tests/$suite.lua"
           done
+          python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Package installable ZIP
         id: archive
         run: |
           archive=$(python3 package.py dist)
           version=$(basename "$archive" .zip)
           printf 'file=%s\ntag=v%s\n' "$archive" "${version#Goldbook-}" >> "$GITHUB_OUTPUT"
+          printf 'name=%s\nsha256=%s\n' "$(basename "$archive")" "$(sha256sum "$archive" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - name: Publish release asset
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -53,4 +62,54 @@ jobs:
           Upstream source: https://github.com/jkc-be/goldbook/tree/main/addon
           NOTES
             gh release create "$TAG" "$ARCHIVE" --target "$REVISION" --title "Goldbook ${TAG#v}" --notes-file release-notes.md
+          fi
+          gh release view "$TAG" --json assets --jq '.assets[].name' > release-assets.txt
+          if grep -Fxq curseforge.json release-assets.txt; then
+            gh release download "$TAG" --pattern curseforge.json --dir existing
+            python3 upload-curseforge.py "$ARCHIVE" --receipt existing/curseforge.json --check
+            echo 'upload=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'upload=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  curseforge:
+    needs: package
+    if: needs.package.outputs.upload == 'true'
+    environment: curseforge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Download the tested release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.package.outputs.tag }}
+          ARCHIVE: ${{ needs.package.outputs.archive }}
+          ARCHIVE_SHA256: ${{ needs.package.outputs.sha256 }}
+        run: |
+          gh release download "$TAG" --pattern "$ARCHIVE" --dir dist
+          printf '%s  dist/%s\n' "$ARCHIVE_SHA256" "$ARCHIVE" | sha256sum --check --status
+          gh release view "$TAG" --json body --jq .body > release-notes.md
+          gh release view "$TAG" --json assets --jq '.assets[].name' > release-assets.txt
+          if grep -Fxq curseforge.json release-assets.txt; then
+            gh release download "$TAG" --pattern curseforge.json
+          fi
+      - name: Upload to CurseForge
+        env:
+          CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+          ARCHIVE: ${{ needs.package.outputs.archive }}
+        run: python3 upload-curseforge.py "dist/$ARCHIVE" --changelog release-notes.md
+      - name: Record the CurseForge file ID
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.package.outputs.tag }}
+        run: |
+          if ! grep -Fxq curseforge.json release-assets.txt; then
+            gh release upload "$TAG" curseforge.json
           fi
