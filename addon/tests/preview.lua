@@ -1050,11 +1050,15 @@ local function hover(widget, on)
   records[widget].hover = on or nil
 end
 
--- The chart's marker on a day, without the tooltip that comes with it.
-local function hoverDay(index)
-  local hit = GoldbookWindow.chart.days[index].hit
+-- The chart's marker on a point, counted from the newest when negative,
+-- and the tooltip that comes with it, which `capture` then draws.
+local function hoverPoint(index)
+  local shown = 0
+  for _, hit in ipairs(GoldbookWindow.chart.hits) do
+    shown = shown + (rawget(hit, "shown") and 1 or 0)
+  end
+  local hit = GoldbookWindow.chart.hits[index < 0 and shown + 1 + index or index]
   hit.scripts.OnEnter(hit)
-  GameTooltip:Hide()
 end
 
 -- Every view, the web login and its confirmation, as <name><suffix>.png.
@@ -1077,14 +1081,17 @@ local function captureViews(suffix)
     captureWindow(view .. suffix)
   end
   run("gold")
-  hoverDay(22)
-  captureWindow("gold" .. suffix)
+  hoverPoint(22)
+  captureWindow("gold" .. suffix, GameTooltip)
+  GameTooltip:Hide()
   run("item Black Lotus")
-  hoverDay(28)
-  captureWindow("item" .. suffix)
+  hoverPoint(-4)
+  captureWindow("item" .. suffix, GameTooltip)
+  GameTooltip:Hide()
   run("item Gold Ore")
-  hoverDay(29)
-  captureWindow("item-sparse" .. suffix)
+  hoverPoint(-2)
+  captureWindow("item-sparse" .. suffix, GameTooltip)
+  GameTooltip:Hide()
   local toggle = GoldbookWindow.themeToggle
   hover(toggle, true)
   toggle.scripts.OnEnter(toggle)

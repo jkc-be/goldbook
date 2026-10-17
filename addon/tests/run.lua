@@ -653,22 +653,34 @@ local function selectedTabs()
   return table.concat(names, " ")
 end
 
--- The days the chart has a value for, as day@height in the plot, the days a
--- line reaches from the day before, and the days drawn as a lone dot.
+-- The chart's points, as point@height of the first line in the plot, the
+-- segments that line draws, and the lines with a dot on their latest point.
 local function plotted()
-  local marks, lines, dots = {}, {}, {}
-  for index, day in ipairs(GoldbookWindow.chart.days) do
-    if day.hit.shown then
-      marks[#marks + 1] = index .. "@" .. math.floor(day.hit.y + 0.5)
+  local chart, marks, lines, dots = GoldbookWindow.chart, {}, {}, {}
+  for index, hit in ipairs(chart.hits) do
+    if hit.shown then
+      marks[#marks + 1] = index .. "@" .. math.floor(hit.ys[1] + 0.5)
     end
-    if day.line.shown then
+  end
+  for index, segment in ipairs(chart.lines[1].segments) do
+    if segment.shown then
       lines[#lines + 1] = index
     end
-    if day.dot.shown then
+  end
+  for index, line in ipairs(chart.lines) do
+    if line.dot.shown then
       dots[#dots + 1] = index
     end
   end
   return marks, lines, dots
+end
+
+-- What hovering a point shows.
+local function hoverPoint(index)
+  GameTooltip.lines = {}
+  local hit = GoldbookWindow.chart.hits[index]
+  hit.scripts.OnEnter(hit)
+  return plain(table.concat(GameTooltip.lines, " / "))
 end
 
 -- The cards above the list, as "KEY value detail".
@@ -811,11 +823,11 @@ eq(plain(GoldbookWindow.side.lines[1].key.text .. " " .. GoldbookWindow.side.lin
   .. GoldbookWindow.side.lines[5].key.text .. " " .. GoldbookWindow.side.lines[5].value.text), "Sold, after the cut 0c / Best sale –",
   "the month's trades sit beside the characters")
 local marks, lines, dots = plotted()
-eq(#marks .. " " .. #lines .. " " .. #dots .. " " .. marks[1] .. " " .. marks[29] .. " " .. marks[30], "30 29 0 1@0 29@0 30@127",
-  "the gold line has a point per day, from the bottom of the axis to the highest total")
-local lastLine = GoldbookWindow.chart.days[30].line
+eq(#marks .. " " .. #lines .. " " .. table.concat(dots, " ") .. " " .. marks[1] .. " " .. marks[29] .. " " .. marks[30], "30 29 1 1@0 29@0 30@127",
+  "the gold line has a point per day, from the bottom of the axis to the highest total, and a dot on today's")
+local lastLine = GoldbookWindow.chart.lines[1].segments[29]
 eq(("%.0f,%.0f -> %.0f,%.0f"):format(lastLine.startPoint[3], lastLine.startPoint[4], lastLine.endPoint[3], lastLine.endPoint[4]),
-  "594,0 -> 615,127", "a line joins each day to the day before")
+  "544,0 -> 563,127", "a line joins each day to the day before")
 eq(plain(GoldbookWindow.chart.grid[1].label.text) .. " / " .. plain(GoldbookWindow.chart.grid[4].label.text) .. " " .. tostring(GoldbookWindow.chart.grid[5].label.shown),
   "100g / 130g false", "the axis runs in round steps from below the lowest total to above the highest")
 GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
@@ -825,9 +837,8 @@ GoldbookWindow.segments.buttons[3].scripts.OnClick(GoldbookWindow.segments.butto
 marks = plotted()
 eq(segments() .. " " .. #marks, "1W 1M [2M] 60", "2M charts the 60 days the ledger keeps")
 GoldbookWindow.segments.buttons[2].scripts.OnClick(GoldbookWindow.segments.buttons[2])
-GameTooltip.lines = {}
-GoldbookWindow.chart.days[30].hit.scripts.OnEnter(GoldbookWindow.chart.days[30].hit)
-eq(plain(table.concat(GameTooltip.lines, " / ")), "Thu 09 Oct / Total 125g 00s 00c", "hovering a gold day gives its day and total")
+eq(hoverPoint(30), "Thu 09 Oct / Total = 125g 00s 00c", "hovering a gold day gives its day and total")
+eq(GoldbookWindow.chart.legend[1].label.shown, false, "a chart of one line needs no legend")
 
 Stub.advance(0.2)
 Stub.money = 1260000
@@ -897,8 +908,8 @@ eq(head(), "Linen Cloth | 1s 00c | ", "the item view's title names the item and 
 eq(selectedTabs(), "", "the item view has no tab to mark")
 eq(GoldbookWindow.scroll.shown, false, "one day needs no scroll marker")
 marks, lines, dots = plotted()
-eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " ") .. " | " .. table.concat(dots, " "), "30@58 |  | 30",
-  "a single price is a dot halfway up its axis, without a line")
+eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " ") .. " | " .. table.concat(dots, " "), "1@0 |  | 1 2",
+  "a single day is a dot for its price and one for its market value, without lines")
 local header = GoldbookWindow.head.link
 header.scripts.OnEnter(header)
 eq(GameTooltip.hyperlink .. " " .. tostring(GameTooltip.point[2] == header), "item:2589:0:0:0:0:0:0 true",
@@ -990,32 +1001,31 @@ eq(plain(table.concat(GameTooltip.lines, " / ")),
 Stub.alt = true
 HandleModifiedItemClick(bonusLink)
 Stub.alt = false
-eq(plain(GoldbookWindow.status.text), "1–8 of 10 · 10 days recorded for Notched Shortsword of Healing · Shift+click its name to link it in chat",
+eq(plain(GoldbookWindow.status.text), "1–6 of 10 · 10 days recorded for Notched Shortsword of Healing · Shift+click its name to link it in chat",
   "Alt+click finds a variant by the suffix among its bonus ids; the status says which days show")
 eq(cells(1), "Thu 09 Oct | 26s 00c |  | 2 | +4.0%", "the change from the day before")
-eq(cells(8), "Thu 02 Oct | 22s 00c |  | 4 | +4.8%", "a view with a chart lists 8 rows")
-eq(cells(9), " |  |  |  | ", "rows under the chart stay empty")
+eq(cells(6), "Sat 04 Oct | 24s 00c |  | 4 | +4.3%", "the item view's chart and cards leave room for 6 rows")
+eq(cells(7), " |  |  |  | ", "rows under the chart stay empty")
 eq(GoldbookWindow.rows[1].cells[5].text .. " " .. GoldbookWindow.rows[3].cells[5].text .. " " .. GoldbookWindow.rows[4].cells[5].text,
   "|cff5fd35a+4.0%|r 0.0% |cffff6d5a-4.0%|r", "a gain is green, a loss red, no change plain")
-eq(tostring(GoldbookWindow.rows[1].rule.shown) .. " " .. tostring(GoldbookWindow.rows[8].rule.shown) .. " " .. tostring(GoldbookWindow.rows[9].rule.shown),
+eq(tostring(GoldbookWindow.rows[1].rule.shown) .. " " .. tostring(GoldbookWindow.rows[6].rule.shown) .. " " .. tostring(GoldbookWindow.rows[7].rule.shown),
   "true true false", "every filled row is ruled off")
 local thumb = GoldbookWindow.scroll.thumb
 eq(("%s %.1f %.1f %s"):format(tostring(GoldbookWindow.scroll.shown), GoldbookWindow.scroll.height, thumb.height, tostring(thumb.point[5] == 0)),
-  "true 184.0 147.2 true", "the scroll marker spans the 8 rows and its thumb starts at the top")
+  "true 138.0 82.8 true", "the scroll marker spans the 6 rows and its thumb starts at the top")
 GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -1)
-eq(cells(1) .. " / " .. cells(8), "Tue 07 Oct | 24s 00c | 24s 50c | 3 | 0.0% / Tue 30 Sep | 20s 00c |  | 4 | ", "scrolling stops at the oldest day")
-eq(plain(GoldbookWindow.status.text):match("^(.-) ·"), "3–10 of 10", "the status follows the scrolling")
-eq(("%.1f"):format(thumb.point[5]), "-36.8", "the thumb ends at the bottom with the oldest day")
+GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -1)
+eq(cells(1) .. " / " .. cells(6), "Sun 05 Oct | 25s 00c |  | 4 | +4.2% / Tue 30 Sep | 20s 00c |  | 4 | ", "scrolling stops at the oldest day")
+eq(plain(GoldbookWindow.status.text):match("^(.-) ·"), "5–10 of 10", "the status follows the scrolling")
+eq(("%.1f"):format(thumb.point[5]), "-55.2", "the thumb ends at the bottom with the oldest day")
 eq(head(), "Notched Shortsword of Healing | 26s 00c |  | 1 day +4.0% | 7 days +18.2%", "the item's title states its price and its changes")
 eq(GoldbookWindow.head.tags[1].label.text, "|cffab9f891 day|r |cff5fd35a+4.0%|r", "the changes are coloured")
 eq(cards(), "MARKET VALUE –  / USUAL 25s 00c  / LISTED 2 Seen 18m ago / 30-DAY LOW 20s 00c High 26s 00c",
   "the item's cards give its usual price, what is listed and its range over 30 days")
 marks, lines = plotted()
-eq(table.concat(marks, " "), "21@0 22@19 23@39 24@58 25@77 26@97 27@77 28@77 29@97 30@116",
-  "the item line runs from the lowest price at the bottom to the highest at the top")
-GameTooltip.lines = {}
-GoldbookWindow.chart.days[28].hit.scripts.OnEnter(GoldbookWindow.chart.days[28].hit)
-eq(plain(table.concat(GameTooltip.lines, " / ")), "Tue 07 Oct / Min buyout 24s 00c / Listed 3 / Market value 24s 50c", "hovering an item day gives that day's prices")
+eq(table.concat(marks, " "), "1@0 2@17 3@34 4@51 5@68 6@85 7@68 8@68 9@85 10@102",
+  "the item line runs from the lowest price at the bottom to the highest at the top, from its first day")
+eq(hoverPoint(8), "Tue 07 Oct / Min buyout = 24s 00c / Market value = 24s 50c / Listed = 3", "hovering an item day gives that day's prices and the amount listed")
 
 GoldbookDB.items["2997"] = "1|Bolt of Woolen Cloth"
 GoldbookDB.prices["Faramon-Horde"]["2997"] = "100000,1,1,1760000016,0,0;100000;"
@@ -1025,11 +1035,31 @@ marks, lines = plotted()
 eq(#lines, 29, "the gold chart joins its 30 days")
 SlashCmdList.GOLDBOOK("item woolen")
 marks, lines = plotted()
-eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " "), "26@0 27@0 29@116 30@0 | 27 30",
-  "after the gold chart only this item's days and lines show, with no line across the missing day")
+eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " "), "1@0 2@0 3@102 4@0 | 1 2 3",
+  "after the gold chart only this item's points and lines show, joined across a missing day as on the web")
 eq(cells(1) .. " / " .. cells(2), "Thu 09 Oct | 10g 00s 00c |  | 1 | 0.0% / Wed 08 Oct | 10g 00s 40c |  | 1 | 0.0%",
   "a change that rounds to nothing has no sign, up or down")
 eq(plain(GoldbookWindow.head.tags[1].label.text), "1 day 0.0%", "nor in the title")
+local chart = GoldbookWindow.chart
+eq(("%.0f %.0f"):format(chart.hits[1].x, chart.hits[4].x), "0 563", "four days recorded span the whole plot, from the first to today")
+local legend = {}
+for _, key in ipairs(chart.legend) do
+  legend[#legend + 1] = key.label.shown and key.label.text or nil
+end
+local bars, tallest = 0, 0
+for _, bar in ipairs(chart.bars) do
+  if bar.shown then
+    bars, tallest = bars + 1, math.max(tallest, bar.height)
+  end
+end
+eq(table.concat(legend, ", ") .. " / " .. bars .. " bars, the tallest " .. tallest .. " / " .. chart.most.text,
+  "Min buyout, Market value, Listed / 4 bars, the tallest 30 / 1", "the item chart's legend names its lines and the band of amounts listed")
+eq(plain(chart.lines[1].value.text) .. " " .. tostring(chart.lines[2].value.shown) .. " / " .. segments(), "10g false / 1D 1W [1M] 2M",
+  "the newest price is labelled right of the plot, and the item chart starts on a month")
+GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.buttons[1])
+marks = plotted()
+eq(table.concat(marks, " ") .. " / " .. segments(), "1@51 / [1D] 1W 1M 2M", "1D charts the last day")
+GoldbookWindow.segments.buttons[3].scripts.OnClick(GoldbookWindow.segments.buttons[3])
 
 -- Each palette's pairs keep their contrast plainly and as the client measured
 -- in client.lua draws them: text 7:1, quieter text and coloured letters 4.5:1,
@@ -1050,7 +1080,7 @@ local LEGIBLE = {
   { "muted", "panel", 4.5 }, { "muted", "bg", 4.5 }, { "muted", "rail", 4.5 }, { "muted", "field", 4.5 },
   { "goldhi", "panel", 4.5 }, { "goldhi", "on", 4.5 }, { "goldhi", "rail", 4.5 }, { "gain", "panel", 4.5 }, { "loss", "panel", 4.5 },
   { "coins.gold", "panel", 4.5 }, { "coins.silver", "panel", 4.5 }, { "coins.copper", "panel", 4.5 }, { "coins.gold", "bg", 4.5 },
-  { "brand", "titleBottom", 3 }, { "gold", "panel", 3 },
+  { "brand", "titleBottom", 3 }, { "gold", "panel", 3 }, { "second", "panel", 3 },
   { "edge", "panel", 1.6 }, { "edge", "bg", 1.5 }, { "line", "panel", 1.3 }, { "line", "bg", 1.3 }, { "titleBottom", "bg", 1.1 },
 }
 for quality = 0, 7 do
