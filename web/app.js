@@ -1256,15 +1256,24 @@ function about(character) {
 
 const groupedId = (id) => `${id.slice(0, 4)}-${id.slice(4)}`;
 
+// A player signed in with Battle.net has no ID of their own: the account's id is null.
+function signedIn(account) {
+  if (!account) {
+    return ["Not signed in"];
+  }
+  if (account.id === null) {
+    return ["Signed in with ", element("strong", { textContent: "Battle.net" })];
+  }
+  return ["Signed in as ", element("strong", { textContent: groupedId(account.id) })];
+}
+
 // The account in the rail, and the purse with the gold of all its characters.
 function drawSession(account) {
   // Newer than any answer still on its way.
   latest.session++;
   session.account = account;
   $("session").hidden = account === undefined;
-  $("session").replaceChildren(
-    ...(account ? ["Signed in as ", element("strong", { textContent: groupedId(account.id) })] : ["Not signed in"]),
-  );
+  $("session").replaceChildren(...signedIn(account));
   $("log-in-link").hidden = account !== null;
   $("log-out").hidden = !account;
   const golds = (account?.characters ?? []).map(({ gold }) => gold).filter((gold) => gold !== null);
@@ -1588,8 +1597,11 @@ function drawGold() {
     },
   });
   ordered.forEach((character, index) => rows[index].setAttribute("aria-selected", String(character === chosen)));
+  const player = account.id === null;
   const linked = account.linked?.length ? `, linked with ${account.linked.map(groupedId).join(", ")}` : "";
-  $("account-id").textContent = `ID ${groupedId(account.id)}${linked}`;
+  $("account-id").textContent = player ? "Signed in with Battle.net" : `ID ${groupedId(account.id)}${linked}`;
+  // A player sees every ID their installs uploaded, so has nothing to link.
+  $("link-form").closest("details").hidden = player;
   drawMonth($("gold-month"), ledger.trades);
 }
 
@@ -2621,5 +2633,9 @@ loadSession().catch(() => {});
 api("/api/realms").then(({ realms }) => {
   realmList = realms;
   drawLastScan();
+}, () => {});
+// A server without Battle.net, or one from before website sign-in, offers only the ID and key.
+api("/api/auth/battlenet/status").then(({ web }) => {
+  $("battlenet").hidden = web !== true;
 }, () => {});
 render();

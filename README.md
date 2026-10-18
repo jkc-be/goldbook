@@ -681,6 +681,14 @@ Linking a login that is already linked with others brings those along.
 Each computer keeps its own key, so **New key** on one logs out only the
 browsers that logged in with that computer's key.
 
+On a server with Battle.net sign-in, the login also offers **Sign in with
+Battle.net**. It needs no ID or key: it shows every ID that a Goldbook app
+signed in with the same Battle.net account uploaded, and every ID linked with
+one of them. An ID counts once the app uploads it after signing in, so after
+signing in to the app, let it upload once before signing in on the web page.
+Linking is for ID and key logins, so a Battle.net sign-in hides **Link another
+computer**. **Log out** in the rail ends either kind of sign-in.
+
 `/gb web` shows the web page's address, the ID and the key, the codes grouped
 for reading as `K7Q2-M9PX` and `7KQ2M-9PXAB-CDEFG-HJKMN`. **Show ID and key**
 under Options > AddOns > Goldbook opens the same window. Chat text cannot be
@@ -966,8 +974,12 @@ already linked to another Battle.net identity cannot be claimed again.
 
 The verified identity is the Battle.net account, while WoW folder identifiers
 remain client claims. This does not prove ownership of a particular WoW
-character or replace the addon's separate ID and key for character pages.
-Manual administrator tokens remain exempt from the self-service login gate.
+character. Each account upload from a linked fingerprint records the player
+against the uploaded ID, and the website's **Sign in with Battle.net** shows
+the player those IDs and the IDs linked with them, beside the addon's ID and
+key login. Website sign-in uses the same redirect URL, so the portal needs no
+change. Manual administrator tokens remain exempt from the self-service login
+gate, and their uploads record no player.
 
 Fingerprint listings include `player_hash` for the linked Battle.net identity.
 To manage player blocks on the server:
