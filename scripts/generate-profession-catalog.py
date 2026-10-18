@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Classic profession item-ID lists from an AtlasLoot Classic data snapshot and catalog/skinning.json."""
+"""Generate Classic profession item-ID lists from an AtlasLoot Classic data snapshot and the gathering lists in catalog/."""
 import argparse
 import hashlib
 import json
@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NAMES = {1: "First Aid", 2: "Blacksmithing", 3: "Leatherworking", 4: "Alchemy",
          5: "Herbalism", 11: "Fishing", 12: "Skinning", 14: "Jewelcrafting", 15: "Inscription",
          6: "Cooking", 7: "Mining", 8: "Tailoring", 9: "Engineering", 10: "Enchanting", 13: "Poisons"}
+GATHERING = ("Herbalism", "Skinning")
 
 
 def classic(text, table):
@@ -44,9 +45,9 @@ def generate(folder):
         if item not in crafted:
             professions[profession]["recipes"].add(item)
     rows = sorted((p for p in professions.values() if any(p[k] for k in ("materials", "recipes", "crafted"))), key=lambda p: p["name"])
-    if any(row["id"] == "skinning" for row in rows):
-        raise ValueError("AtlasLoot now lists Skinning, which catalog/skinning.json would overwrite")
     for row in rows:
+        if row["name"] in GATHERING:
+            raise ValueError(f"AtlasLoot now lists {row['name']}, which catalog/{row['id']}.json would overwrite")
         for kind in ("materials", "recipes", "crafted"):
             row[kind] = sorted(row[kind])
     return {"game": "Classic", "source": "AtlasLoot Classic, Forever 1.60.1, Data/Profession.lua and Data/Recipe.lua",
@@ -66,15 +67,15 @@ def write_lua(catalog):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--atlasloot-data", type=Path, help="AtlasLootClassic/Data directory; omit to regenerate from the committed catalog and skinning.json")
+    parser.add_argument("--atlasloot-data", type=Path, help="AtlasLootClassic/Data directory; omit to regenerate from the committed catalog and the gathering lists")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     path = ROOT / "catalog/professions.json"
     catalog = generate(args.atlasloot_data) if args.atlasloot_data else json.loads(path.read_text())
-    skinning = {"id": "skinning", "name": "Skinning",
-                "materials": sorted(set(json.loads((ROOT / "catalog/skinning.json").read_text())["materials"])),
-                "recipes": [], "crafted": []}
-    catalog["professions"] = sorted([p for p in catalog["professions"] if p["id"] != "skinning"] + [skinning],
+    gathering = [{"id": name.lower(), "name": name,
+                  "materials": sorted(set(json.loads((ROOT / f"catalog/{name.lower()}.json").read_text())["materials"])),
+                  "recipes": [], "crafted": []} for name in GATHERING]
+    catalog["professions"] = sorted([p for p in catalog["professions"] if p["name"] not in GATHERING] + gathering,
                                     key=lambda p: p["name"])
     rendered = json.dumps(catalog, indent=2)
     rendered = re.sub(r"\[\n([\d,\s]+)\n\s*\]", lambda m: "[" + ", ".join(re.findall(r"\d+", m[1])) + "]", rendered)
