@@ -42,6 +42,10 @@ struct SentAccount {
     payload: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     key_hash: Option<String>,
+    // The server learns whose ID it is from the credential, so a new one
+    // sends the account again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token_hash: Option<String>,
 }
 fn state_from_value(v: Value) -> Option<State> {
     let o = v.as_object()?;
@@ -58,6 +62,7 @@ fn state_from_value(v: Value) -> Option<State> {
                 SentAccount {
                     payload: payload.into(),
                     key_hash: None,
+                    token_hash: None,
                 }
             } else {
                 {
@@ -314,8 +319,11 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
         }
     };
     let payload = sha256(serde_json::to_vec(&account)?);
+    let token_hash = sha256(&options.token);
     let last = state.accounts.get(&account.id);
-    if last.is_some_and(|last| last.payload == payload) {
+    if last.is_some_and(|last| {
+        last.payload == payload && last.token_hash.as_deref() == Some(&token_hash)
+    }) {
         result.already_sent += 1;
         return Ok(result);
     }
@@ -348,6 +356,7 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
                     SentAccount {
                         payload,
                         key_hash: Some(account.key_hash.clone()),
+                        token_hash: Some(token_hash),
                     },
                 );
                 Ok(())
