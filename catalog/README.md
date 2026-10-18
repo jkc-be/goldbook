@@ -12,11 +12,22 @@ Only their `CLASSIC` tables are used. No item names or translated descriptions
 are copied. AtlasLoot's recipe index also contains some finished goods; the
 generator excludes those from the recipe role when they are crafting outputs.
 
-The catalog has eleven lists: Alchemy, Blacksmithing, Cooking, Enchanting,
-Engineering, First Aid, Fishing, Leatherworking, Mining, Poisons, and Tailoring.
-Fishing contains recipe books only. Gathering loot is not inferred from an
-item's name. New, seasonal, or expansion-specific items absent from the source
-remain in the unfiltered list.
+The catalog has twelve lists: Alchemy, Blacksmithing, Cooking, Enchanting,
+Engineering, First Aid, Fishing, Leatherworking, Mining, Poisons, Skinning, and
+Tailoring. Fishing contains recipe books only. Gathering loot is not inferred
+from an item's name. New, seasonal, or expansion-specific items absent from the
+source remain in the unfiltered list.
+
+AtlasLoot has no Skinning data, so Skinning's materials come from
+`skinning.json`, a hand-kept list of item IDs. An item is listed when its
+Wowhead Classic page has a "Skinned from" tab. Wool Cloth is left out because
+only sheep yield it and tailors use it, as are two junk items seen skinned
+once: Chipped Boar Tusk and Broken Fang. Drops that are merely leather, such as
+Raptor Hide, and leathers made by crafting are not skinned and stay out.
+Skinned leathers also stay in the lists of the professions that use them. To
+refresh Skinning, edit `skinning.json`, update its `source` line with the date
+checked, and regenerate. The generator stops with an error if AtlasLoot ever
+lists Skinning itself.
 
 Refresh both the JSON and Lua data from a local AtlasLoot snapshot:
 
@@ -24,7 +35,7 @@ Refresh both the JSON and Lua data from a local AtlasLoot snapshot:
 python3 scripts/generate-profession-catalog.py --atlasloot-data "/path/to/AtlasLootClassic/Data"
 ```
 
-Regenerate the addon's data from the committed JSON:
+Regenerate both from the committed JSON and `skinning.json`:
 
 ```sh
 python3 scripts/generate-profession-catalog.py
