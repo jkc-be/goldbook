@@ -1996,7 +1996,7 @@ function drawTrades(container, trades) {
   view.sort ??= { column: columns.length - 1, descending: true };
   const characters = tradeCharacters(trades);
   const character = characters.some(([key]) => key === state.character) ? state.character : "";
-  const needle = view.q.toLowerCase();
+  const needle = view.q.trim().toLowerCase();
   const kept = trades.filter((trade) => {
     const side = SIDES[trade.side];
     return ENTRY_FILTERS[view.segment].keep(side)
@@ -2024,7 +2024,9 @@ function drawTrades(container, trades) {
   search.oninput = () => {
     clearTimeout(view.timer);
     view.timer = setTimeout(() => {
-      view.q = search.value.trim();
+      // The box is drawn again with this text, so it keeps what was typed,
+      // a space at its end too.
+      view.q = search.value;
       view.offset = 0;
       redraw();
       const input = container.querySelector(".search input");
