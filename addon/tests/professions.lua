@@ -15,6 +15,9 @@ assert(ns.Professions.Matches("999999", "", "all"), "unknown items stay visible 
 assert(ns.Professions.Matches("2318", "skinning", "materials"), "light leather is a skinning material")
 assert(ns.Professions.Matches("2318", "leatherworking", "materials"), "light leather is still a leatherworking material")
 assert(not ns.Professions.Matches("2318", "skinning", "crafted"), "skinning crafts nothing")
+assert(ns.Professions.Matches("2447", "herbalism", "materials"), "peacebloom is a herbalism material")
+assert(ns.Professions.Matches("2447", "alchemy", "materials"), "peacebloom is still an alchemy material")
+assert(not ns.Professions.Matches("2447", "herbalism", "crafted"), "herbalism crafts nothing")
 local rows, names = {}, {}
 for _, item in ipairs({ {"2589", "Linen Cloth", 1}, {"2447", "Peacebloom", 1}, {"2840", "Copper Bar", 1},
   {"2318", "Light Leather", 1}, {"2881", "Plans: Runed Copper Breastplate", 2}, {"858", "Lesser Healing Potion", 1},
@@ -46,9 +49,11 @@ for _, option in ipairs(window.filters.controls.profession.menu.options) do
   if option.shown then labels[#labels + 1] = option.label.text end
 end
 assert(table.concat(labels, ", ") == "All professions, Alchemy, Blacksmithing, Cooking, Enchanting, Engineering, "
-  .. "First Aid, Leatherworking, Mining, Poisons, Skinning, Tailoring", "the profession menu offers skinning")
+  .. "First Aid, Herbalism, Leatherworking, Mining, Poisons, Skinning, Tailoring", "the profession menu offers the gathering professions")
 window.filters.controls.profession.menu:Hide()
-choose("profession", 11)
+choose("profession", 8)
+assert(shown() == "2447", "choosing herbalism shows gathered herbs")
+choose("profession", 12)
 assert(shown() == "2318", "choosing skinning shows skinned leather")
 choose("profession", 2)
 assert(shown() == "2447", "choosing alchemy shows only materials")
