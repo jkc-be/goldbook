@@ -67,6 +67,12 @@ The check fails if prerequisites or the download are unavailable; it never
 silently skips proxy coverage. Run it alone after `cargo build --locked` with
 `python3 scripts/verify-proxy.py`.
 
+The client compatibility check replays the requests of every app version the
+server still supports, recorded under `fixtures/clients/`, against the current
+server. [fixtures/clients/README.md](fixtures/clients/README.md) explains the
+support floor and how to add a version. Run it alone with
+`python3 scripts/verify-client-compatibility.py`.
+
 ## Local development
 
 Run the same Goldbook image and Compose stack used on OVH:

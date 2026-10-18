@@ -1,6 +1,7 @@
 node_modules/
 fixtures/*
 !fixtures/.gitkeep
+!fixtures/clients/
 .venv/
 __pycache__/
 /data/

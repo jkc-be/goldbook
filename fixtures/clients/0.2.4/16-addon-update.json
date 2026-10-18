@@ -1,0 +1,21 @@
+{
+  "about": "The app downloads the signed addon from the server's updates folder.",
+  "source": "desktop/src-tauri/src/updates.rs:209",
+  "files": {
+    "updates/addon.json": {
+      "payload": "eyJ2ZXJzaW9uIjoiMC4yLjQiLCJzZXF1ZW5jZSI6NywicmV2aXNpb24iOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZmlsZXMiOnsiR29sZGJvb2sudG9jIjoiIyMgVmVyc2lvbjogMC4yLjRcbkNvcmUubHVhXG4iLCJDb3JlLmx1YSI6Ii0tIHN5bnRoZXRpY1xuIn19",
+      "signature": "c3ludGhldGljIHNpZ25hdHVyZQ=="
+    }
+  },
+  "request": {
+    "method": "GET",
+    "path": "/updates/addon.json"
+  },
+  "expect": {
+    "status": 200,
+    "body": {
+      "payload": "string",
+      "signature": "string"
+    }
+  }
+}
