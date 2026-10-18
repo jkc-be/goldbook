@@ -9,3 +9,10 @@ condition = "AND"
 paths = ['''(^|/)(addon/tests/|crates/[^/]+/tests/|desktop/src-tauri/src/website\.rs$|scripts/verify-migration\.py$|scripts/migration-baseline\.json$)''']
 regexTarget = "secret"
 regexes = ['''(?i)^7KQ2M-?9PXAB-?CDEFGx?-?HJKMN$''', '''^1f2a4b22637651b9c0e4169e248acbe887d2e3d0ea98321f1bf1452f9b6ecb79$''']
+
+[[allowlists]]
+description = "SHA-256 account key hashes of synthetic keys in released-client fixtures"
+condition = "AND"
+paths = ['''^fixtures/clients/''']
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{64}$''']
