@@ -184,9 +184,10 @@ Open the desktop app:
 npm run desktop
 ```
 
-The window has three tabs. **Prices** and **Characters** show the website
-inside the app, and Characters signs in with the login the game saved.
-**Sync** holds the status and settings.
+The window's rail has the addon's hubs. **Market**, **Inventory** and
+**Ledger** show the website's Prices, Bags and Gold inside the app, with the
+website's tabs for the rest; Inventory and Ledger sign in with the login the
+game saved. **Sync** holds the status and settings.
 
 Open **Sync**, confirm the game folder, set the server to
 `http://localhost:8787`, and enter `dev-token` as the upload token for this
@@ -205,7 +206,7 @@ the Goldbook menu.
 
 Change the game folder, server, or upload token from **Settings** in the
 window. **Sync now** checks for new scans immediately. **Open website** signs
-you in to the character pages with the ID and key saved by the addon. After
+you in to the website's Gold with the ID and key saved by the addon. After
 your first game login, type `/reload` once so they are available. If several
 accounts are saved, choose which one to open.
 
@@ -287,15 +288,14 @@ snapshot uploads.
 
 From then on, steps 3 and 4 are all you start before playing.
 
-Click **Characters** at the top of the page to see your own characters. Type
-`/gb web` in game for your account's ID and key, and log in with them. Case,
-spaces and dashes do not matter. The list shows each character's level, class,
-realm and gold, richest first. Click a character for the change in its gold
-today, over 7 days and over 30 days, a chart of its gold hour by hour over the
-last day, 7 days or 30 days, and what its bags and bank would bring, item by
-item. The game saves the bags when you log out or type
-`/reload`, and the bank as it was the last time you opened it. A login lasts
-30 days.
+Click **Ledger** in the rail to see your own characters. Type `/gb web` in
+game for your account's ID and key, and log in with them. Case, spaces and
+dashes do not matter. **Gold** shows the gold of all your characters and a
+row per character, richest first; click a name or choose it in the character
+chip for its own gold, today, over 7 and 30 days and on a chart. **Bags**
+under Inventory shows what the bags and banks would bring, item by item. The
+game saves the bags when you log out or type `/reload`, and the bank as it
+was the last time you opened it. A login lasts 30 days.
 
 ### Verify without scanning
 
@@ -573,15 +573,16 @@ Goldbook keeps 180 days and at most 3,000 entries per character, never
 dropping one less than 30 days old, so that an invoice still in the mailbox is
 not booked again.
 
-On the web page, after the next sync, **Characters** shows the **Accounting**
-of the whole account and each character page shows its own:
+On the web page, after the next sync, **Ledger** shows the **Accounting**
+of the whole account, or of the character chosen in its chip:
 
 - **Revenue** after the auction house cut, **Expenses**, the **Net** of the
   two, and the **Realized profit** on goods;
-- **By item**: units bought and sold, the average cost and the average sale
-  after the cut, and the profit or loss on the units that were both bought and
-  sold. Sales count at auction, to vendors and in player trades; purchases at
-  auction, from merchants, in player trades and by cash on delivery;
+- **By item**, a tab of its own: units bought and sold, the average cost and
+  the average sale after the cut, and the profit or loss on the units that
+  were both bought and sold. Sales count at auction, to vendors and in player
+  trades; purchases at auction, from merchants, in player trades and by cash
+  on delivery;
 - **History**: every entry with its source, such as "Auction sale", "Trade
   sale to Mirelle", "Mail gold in from Mirelle", "Quest reward" or "Repairs",
   and what it added to the gold or took from it. **All**, **Revenue** and
@@ -625,7 +626,7 @@ that account played on that computer.
 
 A second computer makes a login of its own. To see the characters of both
 together, log in on the web page with one computer's ID and key, open **Link
-another computer** under **Characters**, and enter the other computer's ID and
+another computer** under the characters in **Gold**, and enter the other computer's ID and
 key. From then on either login shows the characters of both. A character
 played on both shows once, with the gold of both and its newest bags and bank.
 Linking a login that is already linked with others brings those along.
@@ -636,7 +637,7 @@ browsers that logged in with that computer's key.
 for reading as `K7Q2-M9PX` and `7KQ2M-9PXAB-CDEFG-HJKMN`. **Show ID and key**
 under Options > AddOns > Goldbook opens the same window. Chat text cannot be
 copied, so the window shows each in a text box. Click a box to select it, then
-press Ctrl+C. On the web page, log in under **Characters**. To use your own
+press Ctrl+C. On the web page, click **Log in** in the rail. To use your own
 server, change `X-Website` in `addon/Goldbook/Goldbook.toc` to its address and
 install the addon again.
 
@@ -718,7 +719,7 @@ the token in your shell history.
 
 Reading prices needs no token. Uploading needs a token.
 
-The Characters view of the web page asks for the ID and key that `/gb web`
+The signed-in views of the web page ask for the ID and key that `/gb web`
 shows in game. The server stores only a hash of the key. A login lasts 30 days.
 Five wrong tries for one ID from one address lock that ID for that address for
 15 minutes. Linking another computer's ID counts the same tries.
@@ -999,21 +1000,22 @@ manual workflow.
 ### Website
 
 The website is laid out and coloured like the addon's window, in the colours
-the game shows it in. The half-filled ring in the title bar switches between
-the dark and the light window. The rail on the left has three hubs, and each
-hub has tabs at the top of the page:
+the game shows it in. It opens dark; the half-filled ring in the title bar
+switches between the dark and the light window, and the site remembers the
+choice. The rail on the left has three hubs, and each hub has tabs at the top
+of the page:
 
 | Hub | Tabs | Sign-in |
 | --- | --- | --- |
 | **Market** | Prices, Deals, Movers | No |
 | **Inventory** | Bags | Yes |
-| **Ledger** | Gold, Accounting | Yes |
+| **Ledger** | Gold, Accounting, By item | Yes |
 
-Under **Account** the rail has **Characters** and **Download**. Mail is in
-game only. Each tab has its own address, such as `#prices`, `#deals`,
-`#movers`, `#bags`, `#gold` or `#accounting`, and a character's page is at
-`#character/<name>-<realm>`. Links to the older `#characters/<name>-<realm>`
-still open it. The Market tabs show the realm chosen at the top. The other
+Under **Account** the rail has **Download**. Mail is in game only. Each tab
+has its own address, such as `#prices`, `#deals`, `#movers`, `#bags`, `#gold`,
+`#accounting` or `#items`. The character pages of earlier versions are gone:
+`#characters` opens Gold, and `#character/<name>-<realm>` opens Gold with that
+character chosen. The Market tabs show the realm chosen at the top. The other
 tabs show the login when you are signed out.
 
 - **Prices** lists the newest scan's prices. See
@@ -1040,11 +1042,18 @@ tabs show the login when you are signed out.
   the one you choose: the total and its high, today, 30 days and net worth.
   Under them are the gold over one week, one month or two months, the
   characters with their gold, today's change and when they last played, and
-  the month's accounting.
+  the month's accounting. Click a character's name to choose it, and again
+  for all of them. Under the characters are the account's ID and **Link
+  another computer**.
 - **Accounting** lists the entries the addon booked for all your characters,
   with the revenue, expenses, net and realized profit of the entries shown,
-  a search, source and character filters, and each item's profit below. Each
-  character's page books its own.
+  and a search, source and character filters.
+- **By item** lists each item your characters bought or sold: the units
+  bought and their average cost, the units sold and their average sale after
+  the cut, the profit realized on the units both bought and sold, and when it
+  last moved, newest first. Its cards total what was bought and sold, the
+  realized profit and the best item. A search, the profession, item and
+  quality filters and a character filter narrow it.
 
 The tables of Prices, Deals and Movers open an item's price history in
 Prices. The server works out Deals and Movers from the lowest price of each
@@ -1187,9 +1196,9 @@ files, so update those before deploying the Rust image through Actions.
   income or expense. A sold auction's mail returns its deposit with the sale,
   and that deposit is booked as other income. Gold sent between your own
   characters is mail gold out on one and mail gold in on the other.
-  Profit or loss is per item name
-  and per character on character pages, so an item bought on one character
-  and sold on another has a cost only on the account page.
+  Profit or loss is per item name, and per character when one is chosen, so
+  an item bought on one character and sold on another has a cost only with
+  all characters shown.
 
 ## Source, license, and contributions
 
