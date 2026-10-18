@@ -83,7 +83,7 @@ version:
 
 # Turns the files in changes/ into a CHANGELOG.md section, sets the version and
 # deletes the files, such as make prepare-release VERSION=0.2.5. Then edit the
-# section's prose and open the release pull request.
+# section's prose and open the release pull request with the release label.
 prepare-release:
 	@test -n "$(VERSION)" || { echo "Usage: make prepare-release VERSION=0.2.5"; exit 1; }
 	python3 scripts/prepare-release.py $(VERSION)

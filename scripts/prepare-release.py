@@ -8,6 +8,8 @@ changes/ holds no change file, when a change file is malformed, or when the
 version is not higher than the current one. Then sets the version with
 set-version.py, inserts `## <version> - <today>` above the newest release in
 CHANGELOG.md with one heading per section, and deletes the change files.
+Open the result as a pull request with the release label; the changes check
+refuses any other pull request that edits the version or CHANGELOG.md.
 """
 import datetime
 from pathlib import Path
@@ -77,7 +79,8 @@ def main():
     CHANGELOG.write_text(changelog[:newest.start()] + entry + changelog[newest.start():])
     for path in files:
         path.unlink()
-    print(f"Added {version} to CHANGELOG.md from {len(files)} change files, and deleted them.")
+    print(f"Added {version} to CHANGELOG.md from {len(files)} change files, and deleted them.\n"
+          "Edit the new section's prose, commit, and open the pull request with the release label.")
 
 
 if __name__ == "__main__":

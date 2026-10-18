@@ -28,7 +28,29 @@ with commands and names in backticks and buttons in bold. Wrap lines at about
 ```
 
 Within a heading, entries are ordered by file name. A pull request that
-changes nothing a player or user would notice, such as a refactor, tests, CI
-or a release, gets the `no-changes` label instead of a file. The `changes`
-check fails when a pull request touches `addon/`, `desktop/`, `web/`,
-`crates/` or `server/` without adding a file here and without that label.
+changes nothing a player or user would notice, such as a refactor, tests or
+CI, gets the `no-changes` label instead of a file.
+
+## The changes check
+
+The `changes` check on each pull request enforces four rules. Each failure
+names its rule and how to fix it.
+
+- **Change file rule.** A pull request that touches `addon/`, `desktop/`,
+  `web/`, `crates/` or `server/` adds a file here, and every file it adds or
+  edits here is well formed. The `no-changes` label waives this rule, and
+  only this rule.
+- **Version rule.** Only a release pull request changes the version: the
+  `version` in `desktop/src-tauri/tauri.conf.json`, or any other field that
+  `scripts/set-version.py` writes. Other edits to those files, such as a
+  dependency in `package.json` or `Cargo.toml`, are fine.
+- **Changelog rule.** Only a release pull request edits `CHANGELOG.md`.
+- **Release rule.** A release pull request has the `release` label and is
+  what `make prepare-release VERSION=x.y.z` produces: every version field
+  holds one version, higher than `main`'s; `CHANGELOG.md` has a
+  `## <version> - ` section; every change file is deleted; and nothing else
+  changes, apart from the prose of the new section. It needs no change file.
+
+To prepare a release, branch from `main`, run
+`make prepare-release VERSION=x.y.z`, edit the new section's prose, and open
+the pull request with the `release` label.

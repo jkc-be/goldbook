@@ -1254,7 +1254,8 @@ turns the files under [changes/](changes/README.md) into a section of
 [CHANGELOG.md](CHANGELOG.md), deletes them, and writes the version to
 `package.json`, `package-lock.json`, the Cargo package manifests and
 `Cargo.lock`, `desktop/src-tauri/tauri.conf.json`, the addon TOC and the
-website's title bar. Commit that, merge it to main, then run
+website's title bar. Commit that, open the pull request with the `release`
+label, merge it to main, then run
 **Release desktop** on main. The client only
 installs a release with a higher version than its own, so a release under the
 same version reaches only new installs. `make build` builds with the version as

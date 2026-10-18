@@ -12,8 +12,10 @@ forks and pull requests. `CODEOWNERS` assigns every file to @jkc-be.
 
 The `main` ruleset restricts branch creation and updates to repository
 administrators. It requires a pull request, code-owner approval, resolved review
-threads, and the `test`, `local-stack`, and `secrets` checks for anyone without
-bypass permission. The sole administrator can merge or push directly and can
+threads, and the `test`, `local-stack`, `secrets`, `desktop-tests`, and `changes`
+checks for anyone without bypass permission. `changes` enforces the change file,
+version, changelog and release rules in [changes/README.md](../changes/README.md);
+it reads the `no-changes` and `release` labels. The sole administrator can merge or push directly and can
 bypass those review and check requirements. A separate rule blocks force pushes
 and deletion for everyone, including the administrator. Changing that rule
 requires an explicit settings change.
@@ -30,6 +32,10 @@ Apply or verify these settings with the owner's authenticated GitHub CLI:
 python3 scripts/configure-github.py
 python3 scripts/configure-github.py --check
 ```
+
+A newly required check counts only once it has reported on a pull request's
+head commit. After the script adds a required check, every open pull request
+needs one new push, such as a rebase or an empty commit, before it can merge.
 
 ## Secrets and approvals
 
