@@ -1236,45 +1236,22 @@ for (const button of $("mover-direction").querySelectorAll("button")) {
   };
 }
 
-function showPanel(...ids) {
-  for (const section of $("account-view").children) {
-    section.hidden = !ids.includes(section.id);
-  }
-}
-
 function classColor(token) {
   return CLASSES.has(token) ? `var(--class-${token.toLowerCase()})` : "";
 }
 
 // Spaces inside each part do not break, so that a phone wraps between parts only.
-function about(character, { faction = false } = {}) {
+function about(character) {
   const { level, class: token, realm, updatedAt } = character;
   const kind = token === null ? null : (CLASSES.get(token) ?? `${token[0].toUpperCase()}${token.slice(1).toLowerCase()}`);
   return [
     [level === null ? null : `Level ${level}`, kind].filter(Boolean).join(" "),
-    faction ? character.faction : null,
     realm,
     updatedAt === null ? null : `updated ${age(updatedAt)}`,
   ]
     .filter(Boolean)
     .map((part) => part.replaceAll(" ", "\u00a0"))
     .join(" · ");
-}
-
-function characterLink(character, current) {
-  const route = { view: "character", name: character.name, realm: character.realm };
-  const name = element("span", { className: "name", textContent: character.name });
-  name.style.color = classColor(character.class);
-  const link = element("a", { href: routeHash(route) }, [
-    name,
-    character.gold === null ? "–" : money(character.gold),
-    element("span", { className: "about", textContent: about(character) }),
-  ]);
-  // "true", not "page": the rail's Characters link already marks the page.
-  if (current?.name === character.name && current.realm === character.realm) {
-    link.setAttribute("aria-current", "true");
-  }
-  return element("li", {}, [link]);
 }
 
 const groupedId = (id) => `${id.slice(0, 4)}-${id.slice(4)}`;
@@ -1305,19 +1282,6 @@ async function loadSession() {
   drawSession(account);
 }
 
-// The roster, with the character on show marked.
-function drawAccount(account, current = null) {
-  const linked = account.linked?.length ? `, linked with ${account.linked.map(groupedId).join(", ")}` : "";
-  $("account-id").textContent = `ID ${groupedId(account.id)}${linked}`;
-  $("character-list").replaceChildren(...account.characters.map((character) => characterLink(character, current)));
-  drawSession(account);
-}
-
-async function loadAccount() {
-  drawAccount(await latestOnly("view", api("/api/account")));
-  showPanel("roster");
-}
-
 // The account and every character in it in full, as each one's page has it.
 async function loadRoster() {
   const account = await api("/api/account");
@@ -1326,6 +1290,22 @@ async function loadRoster() {
 }
 
 const characterKey = (character) => `${character.name}-${character.realm}`;
+
+// A character's name, which picks that character in the view's character
+// chip, and once picked all of them again.
+function characterPick(character, redraw) {
+  const key = characterKey(character);
+  const picked = state.character === key;
+  return element("button", {
+    type: "button",
+    textContent: character.name,
+    title: picked ? "Show all characters" : `Show only ${character.name}`,
+    onclick: () => {
+      state.character = picked ? "" : key;
+      redraw();
+    },
+  });
+}
 
 // The character chips of Bags and Gold choose the same character. One the
 // account no longer has is let go.
@@ -1533,9 +1513,9 @@ const GOLD_COLUMNS = [
     className: "name",
     value: (character) => character.name,
     cell: (character) => {
-      const link = element("a", { href: routeHash({ view: "character", name: character.name, realm: character.realm }), textContent: character.name });
-      link.style.color = classColor(character.class);
-      return link;
+      const pick = characterPick(character, drawGold);
+      pick.style.color = classColor(character.class);
+      return pick;
     },
   },
   { label: "Gold", className: "number", value: balance, cell: (character) => (character.gold.length ? money(balance(character)) : none()) },
@@ -1608,6 +1588,8 @@ function drawGold() {
     },
   });
   ordered.forEach((character, index) => rows[index].setAttribute("aria-selected", String(character === chosen)));
+  const linked = account.linked?.length ? `, linked with ${account.linked.map(groupedId).join(", ")}` : "";
+  $("account-id").textContent = `ID ${groupedId(account.id)}${linked}`;
   drawMonth($("gold-month"), ledger.trades);
 }
 
@@ -1634,7 +1616,7 @@ async function loadGold() {
 }
 
 async function loadAccounting() {
-  drawTrades($("account-trades"), await latestOnly("view", loadTrades()), { withCharacter: true });
+  drawTrades($("account-trades"), await latestOnly("view", loadTrades()));
 }
 
 // Gold is [[time, copper]], oldest first: the balance at the end of the hour
@@ -1673,13 +1655,6 @@ function dailyGold(gold) {
   return days;
 }
 
-// The value and note of a stat: the change, and in the note its share of the
-// balance it started from.
-function goldTrend(change, base, note) {
-  const share = change !== 0 && base > 0 ? percentText(Math.abs(change / base) * 100) : null;
-  return [signedMoney(change), [note, share].filter(Boolean).join(" · ")];
-}
-
 // As Ledger.Performance has it in game: the change over the last `span` UTC
 // days, since the end of the day before them. The balance before the first
 // one on record is the first one, so that meeting a character is not a gain.
@@ -1689,66 +1664,15 @@ function goldChange(gold, span) {
   return { change: gold.at(-1)[1] - base, base };
 }
 
-function goldSummary(gold) {
-  if (gold.length === 0) {
-    return ["Gold", "Today", "7 days", "30 days", "High", "Best day", "Worst day"].map((label) => stat(label, "–"));
-  }
-  const now = gold.at(-1)[1];
-  const date = (time) => shortDate(time, "UTC");
-  const over = (span) => {
-    const { change, base } = goldChange(gold, span);
-    return goldTrend(change, base);
-  };
-  const days = dailyGold(gold);
-  const moves = days.slice(1).map(({ day, copper }, index) => ({ day, change: copper - days[index].copper, base: days[index].copper }));
-  const best = moves.reduce((most, move) => (move.change > (most?.change ?? 0) ? move : most), null);
-  const worst = moves.reduce((most, move) => (move.change < (most?.change ?? 0) ? move : most), null);
-  const [highAt, high] = gold.reduce((most, point) => (point[1] > most[1] ? point : most));
-  const dayChange = (move) => (move ? goldTrend(move.change, move.base, date(move.day)) : ["–"]);
-  return [
-    stat("Gold", money(now)),
-    stat("Today", ...over(1)),
-    stat("7 days", ...over(7)),
-    stat("30 days", ...over(30)),
-    stat("High", money(high), date(highAt)),
-    stat("Best day", ...dayChange(best)),
-    stat("Worst day", ...dayChange(worst)),
-  ];
-}
-
 // As many labels as keep apart on a phone.
 const labelRoom = (width) => Math.min(6, Math.floor(width / 64));
 const clock = (seconds) => new Date(seconds * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-
-// Local whole hours between start and end, 1 to 12 hours apart, at most about
-// `most` of them.
-function hourTicks(start, end, most) {
-  const step = [1, 2, 3, 4, 6, 12].find((hours) => (end - start) / HOUR / hours <= most);
-  const ticks = [];
-  const hour = new Date(start * 1000);
-  hour.setMinutes(0, 0, 0);
-  for (; hour.getTime() / 1000 <= end; hour.setHours(hour.getHours() + 1)) {
-    if (hour.getTime() / 1000 >= start && hour.getHours() % step === 0) {
-      ticks.push(hour.getTime() / 1000);
-    }
-  }
-  return ticks;
-}
-
-// The hours of the day, and at midnight the date.
-function hourDates(start, end, width) {
-  return hourTicks(start, end, labelRoom(width)).map((time) => [
-    time,
-    new Date(time * 1000).getHours() === 0 ? shortDate(time) : clock(time),
-    "middle",
-  ]);
-}
 
 function dayDates(start, end, width) {
   return dayTicks(start, end, labelRoom(width)).map((time) => [time, shortDate(time), "middle"]);
 }
 
-const SPAN_NAMES = { 1: "day", 7: "7 days", 30: "30 days", 60: "60 days" };
+const SPAN_NAMES = { 7: "7 days", 30: "30 days", 60: "60 days" };
 
 // The balance hour by hour over the days chosen in `range`, or since the first
 // one on record when that is later, into `chart`. Each range keeps its own
@@ -1789,24 +1713,8 @@ function drawGoldChart(panel, name, gold) {
     steps: true,
     heading: (index) => `${when(times[index])}–${clock(times[index] + HOUR)}`,
     label: `${name}: gold over the last ${SPAN_NAMES[goldSpan]}, from ${moneyText(balances[0])} to ${moneyText(balances.at(-1))}. Use the arrow keys to read each hour.`,
-    dates: goldSpan === 1 ? hourDates : dayDates,
+    dates: dayDates,
   });
-}
-
-// A character's bags or bank as Bags lists them, without the week's prices.
-function holdings(title, snapshot, seen, missing) {
-  const heading = element("h3", { className: "heading", textContent: title });
-  if (snapshot === null) {
-    return element("div", { className: "panel list-panel" }, [heading, element("p", { className: "panel-note muted", textContent: missing })]);
-  }
-  const table = element("table", { className: "holding" });
-  const [item, ...rest] = BAG_COLUMNS.filter(({ label }) => label !== "7 days");
-  drawTable(table, [{ ...item, label: "Item" }, ...rest], snapshot.rows, { empty: "No unbound items" });
-  return element("div", { className: "panel list-panel" }, [
-    heading,
-    table,
-    element("p", { className: "panel-note muted" }, ["Worth ", money(snapshot.total), ` after the cut · ${seen} ${age(snapshot.at)}`]),
-  ]);
 }
 
 // The gold the addon booked, newest first:
@@ -1940,7 +1848,8 @@ function entryCell(trade) {
   ]);
 }
 
-function tradeColumns(withCharacter) {
+// The columns of Accounting's entries; a character's name picks it with `redraw`.
+function tradeColumns(redraw) {
   return [
     { label: "Entry", className: "item", value: (trade) => trade.item, cell: entryCell },
     {
@@ -1950,14 +1859,7 @@ function tradeColumns(withCharacter) {
       cell: (trade) => element("span", { className: "muted", textContent: SIDES[trade.side].label }),
     },
     { label: "Net", className: "number", value: tradeNet, cell: (trade) => signedMoney(tradeNet(trade)) },
-    ...(withCharacter
-      ? [{
-          label: "Character",
-          className: "character",
-          value: (trade) => trade.name,
-          cell: (trade) => element("a", { href: routeHash({ view: "character", name: trade.name, realm: trade.realm }), textContent: trade.name }),
-        }]
-      : []),
+    { label: "Character", className: "character", value: (trade) => trade.name, cell: (trade) => characterPick(trade, redraw) },
     {
       label: "When",
       className: "number when",
@@ -1966,6 +1868,10 @@ function tradeColumns(withCharacter) {
     },
   ];
 }
+
+// The characters with entries in `trades` as a chip's [key, name] pairs, A to Z.
+const tradeCharacters = (trades) =>
+  [...new Map(trades.map((trade) => [characterKey(trade), trade.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
 
 // A chip of choices: [value, label] pairs, the first for all of them.
 function chip(label, choices, chosen, onchange) {
@@ -1979,17 +1885,20 @@ function chip(label, choices, chosen, onchange) {
 // has it: a title with the choice of revenue or expenses, the cards of what
 // is shown, a search and chips, the entries, and each item's profit under
 // them. The container keeps its choices from one drawing to the next.
-function drawTrades(container, trades, { withCharacter = false, title = "Accounting", heading = "h1" } = {}) {
+function drawTrades(container, trades) {
   if (trades === null) {
     container.replaceChildren();
     return;
   }
   const view = (container.choices ??= { segment: "all", q: "", source: "", sort: null, offset: 0 });
-  const columns = tradeColumns(withCharacter);
+  const redraw = () => drawTrades(container, trades);
+  const columns = tradeColumns(() => {
+    view.offset = 0;
+    redraw();
+  });
   view.sort ??= { column: columns.length - 1, descending: true };
-  const redraw = () => drawTrades(container, trades, { withCharacter, title, heading });
-  const characters = [...new Map(trades.map((trade) => [characterKey(trade), trade.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const character = withCharacter && characters.some(([key]) => key === state.character) ? state.character : "";
+  const characters = tradeCharacters(trades);
+  const character = characters.some(([key]) => key === state.character) ? state.character : "";
   const needle = view.q.toLowerCase();
   const kept = trades.filter((trade) => {
     const side = SIDES[trade.side];
@@ -2061,7 +1970,7 @@ function drawTrades(container, trades, { withCharacter = false, title = "Account
 
   container.replaceChildren(
     element("div", { className: "pagehead" }, [
-      element(heading, { textContent: title }),
+      element("h1", { textContent: "Accounting" }),
       element("p", { className: "sub", textContent: entries(kept.length) }),
       segments,
     ]),
@@ -2079,13 +1988,11 @@ function drawTrades(container, trades, { withCharacter = false, title = "Account
           view.offset = 0;
           redraw();
         }),
-      ...(withCharacter
-        ? [chip("Character", [["", "All characters"], ...characters], character, (value) => {
-            state.character = value;
-            view.offset = 0;
-            redraw();
-          })]
-        : []),
+      chip("Character", [["", "All characters"], ...characters], character, (value) => {
+        state.character = value;
+        view.offset = 0;
+        redraw();
+      }),
     ]),
     element("div", { className: "list" }, [element("section", { className: "panel list-panel" }, [table]), pager]),
     ...(items.length > 0
@@ -2095,8 +2002,8 @@ function drawTrades(container, trades, { withCharacter = false, title = "Account
 }
 
 // A server from before trades answers 404; it has none to show.
-function loadTrades(parameters = {}) {
-  return api("/api/trades", parameters).then(
+function loadTrades() {
+  return api("/api/trades").then(
     ({ trades }) => trades,
     (error) => {
       if (error.status === 404 && error.message === "not found") {
@@ -2105,45 +2012,6 @@ function loadTrades(parameters = {}) {
       throw error;
     },
   );
-}
-
-async function loadCharacter({ name, realm }) {
-  const [character, trades, account] = await latestOnly(
-    "view",
-    Promise.all([
-      api("/api/character", { name, realm }).catch((error) => {
-        if (error.status === 404) {
-          return null;
-        }
-        throw error;
-      }),
-      loadTrades({ name, realm }),
-      api("/api/account"),
-    ]),
-  );
-  // The roster leads to the other characters; the trades of all of them are under Ledger.
-  drawAccount(account, { name, realm });
-  if (character === null) {
-    $("no-character-text").textContent = `No character ${name} on ${realm} in this account.`;
-    showPanel("roster", "no-character");
-    return;
-  }
-  showPanel("roster", "character-page");
-  $("character-title").textContent = character.name;
-  $("character-title").style.color = classColor(character.class);
-  $("character-about").textContent = about(character, { faction: true });
-  $("gold-summary").replaceChildren(...goldSummary(character.gold));
-  $("gold-history").hidden = character.gold.length === 0;
-  if (character.gold.length > 0) {
-    drawGoldChart({ chart: $("gold-chart"), range: $("gold-range") }, character.name, character.gold);
-  }
-  $("holdings").replaceChildren(
-    holdings("Bags", character.bags, "saved", "Log out or /reload in game to save the bags."),
-    holdings("Bank", character.bank, "seen", "Open the bank once in game to see it here."),
-  );
-  // Another character's entries start without the filters of the last one.
-  $("character-trades").choices = null;
-  drawTrades($("character-trades"), trades, { heading: "h3" });
 }
 
 function loginError(error) {
@@ -2156,33 +2024,32 @@ function loginError(error) {
   return `Something went wrong: ${error.message}`;
 }
 
-// "#<view>", or "#character/<name>-<realm>" with each part URI-encoded. Names
-// never contain "-", realms can. `moved` marks a link to a page that has
-// another address now: "#characters/<name>-<realm>" before 0.2.4, and any
-// hash the site does not know, which shows Prices.
+// "#<view>". `moved` marks a link to a page that has another address now:
+// the Characters pages before 0.2.4, which Gold replaced, and any hash the
+// site does not know, which shows Prices. A character page's link,
+// "#character/<name>-<realm>" or before that "#characters/<name>-<realm>"
+// with each part URI-encoded, also names the character Gold picks. Names
+// never contain "-", realms can.
 function parseRoute(hash) {
   const view = hash.slice(1);
   if (view === "") {
     return { view: "prices" };
   }
-  if (ROUTES.has(view) && view !== "character") {
+  if (ROUTES.has(view)) {
     return { view };
   }
-  const [, old, name, realm] = /^#character(s?)\/([^-]+)-(.+)$/.exec(hash) ?? [];
+  if (view === "characters") {
+    return { view: "gold", moved: true };
+  }
+  const [, name, realm] = /^#characters?\/([^-]+)-(.+)$/.exec(hash) ?? [];
   if (name) {
     try {
-      return { view: "character", name: decodeURIComponent(name), realm: decodeURIComponent(realm), moved: old === "s" };
+      return { view: "gold", moved: true, character: characterKey({ name: decodeURIComponent(name), realm: decodeURIComponent(realm) }) };
     } catch {
       // A broken escape is as unknown as any other hash.
     }
   }
   return { view: "prices", moved: true };
-}
-
-function routeHash(route) {
-  return route.view === "character"
-    ? `#character/${encodeURIComponent(route.name)}-${encodeURIComponent(route.realm)}`
-    : `#${route.view}`;
 }
 
 const viewSections = () => NAV.flatMap(({ tabs }) => tabs.flatMap(({ shows }) => shows));
@@ -2552,15 +2419,6 @@ const NAV = [
     ],
   },
   {
-    hub: "Characters",
-    group: "Account",
-    icon: ["M11 5a3 3 0 1 1-6 0a3 3 0 1 1 6 0", "M2 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"],
-    tabs: [
-      { route: "characters", signIn: true, shows: ["account-view"], load: loadAccount },
-      { route: "character", signIn: true, shows: ["account-view"], load: loadCharacter },
-    ],
-  },
-  {
     hub: "Download",
     group: "Account",
     icon: ["M8 2v9M4 7l4 4 4-4M2 14h12"],
@@ -2617,7 +2475,8 @@ let shownHash;
 function render() {
   const route = parseRoute(location.hash);
   if (route.moved) {
-    location.replace(routeHash(route));
+    state.character = route.character ?? state.character;
+    location.replace(`#${route.view}`);
     return;
   }
   const { hub, tab } = ROUTES.get(route.view);
@@ -2645,7 +2504,7 @@ function render() {
     showLogin();
     return;
   }
-  run(() => tab.load(route));
+  run(tab.load);
 }
 
 // The title bar's button names the theme it switches to, as the addon's
