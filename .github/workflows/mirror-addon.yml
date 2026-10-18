@@ -1,31 +1,42 @@
 name: Mirror addon
+# Called by Release promote, which holds the goldbook-production lock, so this
+# workflow has no concurrency group of its own. A manual trigger would mirror
+# whatever is on main; promote the build run again instead.
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - addon/**
-      - .github/workflows/mirror-addon.yml
+  workflow_call:
+    inputs:
+      revision:
+        description: The released commit whose addon/ is mirrored
+        required: true
+        type: string
+    outputs:
+      commit:
+        description: The goldbook-addon commit that holds the revision
+        value: ${{ jobs.mirror.outputs.commit }}
 permissions:
   contents: read
-concurrency:
-  group: mirror-addon
-  cancel-in-progress: false
 jobs:
   mirror:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
     environment: addon-mirror
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      commit: ${{ steps.mirror.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.revision }}
       - name: Mirror the public upstream
+        id: mirror
         env:
           SSH_KEY: ${{ secrets.ADDON_MIRROR_SSH_KEY }}
           GH_TOKEN: ${{ github.token }}
-          REVISION: ${{ github.sha }}
+          REVISION: ${{ inputs.revision }}
         run: |
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid revision: $REVISION" >&2; exit 1; }
+          test "$(git rev-parse HEAD)" = "$REVISION"
           umask 077
           printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/addon-mirror-key"
           gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$RUNNER_TEMP/addon-known-hosts"
@@ -34,9 +45,23 @@ jobs:
           rsync -a --delete --exclude .git addon/ mirror/
           printf '{"repository":"jkc-be/goldbook","revision":"%s","path":"addon"}\n' "$REVISION" > mirror/upstream.json
           git -C mirror add -A
-          if git -C mirror diff --cached --quiet; then exit 0; fi
-          git -C mirror -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Sync addon from public Goldbook $REVISION"
-          git -C mirror push origin HEAD:main
+          if git -C mirror diff --cached --quiet; then
+            # Nothing changed: an earlier promotion of this build already pushed
+            # the mirror. Its HEAD must name this revision.
+            mirrored=$(git -C mirror show HEAD:upstream.json | python3 -c 'import json, sys; print(json.load(sys.stdin)["revision"])')
+            if [ "$mirrored" != "$REVISION" ]; then
+              echo "goldbook-addon HEAD names $mirrored, not $REVISION" >&2
+              exit 1
+            fi
+            echo "goldbook-addon already holds $REVISION"
+          else
+            git -C mirror -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Sync addon from public Goldbook $REVISION"
+            git -C mirror push origin HEAD:main
+          fi
+          commit=$(git -C mirror rev-parse HEAD)
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+          # shellcheck disable=SC2016 # the backticks are Markdown
+          printf 'goldbook-addon commit `%s` holds revision `%s`.\n' "$commit" "$REVISION" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove mirror credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/addon-mirror-key" "$RUNNER_TEMP/addon-known-hosts"

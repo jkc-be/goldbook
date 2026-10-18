@@ -12,16 +12,24 @@ on:
 permissions:
   contents: read
 
+# Shared with Release promote, so a deploy and a promotion never interleave.
 concurrency:
-  group: ovh-production-deploy
+  group: goldbook-production
   cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/jkc-be/goldbook-server
 
 jobs:
+  check:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml
+
   build-push:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -61,36 +69,17 @@ jobs:
       packages: read
       actions: read
     steps:
-      - name: Configure deployment SSH identity
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          test -n "$SSH_KEY"
-          test -n "$KNOWN_HOSTS"
-          install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/ovh_deploy"
-          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/ovh_deploy" "$HOME/.ssh/known_hosts"
-      - name: Deploy image and wait for health
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REVISION: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          VERIFY_ONLY: ${{ inputs.verify_only }}
-        run: |
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_USER"
-          operation=deploy
-          if [ "$VERIFY_ONLY" = true ]; then operation=verify; fi
-          printf '%s' "$REGISTRY_TOKEN" | ssh -T \
-            -i "$HOME/.ssh/ovh_deploy" \
-            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=12 \
-            "$DEPLOY_USER@$DEPLOY_HOST" "$operation $RUN_ID $REVISION"
-          printf 'OVH operation `%s` passed for commit `%s`.\n' "$operation" "$REVISION" >> "$GITHUB_STEP_SUMMARY"
-      - name: Remove SSH credentials
-        if: always()
-        run: rm -f "$HOME/.ssh/ovh_deploy" "$HOME/.ssh/known_hosts"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+      - uses: ./.github/actions/ovh
+        with:
+          operation: ${{ inputs.verify_only && 'verify' || 'deploy' }}
+          run-id: ${{ github.run_id }}
+          revision: ${{ github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}

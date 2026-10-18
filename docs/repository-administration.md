@@ -39,6 +39,11 @@ python3 scripts/configure-github.py --check
 | `release-signing` | `TAURI_SIGNING_PRIVATE_KEY` | `jkc-be` | `main` |
 | `addon-mirror` | `ADDON_MIRROR_SSH_KEY` | `jkc-be` | `main` |
 
+`release-signing` signs the installers and the addon update in **Release
+build**. `production` approves **Deploy to OVH**, the `verify` job of
+**Release build**, and the `server` and `publish` jobs of **Release promote**.
+`addon-mirror` approves the mirror push in **Release promote**.
+
 Administrator bypass is disabled for all three environments. Self-review is allowed
 so the sole maintainer can approve a workflow they started. Only the listed
 reviewer can approve. Jobs cannot receive environment secrets before approval.
@@ -84,11 +89,19 @@ reviewing the run. Uncheck `verify_only` for a deployment. That pins the image
 digest, waits for health, and restores the previous image and configuration on
 startup failure. It does not roll back database migrations.
 
+**Deploy to OVH** first runs every check in `check.yml` for the same commit and
+builds the image only when they pass. It shares the concurrency group
+`goldbook-production` with **Release promote**, so a server-only deploy and a
+promotion never interleave.
+
 The server retains its Compose files. Review and copy Compose changes separately
-before deploying an image that depends on them. Deployment and update publication
-use separate locks. Desktop releases and addon publication require signing
-approval followed by production publication approval. The public source import
-does not itself require publishing a new release.
+before deploying an image that depends on them. On OVH, deployment and update
+publication use separate locks. Releases go through **Release build** and
+**Release promote**, described in [releasing](releasing.md). The SSH handling
+for all three workflows lives in the composite action `.github/actions/ovh`.
+Build artifacts are kept for 30 days, which is how long a build run can be
+promoted. The public source import does not itself require publishing a new
+release.
 
 GitHub documents [rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
 and [environment protection](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
@@ -99,9 +112,12 @@ the all-rights-reserved license does not make this open source.
 ## Addon distribution mirror
 
 `jkc-be/goldbook-addon` is generated from this repository's `addon/` directory.
-After a push to main changes the addon, approve **Mirror addon** in the
+**Release promote** mirrors the released commit through the called **Mirror
+addon** workflow, which has no trigger of its own; approve it in the
 `addon-mirror` environment. The workflow uses a dedicated write deploy key for
-the addon repository. It cannot deploy to OVH or sign client updates.
+the addon repository. It cannot deploy to OVH or sign client updates. Its push
+starts the target's **Package addon release** workflow, which Release promote
+waits for before it tags the release.
 
 The addon repository's main branch permits updates only by the sole maintainer
 or this deploy key. Force pushes and deletion are blocked, including for the

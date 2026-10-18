@@ -1212,8 +1212,9 @@ files, so update those before deploying the Rust image through Actions.
 
 This repository contains the desktop, server, web UI, and `addon/` sources.
 [jkc-be/goldbook-addon](https://github.com/jkc-be/goldbook-addon) mirrors
-`addon/` from this public repository. The **Mirror addon** workflow runs for
-addon changes on `main` and requires approval of the `addon-mirror` environment.
+`addon/` from this public repository. **Release promote** mirrors each release
+through the **Mirror addon** workflow, which requires approval of the
+`addon-mirror` environment.
 The mirror records its source commit in `upstream.json` and publishes a
 `Goldbook-<version>.zip` release asset with `Goldbook/Goldbook.toc` at its root.
 The mirror's release workflow uploads that exact ZIP to CurseForge project
@@ -1253,14 +1254,15 @@ To publish a client update, add the version's changes to
 `make version VERSION=<major.minor.patch>`. It writes the version to
 `package.json`, `package-lock.json`, the Cargo package manifests and
 `Cargo.lock`, `desktop/src-tauri/tauri.conf.json`, and the addon TOC. Commit
-that, merge it to main, then run **Release desktop** on main. The client only
-installs a release with a higher version than its own, so a release under the
-same version reaches only new installs. `make build` builds with the version as
-it stands and publishes nothing. It builds signed macOS Apple Silicon,
-Windows x64, Ubuntu deb, and Fedora rpm packages, and publishes a complete feed
-at the Goldbook site. The individual build workflows still produce standalone
-installers. Addon changes on main publish their own signed update automatically;
-**Publish addon update** can also run manually.
+that, merge it to main, then run **Release build** and **Release promote** on
+main as [releasing](docs/releasing.md) describes. The client only installs a
+release with a higher version than its own, so a release under the same
+version reaches only new installs. `make build` builds with the version as it
+stands and publishes nothing. Release build builds signed macOS Apple Silicon,
+Windows x64, Ubuntu deb, and Fedora rpm packages and the signed addon update.
+Release promote publishes that complete feed at the Goldbook site. The
+individual build workflows still produce standalone installers. Merging to
+main publishes nothing.
 
 The website's **Download** page offers the client installers from
 `updates/latest.json` on the same server. It selects the visitor's system,

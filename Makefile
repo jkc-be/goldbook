@@ -76,7 +76,7 @@ endif
 	bash server/deploy.sh $(OVH_HOST)
 
 # Sets the client and addon version everywhere a release reads it, such as
-# make version VERSION=0.1.5. Then commit, merge to main and run Release desktop.
+# make version VERSION=0.1.5. A release uses prepare-release instead.
 version:
 	@test -n "$(VERSION)" || { echo "Usage: make version VERSION=0.1.5"; exit 1; }
 	python3 scripts/set-version.py $(VERSION)
