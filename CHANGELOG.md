@@ -13,11 +13,15 @@ were released with.
 
 - The window's rail has three hubs instead of seven views, each with tabs
   across the top of the page: **Market** (Prices, Deals, Movers),
-  **Inventory** (Bags, Mail) and **Ledger** (Gold, Accounting). A hub opens
+  **Inventory** (Bags, Mail) and **Ledger** (Gold, Accounting, By item). A hub opens
   the tab it showed last. Every command still opens its own tab, the mailbox
   still opens Mail, and the mail count sits by Inventory. An item's history
   keeps the hub it was opened from. Lists show 17 rows instead of 19.
 - Sell becomes Bags (`/gb bags`; `/gb sell` still opens it).
+- Add a By item tab under Ledger (`/gb items`): the accounting per item, with
+  units bought and sold, the average cost and sale, the realized profit or
+  loss and when the item last moved, a search box, and profession, item,
+  quality and character filters.
 - Shift+click an item at the auction house to open its price history in
   Goldbook, as Midas does: in the auction house's lists, your bags and addons
   such as Auctionator, but not while writing in chat. An Options tick turns it

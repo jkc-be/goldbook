@@ -322,6 +322,27 @@ local loss = { accruing = {}, trades = { A = {
   { at = 2, side = "vendor", item = "Jagged Star of the Eagle", count = 1, price = 1900, fee = 0 },
 } }, items = {} }
 eq(Trades.Totals(Trades.Rows(loss)).profit, -400, "sold to a vendor for less than it cost is a loss")
+local mixed = { accruing = {}, items = {}, trades = {
+  ["A-R"] = {
+    { at = 10, side = "buy", item = "Runecloth", count = 20, price = 2000, fee = 0 },
+    { at = 20, side = "repair", item = "Repairs", count = 1, price = 500, fee = 0 },
+    { at = 30, side = "sell", item = "Runecloth", count = 10, price = 1500, fee = 75 },
+  },
+  ["B-R"] = { { at = 40, side = "merchant", item = "Coarse Thread", count = 5, price = 50, fee = 0 } },
+} }
+local perItem = {}
+for _, item in ipairs(Trades.Items(Trades.Rows(mixed))) do
+  perItem[#perItem + 1] = table.concat({ item.name, item.bought, item.cost, tostring(item.averageCost), item.sold, item.proceeds,
+    tostring(item.averageSale), tostring(item.profit), item.last }, " ")
+end
+eq(table.concat(perItem, " / "), "Coarse Thread 5 50 10 0 0 nil nil 40 / Runecloth 20 2000 100 10 1425 142.5 425 30",
+  "By item adds up the goods per item, realizes profit on the units both bought and sold, and leaves out gold-only entries")
+SlashCmdList.GOLDBOOK("items jagged")
+eq(GoldbookWindow.tabs.items.selected.shown, true, "/gb items opens the By item view")
+eq(cells(1), "Jagged Star of the Eagle | 1 | 23s 00c | 1 | 31s 00c | +8s 00c | just now", "an item bought for 23s and sold for 31s")
+eq(cards() .. " " .. plain(GoldbookWindow.cards.cards[4].detail.text),
+  "BOUGHT 23s 00c / SOLD 31s 00c / REALIZED PROFIT +8s 00c / BEST ITEM +8s 00c Jagged Star of the Eagle",
+  "the cards total the items shown, the best item under its profit")
 GoldbookWindow.search:SetText("")
 
 -- The file the end-to-end check uploads, with the account the sync tests use.

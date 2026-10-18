@@ -367,6 +367,7 @@ hub.
 | `/gb gold` | Your account: gold per character, gains, a 30 day chart and net worth |
 | `/gb mail [text]`, or open a mailbox | The open mailbox: every mail with its items, sender, days left and gold, and a button that collects the mails shown. See [Mail](#mail) |
 | `/gb accounting` | Your revenue and expenses, newest first: auction and vendor sales, purchases, trades with players, mail, repairs, flights and every other gold movement, with what each did to your gold. `/gb trades` opens it too. See [Accounting](#accounting) |
+| `/gb items [text]` | Your accounting per item: units bought and sold, the average cost and sale, the profit or loss realized and when the item last moved. See [Accounting](#accounting) |
 | Alt+click an item, or `/gb item <link or name>` | The item's price history. Works on items in bags, the bank, chat links, loot, the auction house and the Goldbook lists |
 | Shift+click an item at the auction house | Also opens its price history, for an item Goldbook has a price for. Works in the auction house's own lists, in your bags and in addons such as Auctionator, and not while you are writing in chat |
 | Click a column header | Sorts the list by that column. Click again to reverse |
@@ -568,6 +569,13 @@ the profit or loss realized on goods both bought and sold, however they were
 bought and sold. Buy a Jagged Star of the Eagle for 23s and sell it to a
 vendor for 31s, and that is a profit of 8s; sell it for 19s, and a loss of
 4s. The Gold view shows the same totals for the last 30 days.
+
+**By item**, the tab after Accounting, or `/gb items`, adds the entries up
+per item: units bought and sold, the average cost and the average sale after
+the cut, the profit or loss on the units that were both bought and sold, and
+when the item last moved. The search box matches the item, and the
+profession, item, quality and character chips filter it. The cards total what
+was bought and sold, the realized profit and the item that made the most.
 
 Goldbook keeps 180 days and at most 3,000 entries per character, never
 dropping one less than 30 days old, so that an invoice still in the mailbox is

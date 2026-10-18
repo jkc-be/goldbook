@@ -1178,6 +1178,8 @@ local function captureViews(suffix)
   sources.scripts.OnClick(sources)
   local all = GoldbookWindow.segments.buttons[1]
   all.scripts.OnClick(all)
+  run("items")
+  captureWindow("items" .. suffix)
   -- The mailbox opens the Mail view, and closing it closes the window. Its
   -- invoices book trades; the seeded ones are kept, so both themes match.
   local trades = ns.db.trades

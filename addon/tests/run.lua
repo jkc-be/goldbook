@@ -1006,20 +1006,20 @@ GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.butto
 
 -- Each command lands on its own hub and tab; a hub opens the tab it showed last.
 local landed = {}
-for _, command in ipairs({ "show", "deals", "movers", "bags", "sell", "mail", "gold", "accounting", "trades" }) do
+for _, command in ipairs({ "show", "deals", "movers", "bags", "sell", "mail", "gold", "items", "accounting", "trades" }) do
   SlashCmdList.GOLDBOOK(command)
   landed[#landed + 1] = command .. " " .. navigation()
 end
 eq(table.concat(landed, " / "), "show Market: [Prices] Deals Movers / deals Market: Prices [Deals] Movers"
   .. " / movers Market: Prices Deals [Movers] / bags Inventory: [Bags] Mail / sell Inventory: [Bags] Mail"
-  .. " / mail Inventory: Bags [Mail] / gold Ledger: [Gold] Accounting / accounting Ledger: Gold [Accounting]"
-  .. " / trades Ledger: Gold [Accounting]", "every command opens its view under its hub, /gb sell as /gb bags")
+  .. " / mail Inventory: Bags [Mail] / gold Ledger: [Gold] Accounting By item / items Ledger: Gold Accounting [By item]"
+  .. " / accounting Ledger: Gold [Accounting] By item / trades Ledger: Gold [Accounting] By item", "every command opens its view under its hub, /gb sell as /gb bags")
 GoldbookWindow.hubs.market.scripts.OnClick()
 eq(navigation(), "Market: Prices Deals [Movers]", "a hub opens on the tab it showed last")
 GoldbookWindow.hubs.inventory.scripts.OnClick()
 GoldbookWindow.tabs.bags.scripts.OnClick()
 GoldbookWindow.hubs.ledger.scripts.OnClick()
-eq(navigation(), "Ledger: Gold [Accounting]", "and keeps it while another hub is shown")
+eq(navigation(), "Ledger: Gold [Accounting] By item", "and keeps it while another hub is shown")
 GoldbookWindow.hubs.inventory.scripts.OnClick()
 eq(navigation() .. " / " .. head(), "Inventory: [Bags] Mail / Bags |  | 4 items in your bags", "a tab clicked becomes the hub's last")
 eq(GoldbookDB.settings.hubViews.market .. " " .. GoldbookDB.settings.hubViews.inventory .. " " .. GoldbookDB.settings.hubViews.ledger,

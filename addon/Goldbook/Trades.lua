@@ -385,23 +385,21 @@ function Trades.Rows(db)
   return rows
 end
 
--- What `rows` add up to: `revenue` after the auction house cut, `expenses`,
--- and `net` the two together. `profit` is the profit or loss realized per
--- item on the goods both bought and sold, however they were bought and sold,
--- at the average sale less the average cost, nil when no item was both.
-function Trades.Totals(rows)
-  local totals = { revenue = 0, expenses = 0, net = 0 }
-  local items = {}
+-- One row per item that `rows` moved, the goods of every side however they
+-- were bought and sold, by name: { name, key, quality, bought, cost, sold,
+-- proceeds, averageCost, averageSale, profit, last }. `profit` is realized on
+-- the units both bought and sold, at the average sale less the average cost,
+-- nil when none were both; `last` is when the item last moved.
+function Trades.Items(rows)
+  local items, byName = {}, {}
   for _, row in ipairs(rows) do
-    if row.revenue then
-      totals.revenue = totals.revenue + row.net
-    else
-      totals.expenses = totals.expenses - row.net
-    end
-    totals.net = totals.net + row.net
     if row.goods then
-      local item = items[row.name] or { bought = 0, cost = 0, sold = 0, proceeds = 0 }
-      items[row.name] = item
+      local item = byName[row.name]
+      if not item then
+        item = { name = row.name, quality = row.quality, bought = 0, cost = 0, sold = 0, proceeds = 0, last = row.at }
+        byName[row.name], items[#items + 1] = item, item
+      end
+      item.key, item.last = item.key or row.key, math.max(item.last, row.at)
       if row.revenue then
         item.sold, item.proceeds = item.sold + row.count, item.proceeds + row.net
       else
@@ -409,11 +407,33 @@ function Trades.Totals(rows)
       end
     end
   end
-  for _, item in pairs(items) do
+  for _, item in ipairs(items) do
+    item.averageCost = item.bought > 0 and item.cost / item.bought or nil
+    item.averageSale = item.sold > 0 and item.proceeds / item.sold or nil
     local matched = math.min(item.bought, item.sold)
     if matched > 0 then
-      totals.profit = (totals.profit or 0)
-        + math.floor(matched * (item.proceeds / item.sold - item.cost / item.bought) + 0.5)
+      item.profit = math.floor(matched * (item.averageSale - item.averageCost) + 0.5)
+    end
+  end
+  return items
+end
+
+-- What `rows` add up to: `revenue` after the auction house cut, `expenses`,
+-- and `net` the two together. `profit` is the sum of Trades.Items' profits,
+-- nil when no item was both bought and sold.
+function Trades.Totals(rows)
+  local totals = { revenue = 0, expenses = 0, net = 0 }
+  for _, row in ipairs(rows) do
+    if row.revenue then
+      totals.revenue = totals.revenue + row.net
+    else
+      totals.expenses = totals.expenses - row.net
+    end
+    totals.net = totals.net + row.net
+  end
+  for _, item in ipairs(Trades.Items(rows)) do
+    if item.profit then
+      totals.profit = (totals.profit or 0) + item.profit
     end
   end
   return totals

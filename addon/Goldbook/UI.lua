@@ -15,7 +15,7 @@ local PAGE_LEFT, PAGE_TOP, PAGE_WIDTH, PAGE_BOTTOM = RAIL_WIDTH + 16, TABS_TOP +
 local GAP = 10
 local HEAD_HEIGHT, TOOLBAR_HEIGHT, STATUS_HEIGHT, HEADING_HEIGHT = 28, 28, 16, 30
 local CARD_GAP, CARD_HEIGHT, CARD_DETAIL_HEIGHT = 8, 54, 72
-local HEADER_HEIGHT, ROW_HEIGHT, MAX_ROWS, MAX_COLUMNS = 27, 23, 20, 6
+local HEADER_HEIGHT, ROW_HEIGHT, MAX_ROWS, MAX_COLUMNS = 27, 23, 20, 7
 local CELL_PAD, ICON_SIZE = 10, 18
 local SPARK_WIDTH, SPARK_HEIGHT, SPARK_DAYS = 64, 16, 7
 local TAG_HEIGHT, ACTION_WIDTH, ACTION_HEIGHT = 18, 150, 24
@@ -782,6 +782,59 @@ local VIEWS = {
       return joinedStatus(scrollRange(rows, visible), "Open a mailbox to book auction sales and purchases")
     end,
   },
+  items = {
+    tab = "By item",
+    icons = true,
+    blocks = { "cards", "toolbar", "table" },
+    search = "Search items",
+    chips = { "profession", "kind", "quality", "character" },
+    -- An entry booked without its item's key matches no profession.
+    keep = function(row)
+      return (row.key ~= nil or (filters.profession == "" and filters.kind == "all")) and keepItem(row)
+    end,
+    columns = { { "Item", "name", 188 }, { "Bought", "bought", 74 }, { "Avg cost", "averageCost", 92 }, { "Sold", "sold", 52 },
+      { "Avg sale", "averageSale", 92 }, { "Profit", "profit", 94 }, { "Last", "last", 85 } },
+    sort = { 7, true },
+    -- The character chip picks the entries, before they are added up per item.
+    rows = function(text)
+      local needle, entries = text:lower(), {}
+      for _, row in ipairs(Trades.Rows(ns.db)) do
+        if (filters.character == nil or row.character == filters.character) and row.name:lower():find(needle, 1, true) then
+          entries[#entries + 1] = row
+        end
+      end
+      return Trades.Items(entries)
+    end,
+    cells = function(row)
+      local function average(copper)
+        return copper and money(math.floor(copper + 0.5)) or tint("muted", "–")
+      end
+      return itemText(row), tostring(row.bought), average(row.averageCost), tostring(row.sold), average(row.averageSale),
+        row.profit and change(row.profit) or tint("muted", "–"), tint("muted", Codec.Age(time() - row.last))
+    end,
+    head = function(rows)
+      return { sub = plural(#rows, "item") }
+    end,
+    cards = function(rows)
+      local cost, proceeds, profit, best = 0, 0, nil, nil
+      for _, row in ipairs(rows) do
+        cost, proceeds = cost + row.cost, proceeds + row.proceeds
+        if row.profit then
+          profit = (profit or 0) + row.profit
+          best = (not best or row.profit > best.profit) and row or best
+        end
+      end
+      return {
+        { "Bought", money(cost) },
+        { "Sold", money(proceeds) },
+        { "Realized profit", profit and change(profit) or tint("muted", "–") },
+        { "Best item", best and change(best.profit) or tint("muted", "–"), best and itemText(best) },
+      }
+    end,
+    status = function(rows, visible)
+      return joinedStatus(scrollRange(rows, visible), "Profit counts the units both bought and sold, at the average sale less the average cost")
+    end,
+  },
   mail = {
     tab = "Mail",
     icons = true,
@@ -897,7 +950,7 @@ local VIEWS = {
 local HUBS = {
   { key = "market", label = "Market", icon = "tag", views = { "prices", "deals", "movers" } },
   { key = "inventory", label = "Inventory", icon = "bag", views = { "bags", "mail" } },
-  { key = "ledger", label = "Ledger", icon = "scales", views = { "gold", "accounting" } },
+  { key = "ledger", label = "Ledger", icon = "scales", views = { "gold", "accounting", "items" } },
 }
 for _, hub in ipairs(HUBS) do
   for _, name in ipairs(hub.views) do
