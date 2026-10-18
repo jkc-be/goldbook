@@ -43,6 +43,8 @@ class PublishUpdates(unittest.TestCase):
             'url': 'https://app.jkc-be.com/goldbook/updates/' + REVISION + '/client.tar.gz', 'signature': 'signed'}}}
         self.files = {'latest.json': json.dumps(self.manifest), REVISION + '/client.tar.gz': 'signed package'}
         self.artifacts = [{'id': 456, 'name': 'Goldbook-update-feed', 'expired': False}]
+        self.relation = None
+        self.compares = []
 
     def use_root(self, name):
         root = self.root / name
@@ -73,6 +75,9 @@ class PublishUpdates(unittest.TestCase):
     def response(self, request, **_):
         if request.full_url.endswith('/actions/runs/123'):
             value = json.dumps(self.run).encode()
+        elif '/compare/' in request.full_url:
+            self.compares.append(request.full_url.split('/compare/', 1)[1])
+            value = json.dumps({'status': self.relation}).encode()
         elif request.full_url.endswith('/actions/runs/123/artifacts'):
             value = json.dumps({'artifacts': self.artifacts}).encode()
         else:
@@ -100,8 +105,34 @@ class PublishUpdates(unittest.TestCase):
             self.publish()
         self.assertEqual((destination / REVISION / 'client.tar.gz').read_text(), 'signed package')
 
-    def test_rejects_wrong_revision_branch_workflow_path_and_missing_package(self):
-        for field, value in [('head_sha', 'b' * 40), ('head_branch', 'other'), ('path', '.github/workflows/other.yml'),
+    def test_run_for_the_revision_needs_no_comparison(self):
+        self.release_build()
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.compares, [])
+
+    def test_run_dispatched_on_a_later_commit_of_main_can_publish_the_revision(self):
+        before = self.published_before()
+        self.run['head_sha'] = 'b' * 40
+        for relation in ('behind', 'diverged'):
+            self.relation = relation
+            self.release_build()
+            with self.subTest(relation=relation), self.assertRaisesRegex(
+                    RuntimeError, f'^Run 123 is for commit {"b" * 40}, which does not contain {REVISION}$'):
+                self.publish()
+            self.assertEqual(self.snapshot(), before)
+        self.relation = 'ahead'
+        self.compares = []
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.compares, [REVISION + '...' + 'b' * 40])
+
+    def test_untrusted_run_is_refused_before_any_comparison(self):
+        self.run.update(head_sha='b' * 40, head_branch='other')
+        with self.assertRaisesRegex(RuntimeError, 'Only a maintainer Goldbook workflow'):
+            self.publish()
+        self.assertEqual(self.compares, [])
+
+    def test_rejects_untrusted_branch_workflow_path_and_missing_package(self):
+        for field, value in [('head_branch', 'other'), ('path', '.github/workflows/other.yml'),
                              ('repository', {'full_name': 'other/goldbook'}),
                              ('head_repository', {'full_name': 'other/goldbook'}),
                              ('actor', {'id': 123}), ('triggering_actor', {'id': 123}),

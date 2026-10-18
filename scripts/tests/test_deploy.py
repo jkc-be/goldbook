@@ -19,6 +19,7 @@ REVISION = "a" * 40
 DIGEST = "sha256:" + "b" * 64
 IMAGE = deployment.REPOSITORY + "@" + DIGEST
 REPOINTED = deployment.REPOSITORY + "@sha256:" + "c" * 64
+ACTIVE = "d" * 40
 
 
 class DeploymentTest(unittest.TestCase):
@@ -47,6 +48,9 @@ class DeploymentTest(unittest.TestCase):
         self.active_image = "goldbook"
         self.healthy = True
         self.label = REVISION
+        self.active_labels = {"org.opencontainers.image.revision": ACTIVE, "traefik.enable": "true"}
+        self.relation = "behind"
+        self.compares = []
         self.starts = []
         self.pulls = []
         self.registry_config = None
@@ -57,6 +61,9 @@ class DeploymentTest(unittest.TestCase):
                           {"id": 789, "name": "Goldbook-update-feed", "expired": False}]
 
     def github(self, request, **_):
+        if "/compare/" in request.full_url:
+            self.compares.append(request.full_url.split("/compare/", 1)[1])
+            return io.BytesIO(json.dumps({"status": self.relation}).encode())
         if request.full_url.endswith("/actions/runs/123/artifacts"):
             return io.BytesIO(json.dumps({"artifacts": self.artifacts}).encode())
         self.assertTrue(request.full_url.endswith("/actions/artifacts/456/zip"))
@@ -77,6 +84,8 @@ class DeploymentTest(unittest.TestCase):
                                       "RepoDigests": [self.registry[args[2]]]}])
             elif args[-1] == "{{.Config.Image}}":
                 stdout = self.active_image
+            elif args[-1] == "{{json .Config.Labels}}":
+                stdout = json.dumps(self.active_labels)
             else:
                 stdout = "healthy" if self.healthy else "unhealthy"
         elif args[:2] == ("docker", "compose"):
@@ -202,11 +211,72 @@ class DeploymentTest(unittest.TestCase):
         self.assertEqual(list((self.root / "backups").iterdir()), [])
         self.assertEqual(self.starts, [])
 
-    def test_repeated_deploy_keeps_one_image_setting(self):
+    def test_deploy_over_a_pinned_image_keeps_one_image_setting(self):
+        self.original += "GOLDBOOK_IMAGE=" + REPOINTED + "\n"
+        self.env_file.write_text(self.original)
+        self.active_image = REPOINTED
         self.run_deploy()
-        self.run_deploy()
-        self.assertEqual(self.env_file.read_text(), self.original + "GOLDBOOK_IMAGE=" + IMAGE + "\n")
-        self.assertEqual(self.starts, [IMAGE, IMAGE])
+        self.assertEqual(self.env_file.read_text(), self.original.replace(REPOINTED, IMAGE))
+        self.assertEqual(self.starts, [IMAGE])
+
+    def assert_nothing_changed(self):
+        self.assertEqual(self.env_file.read_text(), self.original)
+        self.assertEqual(list(self.root.glob(".env.before-*")), [])
+        self.assertEqual(list((self.root / "backups").iterdir()), [])
+        self.assertEqual(self.starts, [])
+        self.assertEqual(self.active_image, "goldbook")
+
+    def test_server_already_running_the_revision_is_left_alone(self):
+        self.active_labels["org.opencontainers.image.revision"] = REVISION
+        self.assertEqual(self.run_deploy(), {"skipped": True, "revision": REVISION, "active_revision": REVISION,
+                                             "active_image": "goldbook"})
+        self.assertEqual(self.compares, [])
+        self.assert_nothing_changed()
+
+    def test_server_running_a_newer_commit_is_not_moved_back(self):
+        self.relation = "ahead"
+        self.assertEqual(self.run_deploy(), {"skipped": True, "revision": REVISION, "active_revision": ACTIVE,
+                                             "active_image": "goldbook"})
+        self.assertEqual(self.compares, [REVISION + "..." + ACTIVE])
+        self.assert_nothing_changed()
+
+    def test_revision_newer_than_the_running_one_is_deployed(self):
+        result = self.run_deploy()
+        self.assertEqual(self.compares, [REVISION + "..." + ACTIVE])
+        self.assertEqual((result["revision"], result["active_image"]), (REVISION, IMAGE))
+        self.assertEqual(self.starts, [IMAGE])
+
+    def test_revision_that_diverged_from_the_running_one_is_refused(self):
+        for relation in ("diverged", "unknown"):
+            self.relation = relation
+            for verify_only in (False, True):
+                with self.subTest(relation=relation, verify_only=verify_only), self.assertRaisesRegex(
+                        RuntimeError, f"^Requested revision {REVISION} does not descend from active revision "
+                                      f"{ACTIVE} \\(GitHub reports {relation}\\); reconcile them by hand$"):
+                    self.run_deploy(verify_only=verify_only)
+                self.assert_nothing_changed()
+
+    def test_running_image_without_a_revision_label_is_refused(self):
+        for labels in (None, {}, {"traefik.enable": "true"}, {"org.opencontainers.image.revision": "goldbook"}):
+            self.active_labels = labels
+            for verify_only in (False, True):
+                with self.subTest(labels=labels, verify_only=verify_only), self.assertRaisesRegex(
+                        RuntimeError, "^The running image has no org.opencontainers.image.revision commit label; "
+                                      "reconcile the running image by hand before deployment$"):
+                    self.run_deploy(verify_only=verify_only)
+                self.assert_nothing_changed()
+        self.assertEqual(self.compares, [])
+
+    def test_verify_reports_whether_a_deploy_would_change_the_server(self):
+        for active, relation, would_deploy in [(REVISION, "identical", False), (ACTIVE, "ahead", False),
+                                               (ACTIVE, "behind", True)]:
+            self.active_labels["org.opencontainers.image.revision"] = active
+            self.relation = relation
+            with self.subTest(relation=relation):
+                self.assertEqual(self.run_deploy(verify_only=True),
+                                 {"verified_revision": REVISION, "active_revision": active, "active_image": "goldbook",
+                                  "would_deploy": would_deploy, "health": "healthy", "service_changed": False})
+                self.assert_nothing_changed()
 
     def test_unhealthy_deploy_restores_previous_image_and_configuration(self):
         self.healthy = False

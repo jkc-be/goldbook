@@ -115,12 +115,28 @@ def deploy(run_id, revision, token, verify_only=False):
                 raise
             run("docker", "pull", previous, timeout=300)
             run("docker", "image", "inspect", previous, capture=True)
+        labels = json.loads(inspect(container, "--format", "{{json .Config.Labels}}")) or {}
+        active = labels.get("org.opencontainers.image.revision", "")
+        if not re.fullmatch(r"[0-9a-f]{40}", active):
+            raise RuntimeError("The running image has no org.opencontainers.image.revision commit label; "
+                               "reconcile the running image by hand before deployment")
+        # Never move the server back; it may already run a newer commit, such as a hotfix.
+        relation = compare(revision, active, token)
+        if relation not in ("identical", "ahead", "behind"):
+            raise RuntimeError(f"Requested revision {revision} does not descend from active revision {active} "
+                               f"(GitHub reports {relation}); reconcile them by hand")
+        would_deploy = relation == "behind"
 
         if verify_only:
             if inspect(container, "--format", "{{.State.Health.Status}}") != "healthy":
                 raise RuntimeError("Goldbook is not healthy")
-            print(json.dumps({"verified_revision": revision, "active_image": previous,
+            print(json.dumps({"verified_revision": revision, "active_revision": active,
+                              "active_image": previous, "would_deploy": would_deploy,
                               "health": "healthy", "service_changed": False}), flush=True)
+            return
+        if not would_deploy:
+            print(json.dumps({"skipped": True, "revision": revision, "active_revision": active,
+                              "active_image": previous}), flush=True)
             return
 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -183,17 +199,28 @@ def github_request(path, token):
         "X-GitHub-Api-Version": "2022-11-28"}), timeout=120)
 
 
+def compare(base, head, token):
+    """Returns GitHub's status of head against base: identical, ahead, behind or diverged."""
+    if base == head:
+        return "identical"
+    with github_request(f"/compare/{base}...{head}", token) as response:
+        return json.load(response)["status"]
+
+
 def verify_run(run_id, revision, token, workflows):
     with github_request(f"/actions/runs/{run_id}", token) as response:
         run = json.load(response)
     workflow = run["path"].split("@", 1)[0]
-    if (run["head_sha"] != revision or run["head_branch"] != "main"
+    if (run["head_branch"] != "main"
             or workflow not in workflows
             or run["repository"]["full_name"] != GITHUB_REPOSITORY
             or run["head_repository"]["full_name"] != GITHUB_REPOSITORY
             or run["actor"]["id"] != 156444954 or run["triggering_actor"]["id"] != 156444954
             or run["event"] not in ("workflow_dispatch", "push")):
         raise RuntimeError("Only a maintainer Goldbook workflow on main can deploy or publish")
+    # A release build can build an earlier commit of main than the one it was dispatched on.
+    if compare(revision, run["head_sha"], token) not in ("identical", "ahead"):
+        raise RuntimeError(f"Run {run_id} is for commit {run['head_sha']}, which does not contain {revision}")
     return workflow
 
 

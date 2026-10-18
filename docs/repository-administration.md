@@ -81,12 +81,15 @@ mode 700. Rerun it after every change to `scripts/deploy-ovh.py`; the server
 keeps running the helper it last installed.
 
 The helper accepts four commands, each given a workflow run ID and a commit
-SHA. The run must be the one that built what is being shipped.
+SHA. The run must be the one that built what is being shipped. Its head commit
+must be that SHA or a later commit that contains it, as GitHub's compare API
+reports, so a **Release build** can build an earlier commit of `main` than the
+one `main` pointed at when the run started.
 
 | Command | Accepted workflows | Effect |
 | --- | --- | --- |
-| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the run's image and the running service. Changes nothing. |
-| `deploy` | `deploy.yml`, `release-build.yml` | Backs up the database, then replaces the running image with the run's image. |
+| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the run's image and the running service, and reports whether `deploy` would replace it. Changes nothing. |
+| `deploy` | `deploy.yml`, `release-build.yml` | When the commit is newer than the running one, backs up the database, then replaces the running image with the run's image. |
 | `check-publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
 | `publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Validates and publishes the run's update feed. |
 
@@ -99,6 +102,22 @@ digest is malformed. It pulls `ghcr.io/jkc-be/goldbook-server@<digest>`, checks
 that its `org.opencontainers.image.revision` label is the commit, and pins that
 digest in `GOLDBOOK_IMAGE`. A **Deploy to OVH** run from before this artifact
 existed cannot deploy; start a new run.
+
+A deploy never moves the server back to an older commit. After the checks
+above, the helper reads the `org.opencontainers.image.revision` label of the
+running container and asks GitHub how the requested commit relates to it:
+
+- The running commit is the requested one, or is newer and contains it, for
+  example after a **Deploy to OVH** hotfix. `deploy` changes nothing, takes no
+  backup and prints `{"skipped": true, "revision": ..., "active_revision": ...,
+  "active_image": ...}`. `verify` prints `"would_deploy": false`.
+- The requested commit is newer and contains the running one. `deploy` goes
+  ahead, and `verify` prints `"would_deploy": true`.
+- The two commits have diverged. Both commands refuse and name both commits.
+
+Both commands also refuse when the running image has no such label, for example
+an image built on the server. Reconcile by hand: set `GOLDBOOK_IMAGE` to a
+labelled image, such as the one the last deploy pinned, and restart the service.
 
 A feed must come from a run with exactly one unexpired `Goldbook-update-feed`
 artifact. A `release-desktop.yml` feed publishes `latest.json` and its package
