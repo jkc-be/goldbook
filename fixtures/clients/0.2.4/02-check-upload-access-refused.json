@@ -1,0 +1,16 @@
+{
+  "about": "The same check with a token the server does not know must answer 401.",
+  "source": "desktop/src-tauri/src/main.rs:383",
+  "request": {
+    "method": "POST",
+    "path": "/api/scans",
+    "headers": {
+      "Authorization": "Bearer not-a-known-token",
+      "Content-Type": "application/json"
+    },
+    "body": "{}"
+  },
+  "expect": {
+    "status": 401
+  }
+}

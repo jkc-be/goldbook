@@ -12,8 +12,10 @@ forks and pull requests. `CODEOWNERS` assigns every file to @jkc-be.
 
 The `main` ruleset restricts branch creation and updates to repository
 administrators. It requires a pull request, code-owner approval, resolved review
-threads, and the `test`, `local-stack`, and `secrets` checks for anyone without
-bypass permission. The sole administrator can merge or push directly and can
+threads, and the `test`, `local-stack`, `secrets`, `desktop-tests`, and `changes`
+checks for anyone without bypass permission. `changes` enforces the change file,
+version, changelog and release rules in [changes/README.md](../changes/README.md);
+it reads the `no-changes` and `release` labels. The sole administrator can merge or push directly and can
 bypass those review and check requirements. A separate rule blocks force pushes
 and deletion for everyone, including the administrator. Changing that rule
 requires an explicit settings change.
@@ -30,6 +32,10 @@ Apply or verify these settings with the owner's authenticated GitHub CLI:
 python3 scripts/configure-github.py
 python3 scripts/configure-github.py --check
 ```
+
+A newly required check counts only once it has reported on a pull request's
+head commit. After the script adds a required check, every open pull request
+needs one new push, such as a rebase or an empty commit, before it can merge.
 
 ## Secrets and approvals
 
@@ -80,14 +86,83 @@ Keep the existing signing key for updater compatibility. Never commit it.
 `setup-deploy.sh` installs `/opt/goldbook/deploy-public.py` and replaces only the
 key marked `goldbook-public-github-actions`. It stores the private key directly
 in the protected `production` environment and deletes its temporary local copy.
+Before it installs the helper, it checks that the SSH user can read
+`/opt/goldbook/data/goldbook.sqlite` and creates `/opt/goldbook/backups` with
+mode 700. Rerun it after every change to `scripts/deploy-ovh.py`; the server
+keeps running the helper it last installed.
+
+The helper accepts four commands, each given a workflow run ID and a commit
+SHA. The run must be the one that built what is being shipped. Its head commit
+must be that SHA or a later commit that contains it, as GitHub's compare API
+reports, so a **Release build** can build an earlier commit of `main` than the
+one `main` pointed at when the run started.
+
+| Command | Accepted workflows | Effect |
+| --- | --- | --- |
+| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the run's image and the running service, and reports whether `deploy` would replace it. Changes nothing. |
+| `deploy` | `deploy.yml`, `release-build.yml` | When the commit is newer than the running one, backs up the database, then replaces the running image with the run's image. |
+| `check-publish` | `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
+| `publish` | `release-build.yml` | Validates and publishes the run's update feed. |
+
+The run's image is the one it pushed, not whatever its commit's tag points at
+now, because another run for the same commit can push the tag again. The run
+must have exactly one unexpired `Goldbook-server-image` artifact holding only
+`image.json`, `{"revision": "<commit SHA>", "digest": "sha256:<64 hex digits>"}`.
+The helper refuses the run when the revision differs from the command's or the
+digest is malformed. It pulls `ghcr.io/jkc-be/goldbook-server@<digest>`, checks
+that its `org.opencontainers.image.revision` label is the commit, and pins that
+digest in `GOLDBOOK_IMAGE`. A **Deploy to OVH** run from before this artifact
+existed cannot deploy; start a new run.
+
+A deploy never moves the server back to an older commit. After the checks
+above, the helper reads the `org.opencontainers.image.revision` label of the
+running container and asks GitHub how the requested commit relates to it:
+
+- The running commit is the requested one, or is newer and contains it, for
+  example after a **Deploy to OVH** hotfix. `deploy` changes nothing and takes
+  no backup. It fails when the running server is not healthy, and otherwise
+  prints `{"skipped": true, "revision": ..., "active_revision": ...,
+  "active_image": ..., "health": "healthy"}`. `verify` prints
+  `"would_deploy": false`.
+- The requested commit is newer and contains the running one. `deploy` goes
+  ahead, and `verify` prints `"would_deploy": true`.
+- The two commits have diverged. Both commands refuse and name both commits.
+
+Both commands also refuse when the running image has no such label, for example
+an image built on the server. Reconcile by hand: set `GOLDBOOK_IMAGE` to a
+labelled image, such as the one the last deploy pinned, and restart the service.
+
+A feed must come from a run with exactly one unexpired `Goldbook-update-feed`
+artifact. Only a `release-build.yml` feed is accepted, and it publishes
+`latest.json`, its package folder and `addon.json`. The helper rejects the feed before
+it replaces anything when a manifest is missing, a package is missing, the
+revision already has different packages, or a manifest is older than the one
+already published. A `latest.json` is older when its `version` is lower; an
+`addon.json` is older when the `sequence` in its signed payload is lower. An
+equal version or sequence is accepted, so a retry can publish again. A missing
+or unreadable published manifest counts as nothing published. It moves the package folder into
+place first, then replaces `latest.json`, then `addon.json`. Publishing the same
+run again after an interruption finishes the publication with the same files.
+`check-publish` runs every one of these checks and prints
+`{"checked": [...], "revision": ...}`; `publish` prints
+`{"published": [...], "revision": ...}`.
 
 Use **Actions > Deploy to OVH > Run workflow** on `main`. The default
-`verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, checks
-the restricted SSH connection, pulls and validates the image, and checks the
+`verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, records
+the pushed digest as the run's `Goldbook-server-image` artifact, checks the
+restricted SSH connection, pulls and validates that image, and checks the
 running service without replacing it. Approve the `production` job after
-reviewing the run. Uncheck `verify_only` for a deployment. That pins the image
-digest, waits for health, and restores the previous image and configuration on
-startup failure. It does not roll back database migrations.
+reviewing the run. Uncheck `verify_only` for a deployment. That copies the
+database through SQLite's backup API to
+`/opt/goldbook/backups/goldbook-<stamp>-<revision>.sqlite`, stops before changing
+the configuration or the service when the copy fails `PRAGMA integrity_check`, pins the image digest,
+waits for health, and restores the previous image and configuration on startup
+failure. The result line names the copy as `database_backup`. The helper does
+not roll back database migrations. To restore the database, stop the service,
+delete any `goldbook.sqlite-wal` and `goldbook.sqlite-shm` files beside the
+database, copy the backup over `/opt/goldbook/data/goldbook.sqlite`, set `GOLDBOOK_IMAGE`
+back from the `.env.before-<stamp>-*` file with the same stamp, and start the
+service. The helper does not delete old backups.
 
 **Deploy to OVH** first runs every check in `check.yml` for the same commit and
 builds the image only when they pass. It shares the concurrency group

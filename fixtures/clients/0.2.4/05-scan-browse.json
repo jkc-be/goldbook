@@ -1,0 +1,61 @@
+{
+  "about": "A browse scan from GoldbookDB.scans, with names from GoldbookDB.items, sent with a registered upload token.",
+  "source": "crates/goldbook-sync/src/sync.rs:228",
+  "request": {
+    "method": "POST",
+    "path": "/api/scans",
+    "headers": {
+      "Authorization": "Bearer {{registered_token}}",
+      "Content-Type": "application/json"
+    },
+    "json": {
+      "realm": "Faramon",
+      "faction": "Horde",
+      "region": "EU",
+      "scannedAt": 1760000000,
+      "mode": "browse",
+      "scanner": "Sultan",
+      "build": "1.60.1.70338",
+      "rows": [
+        [
+          "2589",
+          110,
+          0,
+          42,
+          0
+        ],
+        [
+          "2592",
+          300,
+          0,
+          7,
+          0
+        ],
+        [
+          "9775:584",
+          25000,
+          0,
+          1,
+          0
+        ]
+      ],
+      "items": {
+        "2589": [
+          "Linen Cloth",
+          1
+        ],
+        "2592": [
+          "Thrall's \"Ünicode\" Wool, Fine",
+          1
+        ],
+        "9775:584": [
+          "Bandit Cinch of the Monkey",
+          2
+        ]
+      }
+    }
+  },
+  "expect": {
+    "status": "2xx"
+  }
+}

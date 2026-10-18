@@ -1,4 +1,4 @@
-.PHONY: build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version release hooks clean
+.PHONY: build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version prepare-release release hooks clean
 
 OVH_HOST ?= fedora_ovh
 
@@ -80,6 +80,13 @@ endif
 version:
 	@test -n "$(VERSION)" || { echo "Usage: make version VERSION=0.1.5"; exit 1; }
 	python3 scripts/set-version.py $(VERSION)
+
+# Turns the files in changes/ into a CHANGELOG.md section, sets the version and
+# deletes the files, such as make prepare-release VERSION=0.2.5. Then edit the
+# section's prose and open the release pull request with the release label.
+prepare-release:
+	@test -n "$(VERSION)" || { echo "Usage: make prepare-release VERSION=0.2.5"; exit 1; }
+	python3 scripts/prepare-release.py $(VERSION)
 
 # Runs Release build on GitHub as you, through gh, for the current main or for
 # a commit of main, such as make release REVISION=1a2b3c4. Then asks whether to

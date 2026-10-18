@@ -1,0 +1,24 @@
+{
+  "about": "Automatic upload setup registers each WoW account by its fingerprint and keeps the upload token it gets.",
+  "source": "desktop/src-tauri/src/registration.rs:28",
+  "request": {
+    "method": "POST",
+    "path": "/api/installations",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"fingerprint\":\"8ad7168e744a27c17d5712f7d69d585c0eaa9e0ca520d7a1f9bba47e2ba258d0\",\"fingerprintVersion\":1}"
+  },
+  "expect": {
+    "status": "2xx",
+    "maxBytes": 4096,
+    "body": {
+      "token": {
+        "$match": "gb_[A-Za-z0-9_-]{43}"
+      }
+    }
+  },
+  "capture": {
+    "registered_token": "token"
+  }
+}

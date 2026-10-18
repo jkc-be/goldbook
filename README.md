@@ -67,6 +67,12 @@ The check fails if prerequisites or the download are unavailable; it never
 silently skips proxy coverage. Run it alone after `cargo build --locked` with
 `python3 scripts/verify-proxy.py`.
 
+The client compatibility check replays the requests of every app version the
+server still supports, recorded under `fixtures/clients/`, against the current
+server. [fixtures/clients/README.md](fixtures/clients/README.md) explains the
+support floor and how to add a version. Run it alone with
+`python3 scripts/verify-client-compatibility.py`.
+
 ## Local development
 
 Run the same Goldbook image and Compose stack used on OVH:
@@ -1249,16 +1255,18 @@ was not previously installed. Updates replace the Goldbook addon directory;
 scans and characters in SavedVariables are preserved. The bundled addon works
 when offline, and a newer downloaded addon survives client restarts.
 
-To publish a client update, add the version's changes to
-[CHANGELOG.md](CHANGELOG.md) and set a higher version with
-`make version VERSION=<major.minor.patch>`. It writes the version to
+To publish a client update, run
+`make prepare-release VERSION=<major.minor.patch>` with a higher version. It
+turns the files under [changes/](changes/README.md) into a section of
+[CHANGELOG.md](CHANGELOG.md), deletes them, and writes the version to
 `package.json`, `package-lock.json`, the Cargo package manifests and
-`Cargo.lock`, `desktop/src-tauri/tauri.conf.json`, and the addon TOC. Commit
-that, merge it to main, then run **Release build** and **Release promote** on
-main as [releasing](docs/releasing.md) describes. The client only installs a
-release with a higher version than its own, so a release under the same
-version reaches only new installs. `make build` builds with the version as it
-stands and publishes nothing. Release build builds signed macOS Apple Silicon,
+`Cargo.lock`, `desktop/src-tauri/tauri.conf.json`, the addon TOC and the
+website's title bar. Commit that, open the pull request with the `release`
+label, merge it to main, then run `make release` as
+[releasing](docs/releasing.md) describes. The client only installs a release
+with a higher version than its own, so a release under the same version
+reaches only new installs. `make build` builds with the version as it stands
+and publishes nothing. Release build builds signed macOS Apple Silicon,
 Windows x64, Ubuntu deb, and Fedora rpm packages and the signed addon update.
 Release promote publishes that complete feed at the Goldbook site. The
 individual build workflows still produce standalone installers. Merging to
