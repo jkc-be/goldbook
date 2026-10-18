@@ -626,9 +626,8 @@ async fn show_view(
     let window = app
         .get_window("main")
         .ok_or("The Goldbook window is closed.")?;
-    let existing = window.get_webview(SITE);
     if name == "sync" {
-        if let Some(site) = existing {
+        if let Some(site) = window.get_webview(SITE) {
             site.hide().map_err(|e| e.to_string())?;
         }
         return Ok(());
@@ -677,7 +676,9 @@ async fn show_view(
     let url: url::Url = target
         .parse()
         .map_err(|_| "The server address is not valid.")?;
-    match existing {
+    // Look it up only now: an earlier call may have added it while this one
+    // waited for the lock.
+    match window.get_webview(SITE) {
         Some(site) => {
             site.navigate(url).map_err(|e| e.to_string())?;
             site.show().map_err(|e| e.to_string())?;
