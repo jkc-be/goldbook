@@ -91,7 +91,9 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                 .map(|(k, v)| (k.into_owned(), Value::String(v.into_owned())))
                 .collect();
             // The app names the website's view to open in the query; the
-            // website has views of a few lowercase letters, Gold the default.
+            // website has views of a few lowercase letters. Without one, as
+            // from an app before 0.2.4, #characters, which the website now
+            // sends on to Gold.
             let view = input
                 .query
                 .get("view")
@@ -99,7 +101,7 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                 .filter(|view| {
                     (1..=32).contains(&view.len()) && view.bytes().all(|b| b.is_ascii_lowercase())
                 })
-                .unwrap_or("gold");
+                .unwrap_or("characters");
             authenticate(&input, app, &mut db, Value::Object(body), Some(view))
         }
         ("POST", "/api/link") => link(&input, app, &mut db),

@@ -85,7 +85,8 @@ were released with.
   rules to the realm's newest scan and the lowest price of each day in the
   last 60, with the same search and filters as `/api/prices`.
 - `/api/desktop-login` opens the website's view named by `?view=`, such as
-  `bags`, and Gold without one, instead of the Characters page.
+  `bags`. Without one it opens `#characters` as before, which the website
+  now sends on to Gold.
 
 ### Website
 
