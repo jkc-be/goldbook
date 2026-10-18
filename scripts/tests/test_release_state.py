@@ -228,6 +228,8 @@ class Reasons(unittest.TestCase):
 
 
 class CommandLine(unittest.TestCase):
+    maxDiff = None
+
     def run_main(self, world, *argv, environment=None):
         stdout, stderr = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
