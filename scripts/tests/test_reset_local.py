@@ -24,12 +24,16 @@ class ResetLocalTests(unittest.TestCase):
         self.home = self.root / 'home'
         self.repo = self.root / 'repo'
         self.game = self.root / 'custom game'
+        self.app = self.root / 'Applications/Goldbook.app'
         self.environment = patch.dict(os.environ, {}, clear=True)
         self.environment.start()
         self.addCleanup(self.environment.stop)
         discovery = patch.object(reset_local, 'wow_candidates', return_value=[self.root / 'default game'])
         discovery.start()
         self.addCleanup(discovery.stop)
+        app_path = patch.object(reset_local, 'MAC_APP', self.app)
+        app_path.start()
+        self.addCleanup(app_path.stop)
         self.output = redirect_stdout(io.StringIO())
         self.output.__enter__()
         self.addCleanup(self.output.__exit__, None, None, None)
@@ -40,6 +44,8 @@ class ResetLocalTests(unittest.TestCase):
         return path
 
     def prepare(self, platform):
+        if platform == 'darwin':
+            self.write(self.app / 'Contents/MacOS/Goldbook', 'app executable')
         base = (self.home / 'Library/Application Support' if platform == 'darwin'
                 else self.home / '.config')
         self.settings = self.write(base / 'Goldbook/settings.json', json.dumps({'wowDir': str(self.game)}))
@@ -87,9 +93,25 @@ class ResetLocalTests(unittest.TestCase):
         self.assertEqual(self.source.read_text(), 'ServerData.lua\n')
         self.assertEqual(self.other.read_text(), 'old data')
         self.assertEqual(self.untouched.read_text(), 'local server settings')
+        self.assertFalse(self.app.exists())
+
+    def test_mac_permissions_are_reset_before_uninstalling_only_goldbook(self):
+        self.prepare('darwin')
+        other_app = self.write(self.app.parent / 'Other.app/Contents/MacOS/Other', 'other executable')
+
+        def command(args, **kwargs):
+            if args[0] == 'tccutil':
+                self.assertTrue(self.app.is_dir())
+            return subprocess.CompletedProcess(args, 0, stdout='')
+
+        with patch.object(reset_local.subprocess, 'run', side_effect=command):
+            self.run_reset()
+        self.assertFalse(self.app.exists())
+        self.assertEqual(other_app.read_text(), 'other executable')
 
     def test_linux_resets_xdg_data_and_custom_settings_and_game(self):
         self.prepare('linux')
+        app = self.write(self.app / 'Contents/MacOS/Goldbook', 'mac executable')
         custom_settings = self.write(self.root / 'custom-settings.json', json.dumps({'wowDir': str(self.game)}))
         extra_game = self.root / 'another game'
         extra_saved = self.write(extra_game / '_retail_/WTF/Account/THREE/SavedVariables/Goldbook.lua')
@@ -101,6 +123,7 @@ class ResetLocalTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 1)  # Only the process check, no macOS commands.
         for path in (custom_settings, xdg_data, extra_saved, self.settings, self.sync, self.database, *self.saved):
             self.assertFalse(path.exists(), str(path))
+        self.assertEqual(app.read_text(), 'mac executable')
 
     def test_preview_changes_nothing_and_runs_no_commands(self):
         self.prepare('darwin')
@@ -110,6 +133,7 @@ class ResetLocalTests(unittest.TestCase):
         self.assertEqual(self.prices.read_text(), 'old data')
         for path in (self.settings, self.sync, self.database, self.cache, *self.saved):
             self.assertTrue(path.exists(), str(path))
+        self.assertTrue(self.app.is_dir())
 
     def test_running_game_or_client_prevents_any_reset(self):
         self.prepare('darwin')
@@ -146,6 +170,7 @@ class ResetLocalTests(unittest.TestCase):
                 self.run_reset()
         self.assertTrue(self.settings.exists())
         self.assertEqual(self.prices.read_text(), 'old data')
+        self.assertTrue(self.app.is_dir())
 
     def test_unreadable_game_data_prevents_reset(self):
         self.prepare('darwin')

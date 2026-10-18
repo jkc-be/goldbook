@@ -359,7 +359,8 @@ caches, sync history, and this checkout's `data/` directory, including local
 server databases. It also deletes Goldbook SavedVariables and their backups
 for every account and character in each detected WoW installation, clears
 downloaded addon prices, and removes Goldbook's startup entries. The addon stays
-installed. The next launch starts setup again.
+installed. On macOS, the reset also removes `/Applications/Goldbook.app`.
+Reinstall the desktop app before testing setup again.
 
 The command checks the default WoW folders and the folder in your saved desktop
 settings. Include another installation with `make reset-local WOW="/path/to/World of Warcraft"`.
@@ -367,7 +368,7 @@ It also resets the settings file selected by `GOLDBOOK_CONFIG`, when set.
 
 On macOS it runs [`tccutil reset All app.goldbook.desktop`](https://developer.apple.com/documentation/xcode/resetting-access-to-protected-resources-in-macos)
 to reset Goldbook's privacy permissions. A failed permission reset stops the
-command before file deletion. Keep the app installed so macOS can identify it.
+command before file deletion. The app is removed after its permissions are reset.
 Notification preferences and any permissions granted to your terminal for
 development builds need to be reset separately in System Settings.
 

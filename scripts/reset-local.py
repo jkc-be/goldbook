@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = json.loads((ROOT / 'desktop/src-tauri/tauri.conf.json').read_text())
 IDENTIFIER = APP['identifier']
 NAMES = (APP['productName'], 'goldbook-desktop', 'goldbook')
+MAC_APP = Path('/Applications/Goldbook.app')
 STUB = '-- Cleared by make reset-local.\nGoldbookServerData = nil\n'
 
 
@@ -27,6 +28,7 @@ def app_paths(home, platform):
             library / 'Saved Application State' / f'{IDENTIFIER}.savedState',
         ])
         paths.extend(library / 'LaunchAgents' / f'{name}.plist' for name in NAMES)
+        paths.append(MAC_APP)
     else:
         for variable, default in (('XDG_CONFIG_HOME', '.config'),
                                   ('XDG_DATA_HOME', '.local/share'),
@@ -172,7 +174,8 @@ def reset(home, platform, root, extra_wow=(), dry_run=False):
         if path.is_symlink():
             path.unlink()
         path.write_text(STUB)
-    print('Local Goldbook data cleared. Start Goldbook and WoW to test setup again.')
+    next_step = 'Reinstall Goldbook, then start it and WoW' if platform == 'darwin' else 'Start Goldbook and WoW'
+    print(f'Local Goldbook data cleared. {next_step} to test setup again.')
 
 
 def main():

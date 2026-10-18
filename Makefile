@@ -94,7 +94,7 @@ hooks: ## Enable the pre-push checks for this clone
 clean: ## Remove generated installer bundles
 	rm -rf target/release/bundle
 
-# Permanently clears local app, addon and server data, including macOS privacy grants.
+# Permanently clears local data and removes the macOS app and its privacy grants.
 # Quit Goldbook and WoW first. Preview: make reset-local DRY_RUN=1. Custom game: WOW=/path.
-reset-local: ## Delete local Goldbook data and reset macOS privacy permissions
+reset-local: ## Delete local data; remove the macOS app and its privacy permissions
 	python3 scripts/reset-local.py $(if $(filter 1,$(DRY_RUN)),--dry-run) $(if $(WOW),--wow "$(WOW)")
