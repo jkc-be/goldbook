@@ -40,6 +40,8 @@ def main():
             check("&profession=skinning&kind=materials", ["2318"])
             check("&profession=skinning&kind=crafted", [])
             check("&profession=leatherworking&kind=materials", ["2318"])
+            check("&profession=herbalism&kind=materials", ["2447"])
+            check("&profession=herbalism&kind=crafted", [])
             check("&profession=first-aid&kind=materials", ["2589"])
             check("&quality=2", ["2881", "10504:584"])
             check("&quality=2&limit=1&offset=1&sort=name", ["2881"], 2)
@@ -54,6 +56,8 @@ def main():
             assert 2447 in alchemy["materials"] and 118 in alchemy["crafted"]
             skinning = next(p for p in catalog if p["id"] == "skinning")
             assert 2318 in skinning["materials"] and skinning["crafted"] == [], skinning["crafted"]
+            herbalism = next(p for p in catalog if p["id"] == "herbalism")
+            assert 2447 in herbalism["materials"] and herbalism["crafted"] == [], herbalism["crafted"]
     print("Verified profession lists, quality, text search, pagination, empty pages and invalid filters.")
 
 
