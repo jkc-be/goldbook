@@ -1254,12 +1254,15 @@ was not previously installed. Updates replace the Goldbook addon directory;
 scans and characters in SavedVariables are preserved. The bundled addon works
 when offline, and a newer downloaded addon survives client restarts.
 
-To publish a client update, add the version's changes to
-[CHANGELOG.md](CHANGELOG.md) and set a higher version with
-`make version VERSION=<major.minor.patch>`. It writes the version to
+To publish a client update, run
+`make prepare-release VERSION=<major.minor.patch>` with a higher version. It
+turns the files under [changes/](changes/README.md) into a section of
+[CHANGELOG.md](CHANGELOG.md), deletes them, and writes the version to
 `package.json`, `package-lock.json`, the Cargo package manifests and
-`Cargo.lock`, `desktop/src-tauri/tauri.conf.json`, and the addon TOC. Commit
-that, merge it to main, then run **Release desktop** on main. The client only
+`Cargo.lock`, `desktop/src-tauri/tauri.conf.json`, the addon TOC and the
+website's title bar. Commit that, open the pull request with the `release`
+label, merge it to main, then run
+**Release desktop** on main. The client only
 installs a release with a higher version than its own, so a release under the
 same version reaches only new installs. `make build` builds with the version as
 it stands and publishes nothing. It builds signed macOS Apple Silicon,

@@ -6,6 +6,8 @@ import subprocess
 
 REPO = 'jkc-be/goldbook'
 OWNER_ID = 156444954
+# Job names of the checks main requires, all reported by GitHub Actions (app 15368).
+REQUIRED_CHECKS = ('test', 'local-stack', 'secrets', 'desktop-tests', 'changes')
 
 
 def api(path, method='GET', data=None):
@@ -33,7 +35,7 @@ def settings():
                 {'type': 'required_status_checks', 'parameters': {
                     'strict_required_status_checks_policy': True,
                     'required_status_checks': [{'context': name, 'integration_id': 15368}
-                                               for name in ('test', 'local-stack', 'secrets')],
+                                               for name in REQUIRED_CHECKS],
                 }},
             ],
         },
@@ -83,6 +85,11 @@ def verify():
     assert admins == ['jkc-be'], f'Unexpected administrators: {admins}'
     assert not api('keys'), 'Review deploy keys: none are expected in the public repository'
     rules = {rule['name']: api(f"rulesets/{rule['id']}") for rule in api('rulesets')}
+    required = {(check['context'], check['integration_id']) for rule in rules['main']['rules']
+                if rule['type'] == 'required_status_checks'
+                for check in rule['parameters']['required_status_checks']}
+    missing = [name for name in REQUIRED_CHECKS if (name, 15368) not in required]
+    assert not missing, f'main does not require these GitHub Actions checks: {missing}'
     for name, expected in settings().items():
         actual = rules[name]
         for field in ('enforcement', 'target', 'conditions', 'bypass_actors'):
