@@ -75,14 +75,49 @@ Keep the existing signing key for updater compatibility. Never commit it.
 `setup-deploy.sh` installs `/opt/goldbook/deploy-public.py` and replaces only the
 key marked `goldbook-public-github-actions`. It stores the private key directly
 in the protected `production` environment and deletes its temporary local copy.
+Before it installs the helper, it checks that the SSH user can read
+`/opt/goldbook/data/goldbook.sqlite` and creates `/opt/goldbook/backups` with
+mode 700. Rerun it after every change to `scripts/deploy-ovh.py`; the server
+keeps running the helper it last installed.
+
+The helper accepts four commands, each given a workflow run ID and a commit
+SHA. The run must be the one that built what is being shipped.
+
+| Command | Accepted workflows | Effect |
+| --- | --- | --- |
+| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the image and the running service. Changes nothing. |
+| `deploy` | `deploy.yml`, `release-build.yml` | Backs up the database, then replaces the running image. |
+| `check-publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
+| `publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Validates and publishes the run's update feed. |
+
+A feed must come from a run with exactly one unexpired `Goldbook-update-feed`
+artifact. A `release-desktop.yml` feed publishes `latest.json` and its package
+folder, an `update-addon.yml` feed publishes `addon.json`, and a
+`release-build.yml` feed publishes `latest.json`, its package folder and
+`addon.json`. The helper rejects the feed before
+it replaces anything when a manifest is missing, a package is missing, or the
+revision already has different packages. It moves the package folder into
+place first, then replaces `latest.json`, then `addon.json`. Publishing the same
+run again after an interruption finishes the publication with the same files.
+`check-publish` runs every one of these checks and prints
+`{"checked": [...], "revision": ...}`; `publish` prints
+`{"published": [...], "revision": ...}`.
 
 Use **Actions > Deploy to OVH > Run workflow** on `main`. The default
 `verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, checks
 the restricted SSH connection, pulls and validates the image, and checks the
 running service without replacing it. Approve the `production` job after
-reviewing the run. Uncheck `verify_only` for a deployment. That pins the image
-digest, waits for health, and restores the previous image and configuration on
-startup failure. It does not roll back database migrations.
+reviewing the run. Uncheck `verify_only` for a deployment. That copies the
+database through SQLite's backup API to
+`/opt/goldbook/backups/goldbook-<stamp>-<revision>.sqlite`, stops before changing
+the configuration or the service when the copy fails `PRAGMA integrity_check`, pins the image digest,
+waits for health, and restores the previous image and configuration on startup
+failure. The result line names the copy as `database_backup`. The helper does
+not roll back database migrations. To restore the database, stop the service,
+delete any `goldbook.sqlite-wal` and `goldbook.sqlite-shm` files beside the
+database, copy the backup over `/opt/goldbook/data/goldbook.sqlite`, set `GOLDBOOK_IMAGE`
+back from the `.env.before-<stamp>-*` file with the same stamp, and start the
+service. The helper does not delete old backups.
 
 The server retains its Compose files. Review and copy Compose changes separately
 before deploying an image that depends on them. Deployment and update publication

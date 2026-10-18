@@ -3,9 +3,11 @@ import importlib.util
 import io
 import fcntl
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 import zipfile
 
@@ -13,6 +15,7 @@ SPEC = importlib.util.spec_from_file_location('update_deployment', Path(__file__
 DEPLOY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DEPLOY)
 REVISION = 'a' * 40
+ADDON = '{"payload":"data","signature":"signed"}'
 
 
 class PublishUpdates(unittest.TestCase):
@@ -31,12 +34,39 @@ class PublishUpdates(unittest.TestCase):
         self.manifest = {'version': '0.1.3', 'platforms': {'darwin-aarch64': {
             'url': 'https://app.jkc-be.com/goldbook/updates/' + REVISION + '/client.tar.gz', 'signature': 'signed'}}}
         self.files = {'latest.json': json.dumps(self.manifest), REVISION + '/client.tar.gz': 'signed package'}
+        self.artifacts = [{'id': 456, 'name': 'Goldbook-update-feed', 'expired': False}]
+
+    def use_root(self, name):
+        root = self.root / name
+        root.mkdir()
+        patch = mock.patch.object(DEPLOY, 'ROOT', root)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return root / 'data/updates'
+
+    def release_build(self):
+        self.run['name'] = 'Release build'
+        self.run['path'] = '.github/workflows/release-build.yml'
+        self.files['addon.json'] = ADDON
+
+    def published_before(self):
+        destination = self.root / 'data/updates'
+        (destination / ('c' * 40)).mkdir(parents=True)
+        (destination / ('c' * 40) / 'client.tar.gz').write_text('old package')
+        (destination / 'latest.json').write_text('{"version": "0.1.2"}')
+        (destination / 'addon.json').write_text('{"payload":"old","signature":"old"}')
+        return self.snapshot()
+
+    def snapshot(self, destination=None):
+        destination = destination or self.root / 'data/updates'
+        return {str(path.relative_to(destination)): path.read_bytes()
+                for path in sorted(destination.rglob('*')) if path.is_file()}
 
     def response(self, request, **_):
         if request.full_url.endswith('/actions/runs/123'):
             value = json.dumps(self.run).encode()
         elif request.full_url.endswith('/actions/runs/123/artifacts'):
-            value = json.dumps({'artifacts': [{'id': 456, 'name': 'Goldbook-update-feed', 'expired': False}]}).encode()
+            value = json.dumps({'artifacts': self.artifacts}).encode()
         else:
             self.assertTrue(request.full_url.endswith('/actions/artifacts/456/zip'))
             archive = io.BytesIO()
@@ -46,9 +76,10 @@ class PublishUpdates(unittest.TestCase):
             value = archive.getvalue()
         return io.BytesIO(value)
 
-    def publish(self):
-        with mock.patch.object(DEPLOY.OPENER, 'open', side_effect=self.response):
-            DEPLOY.publish_updates('123', REVISION, 'test-token')
+    def publish(self, check_only=False):
+        with mock.patch.object(DEPLOY.OPENER, 'open', side_effect=self.response), redirect_stdout(io.StringIO()) as output:
+            DEPLOY.publish_updates('123', REVISION, 'test-token', check_only=check_only)
+        return json.loads(output.getvalue())
 
     def test_publishes_complete_feed_and_retries_without_changing_immutable_packages(self):
         self.publish()
@@ -88,14 +119,82 @@ class PublishUpdates(unittest.TestCase):
                  mock.patch.object(DEPLOY.sys, 'stdin', io.StringIO('test-token')), \
                  mock.patch.object(DEPLOY, 'publish_updates') as publish:
                 DEPLOY.main()
-                publish.assert_called_once_with('123', REVISION, 'test-token')
+                publish.assert_called_once_with('123', REVISION, 'test-token', check_only=False)
+            with mock.patch.dict(DEPLOY.os.environ, SSH_ORIGINAL_COMMAND='check-publish 123 ' + REVISION), \
+                 mock.patch.object(DEPLOY.sys, 'stdin', io.StringIO('test-token')), \
+                 mock.patch.object(DEPLOY, 'publish_updates') as publish:
+                DEPLOY.main()
+                publish.assert_called_once_with('123', REVISION, 'test-token', check_only=True)
 
     def test_addon_feed_uses_one_atomic_signed_envelope(self):
         self.run['name'] = 'Publish addon update'
         self.run['path'] = '.github/workflows/update-addon.yml'
-        self.files = {'addon.json': '{"payload":"data","signature":"signed"}'}
+        self.files = {'addon.json': ADDON}
+        self.assertEqual(self.publish(), {'published': ['addon.json'], 'revision': REVISION})
+        self.assertEqual((self.root / 'data/updates/addon.json').read_text(), ADDON)
+
+    def test_release_build_feed_publishes_both_manifests(self):
+        self.release_build()
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.snapshot(), {'latest.json': json.dumps(self.manifest).encode(), 'addon.json': ADDON.encode(),
+                                           REVISION + '/client.tar.gz': b'signed package'})
+
+    def test_release_build_feed_missing_a_manifest_changes_nothing(self):
+        before = self.published_before()
+        self.release_build()
+        del self.files['addon.json']
+        with self.assertRaisesRegex(RuntimeError, '^Update feed is missing addon.json$'):
+            self.publish()
+        self.assertEqual(self.snapshot(), before)
+        self.release_build()
+        del self.files['latest.json']
+        with self.assertRaisesRegex(RuntimeError, '^Update feed is missing latest.json$'):
+            self.publish()
+        self.assertEqual(self.snapshot(), before)
+
+    def test_run_needs_exactly_one_unexpired_feed_artifact(self):
+        before = self.published_before()
+        self.release_build()
+        feed = {'id': 456, 'name': 'Goldbook-update-feed', 'expired': False}
+        for artifacts, count in [([feed, dict(feed, id=789)], 2), ([], 0), ([dict(feed, expired=True)], 0)]:
+            self.artifacts = artifacts
+            with self.subTest(artifacts=artifacts), self.assertRaisesRegex(
+                    RuntimeError, f'^Run 123 has {count} unexpired Goldbook-update-feed artifacts; expected exactly one$'):
+                self.publish()
+            self.assertEqual(self.snapshot(), before)
+        self.artifacts = [feed, dict(feed, id=789, expired=True), dict(feed, id=790, name='Goldbook-addon-feed')]
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+
+    def test_interrupted_publication_completes_with_the_same_bytes_on_retry(self):
+        self.release_build()
         self.publish()
-        self.assertEqual((self.root / 'data/updates/addon.json').read_text(), self.files['addon.json'])
+        uninterrupted = self.snapshot()
+        replace = os.replace
+        for stop, partial in [('latest.json', {REVISION + '/client.tar.gz'}),
+                              ('addon.json', {REVISION + '/client.tar.gz', 'latest.json'})]:
+            with self.subTest(stop=stop):
+                destination = self.use_root('stopped-before-' + stop)
+
+                def interrupted(source, target):
+                    if Path(target) == destination / stop:
+                        raise OSError('interrupted')
+                    replace(source, target)
+                with mock.patch.object(DEPLOY.os, 'replace', side_effect=interrupted), \
+                     self.assertRaisesRegex(OSError, 'interrupted'):
+                    self.publish()
+                self.assertEqual(set(self.snapshot(destination)), partial)
+                self.publish()
+                self.assertEqual(self.snapshot(destination), uninterrupted)
+
+    def test_check_publish_validates_without_changing_the_feed(self):
+        before = self.published_before()
+        self.release_build()
+        self.assertEqual(self.publish(check_only=True), {'checked': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.snapshot(), before)
+        self.files.pop(REVISION + '/client.tar.gz')
+        with self.assertRaisesRegex(RuntimeError, 'Update package is missing'):
+            self.publish(check_only=True)
+        self.assertEqual(self.snapshot(), before)
 
 
 if __name__ == '__main__':

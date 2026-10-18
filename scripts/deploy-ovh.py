@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import shutil
+import sqlite3
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
@@ -17,6 +18,13 @@ from datetime import datetime, timezone
 ROOT = Path("/opt/goldbook")
 REPOSITORY = "ghcr.io/jkc-be/goldbook-server"
 GITHUB_REPOSITORY = "jkc-be/goldbook"
+DEPLOY_WORKFLOWS = (".github/workflows/deploy.yml", ".github/workflows/release-build.yml")
+# The manifests each feed workflow must publish, in publication order.
+FEED_MANIFESTS = {
+    ".github/workflows/release-desktop.yml": ("latest.json",),
+    ".github/workflows/update-addon.yml": ("addon.json",),
+    ".github/workflows/release-build.yml": ("latest.json", "addon.json"),
+}
 
 
 class ArtifactRedirect(urllib.request.HTTPRedirectHandler):
@@ -98,6 +106,22 @@ def deploy(revision, token, verify_only=False):
             return
 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        database = ROOT / "data/goldbook.sqlite"
+        if not database.is_file():
+            raise RuntimeError(f"Expected the database at {database}")
+        database_backup = ROOT / "backups" / f"goldbook-{stamp}-{revision}.sqlite"
+        os.close(os.open(database_backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+        source = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
+        copy = sqlite3.connect(database_backup)
+        try:
+            source.backup(copy)
+            integrity = copy.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            source.close()
+            copy.close()
+        if integrity != "ok":
+            raise RuntimeError(f"Database backup {database_backup} failed its integrity check: {integrity}")
+
         backup = path.with_name(f".env.before-{stamp}-{revision[:12]}")
         fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as output:
@@ -130,7 +154,8 @@ def deploy(revision, token, verify_only=False):
             raise
         print(json.dumps({"revision": revision, "active_image": image,
                           "previous_image": previous, "health": "healthy",
-                          "rollback_config": str(backup)}), flush=True)
+                          "rollback_config": str(backup),
+                          "database_backup": str(database_backup)}), flush=True)
 
 
 def github_request(path, token):
@@ -154,15 +179,18 @@ def verify_run(run_id, revision, token, workflows):
     return workflow
 
 
-def publish_updates(run_id, revision, token):
-    workflow = verify_run(run_id, revision, token,
-                          (".github/workflows/release-desktop.yml", ".github/workflows/update-addon.yml"))
+def publish_updates(run_id, revision, token, check_only=False):
+    workflow = verify_run(run_id, revision, token, tuple(FEED_MANIFESTS))
+    manifests = FEED_MANIFESTS[workflow]
 
     def request(path):
         return github_request(path, token)
     with request(f"/actions/runs/{run_id}/artifacts") as response:
         artifacts = json.load(response)["artifacts"]
-    artifact, = [a for a in artifacts if a["name"] == "Goldbook-update-feed" and not a["expired"]]
+    feeds = [a for a in artifacts if a["name"] == "Goldbook-update-feed" and not a["expired"]]
+    if len(feeds) != 1:
+        raise RuntimeError(f"Run {run_id} has {len(feeds)} unexpired Goldbook-update-feed artifacts; expected exactly one")
+    artifact, = feeds
     destination = ROOT / "data/updates"
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="goldbook-publish-", dir=destination.parent) as temporary:
@@ -184,44 +212,50 @@ def publish_updates(run_id, revision, token):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with bundle.open(entry) as source, target.open("wb") as output:
                     shutil.copyfileobj(source, output)
-        expected = "addon.json" if workflow == ".github/workflows/update-addon.yml" else "latest.json"
-        if not (staged / expected).is_file():
-            raise RuntimeError("Update feed is missing its manifest")
-        if expected == "latest.json":
-            manifest = json.loads((staged / expected).read_text())
+        missing = [name for name in manifests if not (staged / name).is_file()]
+        if missing:
+            raise RuntimeError("Update feed is missing " + ", ".join(missing))
+        package_dir = staged / revision
+        existing = destination / revision
+        if "latest.json" in manifests:
+            manifest = json.loads((staged / "latest.json").read_text())
             for platform in manifest["platforms"].values():
                 prefix = "https://app.jkc-be.com/goldbook/updates/" + revision + "/"
                 if not platform["url"].startswith(prefix) or not platform["signature"]:
                     raise RuntimeError("Invalid update download URL or signature")
-                if not (staged / revision / platform["url"].removeprefix(prefix)).is_file():
+                if not (package_dir / platform["url"].removeprefix(prefix)).is_file():
                     raise RuntimeError("Update package is missing")
-            package_dir = staged / revision
-            existing = destination / revision
-            if existing.exists():
-                # A retry must publish the same immutable files.
-                if {p.name: p.read_bytes() for p in existing.iterdir()} != {p.name: p.read_bytes() for p in package_dir.iterdir()}:
-                    raise RuntimeError("This revision already has different update packages")
-            else:
-                os.rename(package_dir, existing)
-        # Publish the manifest last; clients never see a partially copied package.
-        os.replace(staged / expected, destination / expected)
-    print(json.dumps({"published": expected, "revision": revision}), flush=True)
+            # A retry must publish the same immutable files.
+            if existing.exists() and ({p.name: p.read_bytes() for p in existing.iterdir()}
+                                      != {p.name: p.read_bytes() for p in package_dir.iterdir()}):
+                raise RuntimeError("This revision already has different update packages")
+        if check_only:
+            print(json.dumps({"checked": list(manifests), "revision": revision}), flush=True)
+            return
+        if "latest.json" in manifests and not existing.exists():
+            os.rename(package_dir, existing)
+        # Publish the manifests last; clients never see a partially copied package.
+        for name in manifests:
+            os.replace(staged / name, destination / name)
+    print(json.dumps({"published": list(manifests), "revision": revision}), flush=True)
 
 
 def main():
-    command = re.fullmatch(r"(deploy|verify|publish) ([0-9]+) ([0-9a-f]{40})", os.environ.get("SSH_ORIGINAL_COMMAND", ""))
+    command = re.fullmatch(r"(deploy|verify|publish|check-publish) ([0-9]+) ([0-9a-f]{40})",
+                           os.environ.get("SSH_ORIGINAL_COMMAND", ""))
     if command is None:
-        raise SystemExit("Only 'deploy <run ID> <SHA>', 'verify <run ID> <SHA>', or 'publish <run ID> <SHA>' is permitted")
+        raise SystemExit("Only 'deploy <run ID> <SHA>', 'verify <run ID> <SHA>', 'publish <run ID> <SHA>', "
+                         "or 'check-publish <run ID> <SHA>' is permitted")
     token = sys.stdin.read(16385).strip()
     if not token or len(token) > 16384 or any(character.isspace() for character in token):
         raise SystemExit("Expected a registry token on standard input")
-    lock_name = ".updates.lock" if command[1] == "publish" else ".deploy.lock"
-    with open(ROOT / lock_name, "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | (0 if command[1] == "publish" else fcntl.LOCK_NB))
-        if command[1] == "publish":
-            publish_updates(command[2], command[3], token)
+    updates = command[1] in ("publish", "check-publish")
+    with open(ROOT / (".updates.lock" if updates else ".deploy.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | (0 if updates else fcntl.LOCK_NB))
+        if updates:
+            publish_updates(command[2], command[3], token, check_only=command[1] == "check-publish")
         else:
-            verify_run(command[2], command[3], token, (".github/workflows/deploy.yml",))
+            verify_run(command[2], command[3], token, DEPLOY_WORKFLOWS)
             deploy(command[3], token, verify_only=command[1] == "verify")
 
 

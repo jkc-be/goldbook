@@ -2,10 +2,12 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import sqlite3
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
+from datetime import datetime, timezone
 from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/deploy-ovh.py"
@@ -28,6 +30,17 @@ class DeploymentTest(unittest.TestCase):
         patch = mock.patch.object(deployment, "ROOT", self.root)
         patch.start()
         self.addCleanup(patch.stop)
+        (self.root / "data").mkdir()
+        (self.root / "backups").mkdir()
+        # The running server keeps its connection open, so committed rows may
+        # still be in the write-ahead log when the backup starts.
+        self.database = sqlite3.connect(self.root / "data/goldbook.sqlite")
+        self.addCleanup(self.database.close)
+        self.database.execute("PRAGMA journal_mode=WAL")
+        self.database.execute("CREATE TABLE realms (name TEXT)")
+        self.database.execute("CREATE INDEX realms_name ON realms (name)")
+        self.database.execute("INSERT INTO realms VALUES ('Silvermoon')")
+        self.database.commit()
         self.active_image = "goldbook"
         self.healthy = True
         self.label = REVISION
@@ -62,8 +75,24 @@ class DeploymentTest(unittest.TestCase):
         return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
 
     def run_deploy(self):
-        with mock.patch.object(deployment.subprocess, "run", side_effect=self.docker), redirect_stdout(io.StringIO()):
+        with mock.patch.object(deployment.subprocess, "run", side_effect=self.docker), \
+             redirect_stdout(io.StringIO()) as output:
             deployment.deploy(REVISION, "test-registry-token")
+        return json.loads(output.getvalue())
+
+    def run_main(self, command, workflow):
+        run = dict(head_sha=REVISION, head_branch="main", path=workflow + "@refs/heads/main",
+                   event="workflow_dispatch", repository={"full_name": "jkc-be/goldbook"},
+                   head_repository={"full_name": "jkc-be/goldbook"},
+                   actor={"id": 156444954}, triggering_actor={"id": 156444954})
+        with mock.patch.dict(deployment.os.environ, SSH_ORIGINAL_COMMAND=command + " 123 " + REVISION), \
+             mock.patch.object(deployment.sys, "stdin", io.StringIO("test-token")), \
+             mock.patch.object(deployment.OPENER, "open", return_value=io.BytesIO(json.dumps(run).encode())), \
+             mock.patch.object(deployment, "deploy") as deploy:
+            try:
+                deployment.main()
+            finally:
+                self.deploy_calls = deploy.call_args_list
 
     def test_first_deploy_pins_digest_preserves_settings_and_cleans_registry_credentials(self):
         self.run_deploy()
@@ -82,6 +111,42 @@ class DeploymentTest(unittest.TestCase):
         self.assertEqual(self.starts, [])
         self.assertEqual(self.active_image, "goldbook")
         self.assertEqual(list(self.root.glob(".env.before-*")), [])
+        self.assertEqual(list((self.root / "backups").iterdir()), [])
+
+    def test_deploy_backs_up_the_database_before_starting_the_new_image(self):
+        clock = mock.Mock(now=mock.Mock(return_value=datetime(2026, 10, 18, 12, 30, 5, 123456, timezone.utc)))
+        with mock.patch.object(deployment, "datetime", clock):
+            result = self.run_deploy()
+        backup = self.root / "backups" / ("goldbook-20261018T123005123456Z-" + REVISION + ".sqlite")
+        self.assertEqual(result, {"revision": REVISION, "active_image": IMAGE, "previous_image": "goldbook",
+                                  "health": "healthy",
+                                  "rollback_config": str(self.root / ".env.before-20261018T123005123456Z-aaaaaaaaaaaa"),
+                                  "database_backup": str(backup)})
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        with closing(sqlite3.connect(backup)) as copy:
+            self.assertEqual(copy.execute("SELECT name FROM realms").fetchall(), [("Silvermoon",)])
+
+    def test_failed_database_integrity_check_stops_before_changing_configuration(self):
+        self.database.close()
+        database = self.root / "data/goldbook.sqlite"
+        content = database.read_bytes()
+        # Change the copy of the key stored in the index so the table and index disagree.
+        index_key = content.rindex(b"Silvermoon")
+        database.write_bytes(content[:index_key] + b"Silvermoom" + content[index_key + 10:])
+        with self.assertRaisesRegex(RuntimeError, "failed its integrity check: row 1 missing from index realms_name"):
+            self.run_deploy()
+        self.assertEqual(self.env_file.read_text(), self.original)
+        self.assertEqual(list(self.root.glob(".env.before-*")), [])
+        self.assertEqual(self.starts, [])
+
+    def test_missing_database_stops_before_changing_configuration(self):
+        self.database.close()
+        (self.root / "data/goldbook.sqlite").unlink()
+        with self.assertRaisesRegex(RuntimeError, "Expected the database at " + str(self.root / "data/goldbook.sqlite")):
+            self.run_deploy()
+        self.assertEqual(self.env_file.read_text(), self.original)
+        self.assertEqual(list((self.root / "backups").iterdir()), [])
+        self.assertEqual(self.starts, [])
 
     def test_repeated_deploy_keeps_one_image_setting(self):
         self.run_deploy()
@@ -126,6 +191,22 @@ class DeploymentTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "untrusted run"):
                 deployment.main()
             deploy.assert_not_called()
+
+    def test_deploy_and_release_build_runs_can_deploy_and_verify(self):
+        for command, workflow in [("deploy", ".github/workflows/release-build.yml"),
+                                  ("verify", ".github/workflows/release-build.yml"),
+                                  ("deploy", ".github/workflows/deploy.yml")]:
+            with self.subTest(command=command, workflow=workflow):
+                self.run_main(command, workflow)
+                self.assertEqual(self.deploy_calls, [mock.call(REVISION, "test-token", verify_only=command == "verify")])
+
+    def test_other_workflows_cannot_deploy(self):
+        for workflow in (".github/workflows/release-desktop.yml", ".github/workflows/update-addon.yml",
+                         ".github/workflows/other.yml"):
+            with self.subTest(workflow=workflow):
+                with self.assertRaisesRegex(RuntimeError, "Only a maintainer Goldbook workflow on main"):
+                    self.run_main("deploy", workflow)
+                self.assertEqual(self.deploy_calls, [])
 
     def test_ssh_key_requires_a_registry_token(self):
         with mock.patch.dict(deployment.os.environ, SSH_ORIGINAL_COMMAND="deploy 123 " + REVISION):
