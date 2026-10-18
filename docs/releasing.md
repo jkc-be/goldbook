@@ -30,7 +30,7 @@ accepts each one only when it belongs to the build run being promoted.
 
 | Output | Read from | Belongs to the build run when |
 | --- | --- | --- |
-| Server deploy | Not read | Deploying the same image again is harmless. |
+| Server deploy | Not read | It runs the image digest that the build run recorded in `Goldbook-server-image`. Deploying the same image again is harmless. |
 | Client feed | `https://app.jkc-be.com/goldbook/updates/latest.json` | It is byte for byte the build run's `latest.json`. |
 | Addon feed | `https://app.jkc-be.com/goldbook/updates/addon.json` | It is byte for byte the build run's `addon.json`. |
 | Addon mirror | `jkc-be/goldbook-addon` HEAD | Its `upstream.json` names the revision. |
@@ -56,8 +56,8 @@ address hits it, the job fails without changing anything and can be rerun.
 3. Approve `release-signing` once for the three installer jobs and the addon
    signing job, which wait together.
 4. Approve `production` for the `verify` job.
-5. Note the run ID. The `verify` summary lists the revision, the version, and
-   the ID and digest of every artifact.
+5. Note the run ID. The `verify` summary lists the revision, the version, the
+   server image digest, and the ID and digest of every artifact.
 
 The `guard` job refuses to build when:
 
@@ -77,7 +77,8 @@ A build run proves:
 - the feed has the layout the OVH helper accepts
 - the helper accepts this build run (`verify`), and its feed passes the
   helper's validation (`check-publish`)
-- the image is pushed and OVH can pull it
+- the image is pushed, its digest is recorded in `Goldbook-server-image`, and
+  OVH can pull it
 - the deployment is authorized
 
 A build run does not start the candidate server or apply its migrations to
@@ -86,6 +87,15 @@ production data. The running service is checked, not replaced.
 A failed build run is never rerun. Rerunning all jobs or only the failed jobs
 fails at `guard` or `verify`, and promote refuses any run attempt after the
 first. Start a new build run. Nothing was shipped, so nothing is lost.
+
+A promotion depends on these artifacts of the build run:
+
+| Artifact | Holds |
+| --- | --- |
+| `Goldbook-update-feed` | `latest.json`, `addon.json` and the signed updater packages under `<revision>/`, as the helper publishes them. |
+| `Goldbook-addon-feed` | The signed `addon.json`. |
+| `Goldbook-updater-macOS-ARM64`, `Goldbook-updater-Windows-X64`, `Goldbook-updater-Linux-X64` | The signed updater packages of each platform. |
+| `Goldbook-server-image` | `image.json`, with the revision and the digest of the pushed image. The helper deploys exactly that digest, not the `server:<revision>` tag, which can be pushed again. |
 
 Build artifacts are kept for 30 days, so a build run can be promoted for 30
 days.
@@ -106,8 +116,8 @@ The jobs, in order:
 
 | Job | Does |
 | --- | --- |
-| `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed and three updater artifacts unexpired. Checks out the built revision, reads its version, downloads its `Goldbook-update-feed` and requires every output to be `absent` or `matches`. |
-| `server` | Runs the helper's `check-publish`, then `deploy`, for the build run and its revision. The deploy is skipped once the build's `latest.json` is published, because the feed is published only after that deploy succeeded. |
+| `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed, three updater artifacts and server image artifact unexpired. Checks out the built revision, reads its version, downloads its `Goldbook-update-feed` and requires every output to be `absent` or `matches`. |
+| `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The deploy is skipped once the build's `latest.json` is published, because the feed is published only after that deploy succeeded. |
 | `publish` | Runs the helper's `publish` for the build run. |
 | `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. |
 | `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge job. It polls every 3 minutes for at most 120 minutes. |
@@ -126,8 +136,8 @@ before 0.2.5 had one made by hand. Create it after the tag if you want one.
 
 ## Finish a promotion that stopped partway
 
-Run **Release promote** again with the same `build_run_id`, or rerun the
-stopped promote run. Both are safe:
+Start a new **Release promote** run with the same `build_run_id`, or open the
+stopped promote run and choose **Re-run all jobs**. Both are safe:
 
 - promote builds nothing
 - the helper accepts a second publish of the same files
@@ -140,9 +150,24 @@ stopped promote run. Both are safe:
 | `latest.json` published | Skips the deploy and publishes the same feed again. |
 | Both manifests published | Skips the deploy, publishes again and mirrors. |
 | Mirror pushed | Finds HEAD already holding the revision and waits for its run. |
-| Downstream run failed | Fails at `addon-release` with the run's link. Rerun the failed jobs of that run in goldbook-addon. When it succeeds, rerun promote. |
+| Downstream run failed | Fails at `addon-release` with the run's link. Rerun the failed jobs of that run in goldbook-addon. When it succeeds, start a new promote run or re-run all jobs of this one. |
 | Downstream run succeeded | Tags the commit. |
 | Tagged | Passes every job without changes. |
+
+Do not use **Re-run failed jobs** on a promote run. It reuses the outputs of
+the jobs that passed in the earlier attempt, so `guard` would not read the
+release outputs again, while another promotion or **Deploy to OVH** may have
+run in between. `server`, `publish`, the mirror job and `tag` each compare the
+attempt in which `guard` passed with their own and fail with "Re-run all jobs
+or start a new Release promote run; re-running only failed jobs would skip
+guard". **Re-run all jobs** runs `guard` again in the new attempt, so it
+passes that check.
+
+Within one attempt, the `goldbook-production` concurrency group is held from
+the first job to the last, including while jobs wait for approval, so no other
+promotion or deploy starts between `guard` and the last change. The group is
+released when an attempt ends. As defense in depth, the OVH helper also refuses
+to publish a feed older than the one already published.
 
 `main` may have moved on in the meantime. A promotion always ships its build
 run's revision, never the current `main`.

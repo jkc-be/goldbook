@@ -303,6 +303,16 @@ class CommandLine(unittest.TestCase):
                                          environment={"GITHUB_OUTPUT": str(output)})
             self.assertEqual((code, output.read_text()), (0, f"revision={R1}\n"))
         self.assertIn("| Goldbook-update-feed | 1110 | `sha256:0` |", out)
+        self.assertIn("| Goldbook-server-image | 1115 | `sha256:5` |", out)
+
+    def test_check_build_run_refuses_a_run_without_its_server_image(self):
+        world = World()
+        world.build_run(111, R1, B1_FEED)
+        artifacts = world.urls[f"{SOURCE}/actions/runs/111/artifacts?per_page=100"]["artifacts"]
+        artifacts[:] = [artifact for artifact in artifacts if artifact["name"] != "Goldbook-server-image"]
+        code, _, error = self.run_main(world, "check-build-run", "--run-id", "111")
+        self.assertEqual((code, error), (1, "Build run 111 cannot be promoted: it has 0 unexpired "
+                                            "Goldbook-server-image artifacts, not 1."))
 
     def test_check_build_run_refuses_reruns_failures_other_workflows_and_expired_artifacts(self):
         world = World()
@@ -359,7 +369,7 @@ class DownstreamWait(unittest.TestCase):
             self.wait(world, [])
         self.assertEqual(str(raised.exception), (
             "Package addon release ended with failure: https://github.com/jkc-be/goldbook-addon/actions/runs/7. "
-            "Rerun it in goldbook-addon, then rerun this job."))
+            "Rerun it in goldbook-addon, then re-run all jobs of this promote run or start a new one."))
 
     def test_gives_up_after_the_timeout(self):
         world = World()
@@ -412,6 +422,14 @@ class Version(unittest.TestCase):
     def test_refuses_mismatched_fields(self):
         with self.assertRaisesRegex(STATE.Failure, "set-version.py --check failed:\nCargo.lock differs"):
             STATE.read_version(self.source("Cargo.lock differs", code=1))
+
+    def test_reads_a_source_given_relative_to_the_working_directory(self):
+        root = self.source("0.2.5")
+        stdout = io.StringIO()
+        with contextlib.chdir(root.parent), contextlib.redirect_stdout(stdout), \
+                mock.patch.dict(os.environ, {}, clear=True):
+            code = STATE.main(["version", "--source", root.name], http=World())
+        self.assertEqual((code, stdout.getvalue()), (0, "0.2.5\n"))
 
     def test_refuses_a_check_that_reports_another_version(self):
         with self.assertRaisesRegex(STATE.Failure, "did not report 0.2.5: 0.2.50"):

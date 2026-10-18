@@ -377,7 +377,7 @@
         <mxCell id="n4" value="&lt;b&gt;guard of run 2 reads every output&lt;/b&gt;&lt;br&gt;client feed: matches 4101&lt;br&gt;addon feed: matches 4101&lt;br&gt;mirror: absent&lt;br&gt;addon release: absent&lt;br&gt;tag: absent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="330" y="100" width="250" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="n5" value="&lt;b&gt;Promote run 2&lt;/b&gt;, same build 4101&lt;br&gt;(or rerun run 1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="n5" value="&lt;b&gt;Promote run 2&lt;/b&gt;, same build 4101&lt;br&gt;(or Re-run all jobs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="640" y="120" width="220" height="55" as="geometry" />
         </mxCell>
         <mxCell id="n6" value="&lt;b&gt;server&lt;/b&gt;: check-publish only;&lt;br&gt;deploy skipped, latest.json is live" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">

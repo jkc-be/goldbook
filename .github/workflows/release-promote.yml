@@ -18,7 +18,9 @@ permissions:
   contents: read
 
 # Shared with Deploy to OVH. No called workflow uses this group, because a
-# called workflow would wait for its own caller.
+# called workflow would wait for its own caller. The group is held only while
+# a run attempt is in progress, so every job that changes something refuses an
+# attempt whose guard passed in an earlier one ("Re-run failed jobs").
 concurrency:
   group: goldbook-production
   cancel-in-progress: false
@@ -35,6 +37,7 @@ jobs:
       revision: ${{ steps.run.outputs.revision }}
       version: ${{ steps.version.outputs.version }}
       deploy_server: ${{ steps.state.outputs.deploy_server }}
+      attempt: ${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -83,6 +86,15 @@ jobs:
       packages: read
       actions: read
     steps:
+      - name: Require the guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ needs.guard.outputs.attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -124,6 +136,15 @@ jobs:
       contents: read
       actions: read
     steps:
+      - name: Require the guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ needs.guard.outputs.attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -149,6 +170,7 @@ jobs:
     secrets: inherit
     with:
       revision: ${{ needs.guard.outputs.revision }}
+      guard-attempt: ${{ needs.guard.outputs.attempt }}
 
   addon-release:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
@@ -180,6 +202,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Require the guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ needs.guard.outputs.attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
       - name: Tag the released commit
         env:
           GH_TOKEN: ${{ github.token }}

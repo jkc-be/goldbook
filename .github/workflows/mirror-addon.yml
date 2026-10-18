@@ -9,6 +9,10 @@ on:
         description: The released commit whose addon/ is mirrored
         required: true
         type: string
+      guard-attempt:
+        description: The run attempt in which the caller's guard passed
+        required: true
+        type: string
     outputs:
       commit:
         description: The goldbook-addon commit that holds the revision
@@ -24,6 +28,18 @@ jobs:
     outputs:
       commit: ${{ steps.mirror.outputs.commit }}
     steps:
+      # Here rather than in a job of the caller: Re-run failed jobs reruns this
+      # job but reuses every earlier job that passed, so only a check inside
+      # the job that pushes runs in the attempt that pushes.
+      - name: Require the caller's guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ inputs.guard-attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false

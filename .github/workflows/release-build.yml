@@ -108,6 +108,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -119,6 +121,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        id: push
         with:
           context: .
           file: server/Dockerfile
@@ -130,6 +133,22 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # The tag can be pushed again; the digest names exactly this build's image.
+      - name: Record the image digest
+        env:
+          REVISION: ${{ github.sha }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid image digest: $DIGEST" >&2; exit 1; }
+          mkdir server-image
+          jq -n --arg revision "$REVISION" --arg digest "$DIGEST" '{revision: $revision, digest: $digest}' > server-image/image.json
+          cat server-image/image.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Goldbook-server-image
+          path: server-image/image.json
+          if-no-files-found: error
+          retention-days: 30
 
   feed:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
@@ -222,11 +241,13 @@ jobs:
           VERSION: ${{ needs.guard.outputs.version }}
           REVISION: ${{ github.sha }}
           RUN_ID: ${{ github.run_id }}
+          IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
         run: |
           # shellcheck disable=SC2016 # the backticks are Markdown
           {
             printf '## Goldbook %s\n\n' "$VERSION"
             printf 'Build run %s of revision `%s`. Promote it with **Release promote**.\n\n' "$RUN_ID" "$REVISION"
+            printf 'Server image `%s@%s`, recorded in `Goldbook-server-image`.\n\n' "$IMAGE" "$IMAGE_DIGEST"
             printf '| Artifact | ID | Digest |\n| --- | --- | --- |\n'
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
               --jq '.artifacts | sort_by(.name)[] | "| \(.name) | \(.id) | `\(.digest)` |"'

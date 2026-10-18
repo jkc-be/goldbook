@@ -39,9 +39,9 @@ FEED = "https://app.jkc-be.com/goldbook/updates"
 MAINTAINER_ID = 156444954
 BUILD_WORKFLOW = ".github/workflows/release-build.yml"
 ADDON_WORKFLOW = "release.yml"
-# The signed products a promotion depends on, as release-build.yml names them.
+# The artifacts a promotion depends on, as release-build.yml names them.
 BUILD_ARTIFACTS = ("Goldbook-update-feed", "Goldbook-addon-feed", "Goldbook-updater-macOS-ARM64",
-                   "Goldbook-updater-Windows-X64", "Goldbook-updater-Linux-X64")
+                   "Goldbook-updater-Windows-X64", "Goldbook-updater-Linux-X64", "Goldbook-server-image")
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 REVISION = re.compile(r"[0-9a-f]{40}")
 
@@ -347,7 +347,7 @@ def downstream_verdict(runs, read_jobs):
         return "pending", f"Package addon release is {newest['status']}: {newest['html_url']}"
     newest = max(runs, key=lambda r: r["id"])
     return "failure", (f"Package addon release ended with {newest['conclusion']}: {newest['html_url']}. "
-                       "Rerun it in goldbook-addon, then rerun this job.")
+                       "Rerun it in goldbook-addon, then re-run all jobs of this promote run or start a new one.")
 
 
 def wait_for_addon_release(http, commit, interval, timeout, sleep=time.sleep, clock=time.monotonic):
@@ -372,6 +372,8 @@ def wait_for_addon_release(http, commit, interval, timeout, sleep=time.sleep, cl
 
 def read_version(source):
     """The version at `source`, after set-version.py --check confirms every field agrees."""
+    # Absolute, because the check runs with `source` as its working directory.
+    source = source.resolve()
     check = subprocess.run([sys.executable, str(source / "scripts/set-version.py"), "--check"],
                            cwd=source, text=True, capture_output=True)
     if check.returncode != 0:
