@@ -107,6 +107,11 @@ were released with.
   page keeps its own.
 - A character's page is at `#character/<name>-<realm>`. Links to the old
   `#characters/<name>-<realm>` still open it.
+- The website and the desktop app's own pages look like the addon's window, in
+  its palettes as the game shows them, with its fonts, title bar, theme
+  button, tables, filters and status lines; Bags, Gold and Accounting now
+  have the addon's columns, cards and panels.
+- A tab no longer opens scrolled down to a table that shared its name.
 
 ## 0.2.3 - 2026-10-17
 

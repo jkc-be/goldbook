@@ -8,7 +8,7 @@
   </head>
   <body>
     <aside class="rail">
-      <div class="topbar">
+      <div class="titlebar">
         <span class="brand"><span class="crest" aria-hidden="true"></span>Goldbook</span>
       </div>
       <nav class="views" aria-label="Views">
@@ -17,19 +17,19 @@
         <button type="button" data-view="sync" aria-current="page"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7a5.5 5.5 0 0 1 10-2.5M13.5 9a5.5 5.5 0 0 1-10 2.5M12.5 1.5v3h-3M3.5 14.5v-3h3" /></svg>Sync</button>
       </nav>
       <div class="rail-foot">
+        <p class="rail-version">
+          <span>Client <strong id="rail-version"></strong></span>
+          <button type="button" id="theme" class="icon-button">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
+          </button>
+        </p>
         <button type="button" id="update-alert" class="button" hidden>Update ready</button>
-        <div class="segmented theme-switch" role="group" aria-label="Theme">
-          <button type="button" data-theme-choice="light">Light</button>
-          <button type="button" data-theme-choice="dark">Dark</button>
-        </div>
       </div>
     </aside>
 
     <!-- The website view covers this area on Prices and Characters. -->
     <div class="stage">
-      <header class="topbar">
-        <p class="purse"><span class="purse-label">Client</span><span id="topbar-version"></span></p>
-      </header>
+      <header class="titlebar"></header>
       <div class="content">
         <div class="pagehead">
           <h1>Sync</h1>

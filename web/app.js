@@ -38,7 +38,7 @@ const SERIES = [
 // Prices on top, the quantity listed in a band below that shares the time axis.
 const CHART = { height: 300, left: 56, right: 64, price: [16, 192], supply: [214, 262], dates: 282 };
 const LABEL_HEIGHT = 14;
-const SPARK = { width: 56, height: 20, pad: 3, floor: 0.05 };
+const SPARK = { width: 64, height: 16, pad: 2 };
 const WEEK = 7;
 const NEWEST_SCANS = 5;
 const WOWHEAD_ITEM = "https://www.wowhead.com/forever/item=";
@@ -114,28 +114,23 @@ function moneyText(copper) {
   return shown.length === 0 ? "0c" : shown.map(({ unit, amount }) => `${amount.toLocaleString("en")}${unit}`).join(" ");
 }
 
-// Zero units are left out. In a column every unit keeps its slot, and the
-// units below the largest one show as two digits, as in the addon, so that a
-// lone "12g" reads "12g 00s 00c" and ends where the rows around it end.
-function money(copper, { aligned = false } = {}) {
+// As the addon's Codec.Money writes it: every unit from the largest down, the
+// ones below it as two digits, so that "12g 00s 00c" ends where the rows
+// around it end.
+function money(copper) {
   const amounts = coins(copper);
   const largest = copper === 0 ? COINS.length - 1 : amounts.findIndex(({ amount }) => amount > 0);
-  const parts = amounts.flatMap(({ unit, amount }, index) => {
-    const shown = aligned ? index >= largest : amount > 0 || (copper === 0 && index === COINS.length - 1);
-    if (!shown && !aligned) {
-      return [];
-    }
-    const part = element("span", { className: `coin ${unit}` });
-    if (shown) {
-      const digits = aligned && index > largest ? String(amount).padStart(2, "0") : amount.toLocaleString("en");
-      part.append(digits, element("span", { className: "unit", textContent: unit }));
-    }
-    return [part, " "];
-  });
-  return element("span", { className: aligned ? "money aligned" : "money" }, parts.slice(0, -1));
+  const parts = amounts.slice(largest).flatMap(({ unit, amount }, index) => [
+    element("span", { className: `coin ${unit}` }, [
+      index > 0 ? String(amount).padStart(2, "0") : amount.toLocaleString("en"),
+      element("span", { className: "unit", textContent: unit }),
+    ]),
+    " ",
+  ]);
+  return element("span", { className: "money" }, parts.slice(0, -1));
 }
 
-const optionalMoney = (copper, options) => (copper > 0 ? money(copper, options) : "–");
+const optionalMoney = (copper) => (copper > 0 ? money(copper) : "–");
 const rounded = (value) => String(Math.round(value * 100) / 100);
 
 // Axis labels `step` apart keep to a unit whose hundredths tell them apart.
@@ -176,6 +171,13 @@ function age(seconds) {
     return relative.format(-Math.round(elapsed / 3600), "hour");
   }
   return relative.format(-Math.round(elapsed / DAY), "day");
+}
+
+// As the addon's Codec.Age writes it in a table: "40m ago", "3h ago", "2d ago".
+function ago(seconds) {
+  const elapsed = Math.max(0, Date.now() / 1000 - seconds);
+  const unit = [[DAY, "d"], [HOUR, "h"], [60, "m"]].find(([size]) => elapsed >= size);
+  return unit ? `${Math.floor(elapsed / unit[0])}${unit[1]} ago` : "just now";
 }
 
 function itemName(item) {
@@ -247,39 +249,23 @@ function weekLows(lows, current) {
   return week;
 }
 
-// One line per run of consecutive days with a price; a day without one leaves
-// a gap. `kind` is the direction of the change beside it, so both read alike.
-// The scale spans at least SPARK.floor of the price either way, so that a move
-// of a few percent stays a small move, and a dashed rule marks the first price.
-function sparkline(lows, kind) {
-  const values = lows.filter((low) => low !== null);
-  const root = svg("svg", { class: `spark ${kind}`, viewBox: `0 0 ${SPARK.width} ${SPARK.height}`, "aria-hidden": "true" });
-  if (values.length === 0) {
+// As the addon draws it: a line through the days with a price, each at its
+// place in the week, from the lowest to the highest of them; green when the
+// newest is at least the oldest, else red. A single day draws nothing.
+function sparkline(lows, label) {
+  const points = lows.flatMap((low, index) => (low === null ? [] : [[index, low]]));
+  const rising = points.length > 1 && points.at(-1)[1] >= points[0][1];
+  const root = svg("svg", { class: `spark ${rising ? "up" : "down"}`, viewBox: `0 0 ${SPARK.width} ${SPARK.height}`, role: "img" });
+  root.setAttribute("aria-label", label);
+  if (points.length < 2) {
     return root;
   }
+  const values = points.map(([, low]) => low);
   const [low, high] = [Math.min(...values), Math.max(...values)];
-  const middle = (low + high) / 2;
-  const reach = Math.max((high - low) / 2, middle * SPARK.floor);
   const x = (index) => SPARK.pad + (index / (lows.length - 1)) * (SPARK.width - 2 * SPARK.pad);
-  const y = (value) => SPARK.height / 2 - ((value - middle) / reach) * (SPARK.height / 2 - SPARK.pad);
-  const base = y(values[0]).toFixed(1);
-  root.append(svg("path", { class: "spark-base", d: `M${SPARK.pad} ${base}H${SPARK.width - SPARK.pad}` }));
-  let path = "";
-  lows.forEach((value, index) => {
-    if (value === null) {
-      return;
-    }
-    const joined = index > 0 && lows[index - 1] !== null;
-    path += `${joined ? "L" : "M"}${x(index).toFixed(1)} ${y(value).toFixed(1)}`;
-    if (!joined && (lows[index + 1] ?? null) === null) {
-      root.append(svg("circle", { class: "spark-point", cx: x(index), cy: y(value), r: 1.5 }));
-    }
-  });
+  const y = (value) => SPARK.height - SPARK.pad - (high > low ? (value - low) / (high - low) : 0.5) * (SPARK.height - 2 * SPARK.pad);
+  const path = points.map(([index, value], position) => `${position ? "L" : "M"}${x(index).toFixed(1)} ${y(value).toFixed(1)}`).join("");
   root.append(svg("path", { class: "spark-line", d: path }));
-  const last = lows.length - 1;
-  if (lows[last] !== null) {
-    root.append(svg("circle", { class: "spark-end", cx: x(last), cy: y(lows[last]), r: 2 }));
-  }
   return root;
 }
 
@@ -450,9 +436,10 @@ function drawChart(chart, options) {
   }
   root.append(svg("line", { class: "axis", x1: CHART.left, x2: right, y1: bottom, y2: bottom }));
 
+  // A rule up the plot at each date, as the addon's charts have.
   for (const [time, text, anchor] of dates(start, end, right - CHART.left)) {
+    root.prepend(svg("line", { class: "grid", x1: x(time), x2: x(time), y1: top, y2: bottom }));
     root.append(
-      svg("line", { class: "axis", x1: x(time), x2: x(time), y1: CHART.dates - 18, y2: CHART.dates - 14 }),
       svg("text", { x: x(time), y: CHART.dates, "text-anchor": anchor }, text),
     );
   }
@@ -580,11 +567,11 @@ function drawItemChart(title, points) {
   );
 }
 
+// A card as the addon draws one: its label, its figure, and a line under
+// them, which is text or nodes.
 function stat(label, value, note) {
-  return element("div", { className: "stat" }, [
-    element("dt", { textContent: label }),
-    element("dd", {}, [value, ...(note ? [element("span", { className: "note", textContent: note, title: note })] : [])]),
-  ]);
+  const detail = note ? [element("dd", { className: "note", title: typeof note === "string" ? note : "" }, [note].flat())] : [];
+  return element("div", { className: "stat" }, [element("dt", { textContent: label }), element("dd", { className: "figure" }, [value]), ...detail]);
 }
 
 function drawSummary(points) {
@@ -612,8 +599,8 @@ function drawScans(points) {
     ...newestFirst.map((point, index) => {
       const row = element("tr", {}, [
         element("td", { textContent: when(point.scannedAt) }),
-        element("td", { className: "number" }, [money(point.minBuyout, { aligned: true })]),
-        element("td", { className: "number" }, [optionalMoney(point.marketValue, { aligned: true })]),
+        element("td", { className: "number" }, [money(point.minBuyout)]),
+        element("td", { className: "number" }, [optionalMoney(point.marketValue)]),
         element("td", { className: "number", textContent: point.quantity.toLocaleString("en") }),
         element("td", { className: "mode", textContent: SCAN_NAMES[point.mode] }),
       ]);
@@ -877,13 +864,17 @@ async function loadHistory(itemKey) {
     api("/api/sellers", { realm, faction, itemKey, history: 1 }),
   ]));
   state.selected = itemKey;
-  for (const row of $("prices").tBodies[0].rows) {
+  for (const row of $("prices-table").tBodies[0].rows) {
     row.setAttribute("aria-selected", String(row.dataset.itemKey === itemKey));
   }
   $("detail").hidden = false;
   $("detail-title").textContent = itemName(data);
   $("detail-title").className = `quality-${quality(data)}`;
   $("detail-wowhead").href = `${WOWHEAD_ITEM}${itemKey.split(":")[0]}`;
+  const item = { itemKey, name: itemName(data), ...state.realm };
+  $("detail-compare").dataset.compareKey = itemKey;
+  $("detail-compare").onclick = () => toggleComparison(item);
+  updateCompareButtons();
   $("detail-subtitle").textContent = `Price per scan on ${realm} · ${faction}`;
   drawSummary(data.points);
   drawSellers(sellers);
@@ -895,9 +886,15 @@ async function loadHistory(itemKey) {
   }
 }
 
-function weekTrend(days, lows, current) {
-  const change = changeOver(seenDays(days, lows), current, WEEK);
-  return [sparkline(weekLows(lows, current), change === null ? "none" : direction(change)), trend(change, "over 7 days")];
+// The week's sparkline, which names the change over it to a screen reader and
+// on hover. Without the price now, the newest day seen ends it.
+function weekTrend(days, lows, current = null) {
+  const seen = seenDays(days, lows);
+  const change = seen.length ? changeOver(seen, current ?? seen.at(-1).low, WEEK) : null;
+  const text = change === null ? "Not enough history" : `${TRENDS[direction(change)].word} ${percentText(Math.abs(change))} over 7 days`;
+  const line = sparkline(current === null ? lows.slice(-(WEEK + 1)) : weekLows(lows, current), text);
+  line.append(svg("title", {}, text));
+  return line;
 }
 
 function priceRow(item, market, trends) {
@@ -908,39 +905,89 @@ function priceRow(item, market, trends) {
     onclick: () => run(() => loadHistory(item.itemKey)),
   });
   const lows = trends && (trends.items[item.itemKey] ?? trends.days.map(() => null));
-  const marketCell = element("td", { className: "number market" }, [optionalMoney(item.marketValue, { aligned: true })]);
+  const marketCell = element("td", { className: "number market" }, [item.marketValue > 0 ? money(item.marketValue) : ""]);
   if (market.borrowed) {
     marketCell.title =
       item.marketValue > 0 ? `From the full scan of ${when(market.scannedAt)}` : `Not in the full scan of ${when(market.scannedAt)}`;
   }
   const row = element("tr", {}, [
     element("td", { className: "item" }, [open]),
-    element("td", { className: "number" }, [money(item.minBuyout, { aligned: true })]),
+    element("td", { className: "number" }, [money(item.minBuyout)]),
     marketCell,
+    element("td", { className: "spark-column" }, trends ? [weekTrend(trends.days, lows, item.minBuyout)] : []),
     element("td", { className: "number listed", textContent: item.quantity.toLocaleString("en") }),
-    element("td", { className: "number week" }, trends ? weekTrend(trends.days, lows, item.minBuyout) : []),
+    element("td", { className: "number seen", textContent: ago(market.seen), title: when(market.seen) }),
   ]);
-  const compare = element("button", {
-    className: "compare-item",
-    onclick: () => toggleComparison({ itemKey: item.itemKey, name: itemName(item), ...state.realm }),
-  });
-  compare.dataset.compareKey = item.itemKey;
-  compare.setAttribute("aria-label", `Compare ${itemName(item)}`);
-  compare.setAttribute("aria-pressed", String(comparisonItems.some((entry) => entry.itemKey === item.itemKey)));
-  row.prepend(element("td", { className: "compare-column" }, [compare]));
   row.dataset.itemKey = item.itemKey;
   row.setAttribute("aria-selected", String(item.itemKey === state.selected));
   return row;
 }
 
+// The line under a table, as the addon's status line: which rows of how many
+// when they take more than a page, and a hint, joined by a middle dot. With
+// `go`, Previous and Next turn the page.
+function drawPager(nav, { offset = 0, count, total, hint = "", none = "", go = null }) {
+  const range = total > count ? `${offset + 1}–${offset + count} of ${total.toLocaleString("en")}` : "";
+  const text = total === 0 ? none : [range, hint].filter(Boolean).join(" · ");
+  const turn = (to) => () => go(Math.max(0, to));
+  nav.replaceChildren(
+    element("span", { className: "range", textContent: text }),
+    ...(go && total > count
+      ? [
+          element("button", { type: "button", textContent: "Previous", disabled: offset === 0, onclick: turn(offset - PAGE) }),
+          element("button", { type: "button", textContent: "Next", disabled: offset + PAGE >= total, onclick: turn(offset + PAGE) }),
+        ]
+      : []),
+  );
+}
+
+// Each of a table's columns as { label, className, cell(row), value(row) }:
+// a column with a value sorts by it when its header is clicked, and the one
+// `sort` names is marked, as the addon marks it, with an arrow.
+function drawTable(table, columns, rows, { sort = null, onSort = null, empty = "" } = {}) {
+  const head = columns.map(({ label, className = "", value }, index) => {
+    const cell = element("th", { scope: "col", className });
+    if (sort?.column === index) {
+      cell.setAttribute("aria-sort", sort.descending ? "descending" : "ascending");
+    }
+    cell.append(value && onSort ? element("button", { type: "button", textContent: label, onclick: () => onSort(index) }) : label);
+    return cell;
+  });
+  const body = rows.map((row) =>
+    element("tr", {}, columns.map(({ className = "", cell }) => element("td", { className }, [cell(row)].flat()))));
+  table.replaceChildren(
+    element("thead", {}, [element("tr", {}, head)]),
+    element("tbody", {}, body.length || !empty ? body : [element("tr", {}, [element("td", { colSpan: columns.length, className: "muted", textContent: empty })])]),
+  );
+  return body;
+}
+
+// Rows in the order of a column's value, names breaking ties; text sorts A to
+// Z and anything else highest first, each the other way round when asked.
+function sorted(rows, value, descending) {
+  const name = (row) => row.name ?? "";
+  return rows.toSorted((a, b) => {
+    const [left, right] = [value(a), value(b)];
+    const order = typeof left === "string" ? left.localeCompare(right) : (left ?? -Infinity) - (right ?? -Infinity);
+    return (descending ? -order : order) || name(a).localeCompare(name(b));
+  });
+}
+
+// A click on the column sorted already turns its order; another column
+// starts with text A to Z and anything else highest first.
+function nextSort(sort, column, columns, sample) {
+  if (sort?.column === column) {
+    return { column, descending: !sort.descending };
+  }
+  return { column, descending: sample === undefined || typeof columns[column].value(sample) !== "string" };
+}
+
 function drawPrices(data, trends) {
   const { scan, marketScan } = data;
-  const market = { borrowed: marketScan !== null && marketScan.id !== scan.id, scannedAt: marketScan?.scannedAt };
-  const marketNote = market.borrowed ? ` Market values are from the full scan of ${when(market.scannedAt)}.` : "";
-  $("scan").textContent =
-    `${SCAN_NAMES[scan.mode]} scan of ${scan.itemCount.toLocaleString("en")} items, ${when(scan.scannedAt)}, by ${scan.scanner}.${marketNote}`;
-  $("market-age").textContent = market.borrowed ? age(market.scannedAt) : "";
-  $("prices").tBodies[0].replaceChildren(...data.items.map((item) => priceRow(item, market, trends)));
+  const market = { borrowed: marketScan !== null && marketScan.id !== scan.id, scannedAt: marketScan?.scannedAt, seen: scan.scannedAt };
+  const where = `${state.realm.realm}-${state.realm.faction}`;
+  $("scan").textContent = `${plural(data.total, "item")} on ${where}${market.borrowed ? ` · market values from the full scan of ${when(market.scannedAt)}` : ""}`;
+  $("prices-table").tBodies[0].replaceChildren(...data.items.map((item) => priceRow(item, market, trends)));
 }
 
 async function loadPrices() {
@@ -962,10 +1009,17 @@ async function loadPrices() {
     }),
   );
   drawPrices(data, null);
-  $("range").textContent =
-    data.total === 0 ? "No items match" : `${state.offset + 1}–${state.offset + data.items.length} of ${data.total.toLocaleString("en")}`;
-  $("previous").disabled = state.offset === 0;
-  $("next").disabled = state.offset + PAGE >= data.total;
+  drawPager($("prices-view").querySelector(".pager"), {
+    offset: state.offset,
+    count: data.items.length,
+    total: data.total,
+    hint: "Click an item to see its history",
+    none: "No items match",
+    go: (offset) => {
+      state.offset = offset;
+      run(loadPrices);
+    },
+  });
   for (const button of document.querySelectorAll("[data-sort]")) {
     const sorted = button.dataset.sort === state.sort;
     button.parentElement.setAttribute("aria-sort", sorted ? `${state.order}ending` : "none");
@@ -981,13 +1035,7 @@ async function ensureRealms() {
   if (state.realm !== null) {
     return true;
   }
-  const [{ realms }, { professions }] = await latestOnly("view", Promise.all([api("/api/realms"), api("/api/professions")]));
-  $("profession").replaceChildren(element("option", { value: "", textContent: "All professions" }),
-    ...professions.filter((p) => p.materials.length > 0).map((p) => element("option", { value: p.id, textContent: p.name })));
-  $("profession").value = state.profession;
-  $("item-quality").replaceChildren(element("option", { value: "", textContent: "All qualities" }),
-    ...QUALITIES.map((name, index) => element("option", { value: String(index), textContent: name })));
-  $("item-quality").value = state.quality;
+  const [{ realms }] = await latestOnly("view", Promise.all([api("/api/realms"), loadProfessions()]));
   state.realms = realms;
   $("realm").replaceChildren(
     ...realms.map((entry, index) => element("option", { value: String(index), textContent: `${entry.realm} · ${entry.faction}` })),
@@ -997,7 +1045,56 @@ async function ensureRealms() {
     return false;
   }
   state.realm = realms[0];
+  drawLastScan();
   return true;
+}
+
+// The professions, once, into every profession and quality chip, each of
+// which keeps what it had chosen. A failure is tried again next time.
+let professionList = null;
+function loadProfessions() {
+  professionList ??= api("/api/professions").then(({ professions }) => {
+    const fill = (selector, first, options) => {
+      for (const select of document.querySelectorAll(selector)) {
+        const chosen = select.value;
+        select.replaceChildren(element("option", { value: "", textContent: first }), ...options());
+        select.value = chosen;
+      }
+    };
+    fill("[data-profession-filter]", "All professions", () =>
+      professions.filter((p) => p.materials.length > 0).map((p) => element("option", { value: p.id, textContent: p.name })));
+    fill("[data-quality-filter]", "All qualities", () =>
+      QUALITIES.map((name, index) => element("option", { value: String(index), textContent: name })));
+    return professions;
+  }, (error) => {
+    professionList = null;
+    throw error;
+  });
+  return professionList;
+}
+
+// As Professions.Matches in the addon: whether an item is of the chosen
+// profession, all of them for none, and of the chosen kind of its items.
+function professionMatches(professions, itemKey, profession, kind) {
+  if (profession === "" && kind === "all") {
+    return true;
+  }
+  const id = Number(itemKey.split(":")[0]);
+  const groups = professions.filter((p) => profession === "" || p.id === profession);
+  const has = (group) => groups.some((p) => p[group].includes(id));
+  return ((kind === "all" || kind === "materials-recipes" || kind === "materials") && has("materials"))
+    || ((kind === "all" || kind === "materials-recipes" || kind === "recipes") && has("recipes"))
+    || ((kind === "all" || kind === "crafted") && has("crafted"));
+}
+
+// The newest scan of the realm on show, else of any realm: the rail's line
+// "Last scan 40m ago", as the addon's rail has it.
+let realmList = null;
+function drawLastScan() {
+  const scans = state.realm ? [state.realm] : (realmList ?? []);
+  const newest = Math.max(0, ...scans.map(({ lastScan }) => lastScan ?? 0));
+  $("last-scan").hidden = newest === 0;
+  $("last-scan").replaceChildren("Last scan ", element("strong", { textContent: ago(newest), title: when(newest) }));
 }
 
 // The realms load on the first visit to a market view, so that a page opened
@@ -1030,15 +1127,23 @@ const itemColumn = {
 
 const weekColumn = {
   label: "7 days",
-  className: "number week",
+  className: "spark-column",
   cell: (item, trends) =>
     trends ? weekTrend(trends.days, trends.items[item.itemKey] ?? trends.days.map(() => null), item.minBuyout) : [],
 };
 
-const aligned = (copper) => money(copper, { aligned: true });
+
+// A change in percent as the addon writes it, to a tenth with its sign, in
+// green or red; one that rounds to nothing has neither.
+function signedPercent(change) {
+  const tenths = Math.round(change * 10);
+  const kind = tenths > 0 ? "up" : tenths < 0 ? "down" : "flat";
+  return element("span", { className: `trend ${kind}`, textContent: `${tenths > 0 ? "+" : ""}${(tenths / 10).toFixed(1)}%` });
+}
 
 // The market views that list what the server's copy of the addon's advice
-// finds in the newest scan: each one's endpoint, columns and sub-heading.
+// finds in the newest scan: each one's endpoint, columns, the column the
+// server sorts by, sub-heading and hint.
 const LISTS = {
   deals: {
     endpoint: "/api/deals",
@@ -1046,15 +1151,19 @@ const LISTS = {
     parameters: () => ({}),
     columns: [
       itemColumn,
-      { label: "Buy from", className: "number", cell: (item) => aligned(item.minBuyout) },
-      { label: "Sells for", className: "number sells", cell: (item) => aligned(item.sell) },
+      { label: "Buy from", className: "number", cell: (item) => money(item.minBuyout) },
+      { label: "Sells for", className: "number sells", cell: (item) => money(item.sell) },
       weekColumn,
-      { label: "Profit", className: "number", cell: (item) => signedMoney(item.profit, { aligned: true }) },
+      { label: "Profit", className: "number", cell: (item) => signedMoney(item.profit) },
+      // The server finds auction flips only; vendor deals need the addon.
+      { label: "Sell to", className: "sell-to", cell: () => "Auction" },
     ],
+    sort: () => ({ column: 4, descending: true }),
     heading: (data) => {
-      $("min-profit").replaceChildren("Min profit ", money(data.minProfit));
-      return `${plural(data.total, "deal")} in the scan of ${when(data.scan.scannedAt)}`;
+      $("min-profit").replaceChildren(element("span", { textContent: "Min profit" }), money(data.minProfit));
+      return `${data.total.toLocaleString("en")} in the scan of ${ago(data.scan.scannedAt)}`;
     },
+    hint: "Click a deal to see its history · Profit is per unit, after the 5% cut · Vendor deals are in game: /gb deals",
     none: "No deals match",
   },
   movers: {
@@ -1064,14 +1173,16 @@ const LISTS = {
     parameters: () => ({ direction: LISTS.movers.direction }),
     columns: [
       itemColumn,
-      { label: "Price", className: "number", cell: (item) => aligned(item.minBuyout) },
-      { label: "Day before", className: "number before", cell: (item) => aligned(item.before) },
+      { label: "Price", className: "number", cell: (item) => money(item.minBuyout) },
+      { label: "Day before", className: "number before", cell: (item) => money(item.before) },
       weekColumn,
-      { label: "Change", className: "number", cell: (item) => trend(item.change, "since the day before") },
+      { label: "Change", className: "number", cell: (item) => signedPercent(item.change) },
       { label: "Listed", className: "number listed", cell: (item) => item.quantity.toLocaleString("en") },
     ],
+    sort: () => ({ column: 4, descending: LISTS.movers.direction === "risers" }),
     heading: (data) =>
-      `${plural(data.total, "price")} ${LISTS.movers.direction === "risers" ? "rose" : "fell"} since the day before, scan of ${when(data.scan.scannedAt)}`,
+      `${plural(data.total, "price")} ${LISTS.movers.direction === "risers" ? "rose" : "fell"} since the day before`,
+    hint: "Click an item to see its history · Prices under a silver on both days are left out",
     none: "No prices match",
   },
 };
@@ -1081,25 +1192,19 @@ const marketFilters = () => ({ q: state.q, profession: state.profession, kind: s
 function drawList(name, data, trends) {
   const list = LISTS[name];
   $("scan").textContent = list.heading(data);
-  $(name).replaceChildren(
-    element("thead", {}, [
-      element("tr", {}, list.columns.map(({ label, className }) => element("th", { scope: "col", className, textContent: label }))),
-    ]),
-    element("tbody", {}, data.items.map((item) =>
-      element("tr", {}, list.columns.map(({ className, cell }) => element("td", { className }, [cell(item, trends)].flat()))))),
-  );
-  const pages = (offset) => () => {
-    list.offset = offset;
-    run(() => loadList(name));
-  };
-  $(`${name}-view`).querySelector(".pager").replaceChildren(
-    element("span", {
-      className: "range muted",
-      textContent: data.total === 0 ? list.none : `${list.offset + 1}–${list.offset + data.items.length} of ${data.total.toLocaleString("en")}`,
-    }),
-    element("button", { textContent: "Previous", disabled: list.offset === 0, onclick: pages(Math.max(0, list.offset - PAGE)) }),
-    element("button", { textContent: "Next", disabled: list.offset + PAGE >= data.total, onclick: pages(list.offset + PAGE) }),
-  );
+  const columns = list.columns.map((column) => ({ ...column, cell: (item) => column.cell(item, trends) }));
+  drawTable($(`${name}-table`), columns, data.items, { sort: list.sort() });
+  drawPager($(`${name}-view`).querySelector(".pager"), {
+    offset: list.offset,
+    count: data.items.length,
+    total: data.total,
+    hint: list.hint,
+    none: list.none,
+    go: (offset) => {
+      list.offset = offset;
+      run(() => loadList(name));
+    },
+  });
 }
 
 async function loadList(name) {
@@ -1210,7 +1315,7 @@ function drawAccount(account, current = null) {
 
 async function loadAccount() {
   drawAccount(await latestOnly("view", api("/api/account")));
-  showPanel("characters");
+  showPanel("roster");
 }
 
 // The account and every character in it in full, as each one's page has it.
@@ -1246,56 +1351,153 @@ for (const select of document.querySelectorAll("[data-character-filter]")) {
   };
 }
 
-function characterCell(character) {
-  const link = element("a", { href: routeHash({ view: "character", name: character.name, realm: character.realm }), textContent: character.name });
-  link.style.color = classColor(character.class);
-  return element("td", { className: "character" }, [link]);
+
+const WHERE = { bags: "bags", bank: "bank" };
+
+// What Bags shows: the roster it last loaded, the 7-day lows of the items on
+// the page by realm, and the toolbar's choices.
+const bags = { roster: null, professions: null, trends: new Map(), q: "", profession: "", kind: "all", quality: "", sort: { column: 4, descending: true }, offset: 0 };
+
+// The items of the characters chosen as the addon's Bags lists them: one row
+// per item, its stacks in every bag and bank added up, and where they are in
+// its `from`. Prices differ by realm, so an item is a row per realm.
+function bagRows(characters) {
+  const rows = new Map();
+  for (const character of characters) {
+    for (const where of Object.keys(WHERE)) {
+      for (const stack of character[where]?.rows ?? []) {
+        const id = `${character.realm}-${character.faction}:${stack.key}`;
+        const row = rows.get(id) ?? { ...stack, count: 0, value: 0, realm: character.realm, faction: character.faction, from: [] };
+        row.count += stack.count;
+        row.value += stack.value;
+        row.from.push(`${character.name}, ${WHERE[where]} ${stack.count.toLocaleString("en")}`);
+        rows.set(id, row);
+      }
+    }
+  }
+  return [...rows.values()];
 }
 
-const WHERE = { bags: "Bags", bank: "Bank" };
+const SELL_TO = { auction: "Auction", vendor: "Vendor", unknown: "No price" };
 
-// Every unbound item in the bags and banks of the characters chosen, the most
-// valuable first, as each character's page lists them.
-function drawBags({ account, characters }) {
+const BAG_COLUMNS = [
+  {
+    label: "Item in bags",
+    className: "item",
+    value: (row) => row.name ?? row.key,
+    cell: (row) =>
+      element("span", { className: `quality-${quality(row)}`, title: row.from?.join(" · ") ?? "" }, [
+        row.name ?? `Item ${row.key}`,
+        element("span", { className: "count", textContent: ` x${row.count.toLocaleString("en")}` }),
+      ]),
+  },
+  { label: "Post at", className: "number", value: (row) => row.post, cell: (row) => (row.post ? money(row.post) : "") },
+  { label: "Vendor pays", className: "number vendor", value: (row) => row.vendor, cell: (row) => (row.vendor > 0 ? money(row.vendor) : "") },
+  {
+    label: "7 days",
+    className: "spark-column",
+    cell: (row) => {
+      const trends = bags.trends.get(`${row.realm}-${row.faction}`);
+      const lows = trends?.items[row.key];
+      return lows ? [weekTrend(trends.days, lows)] : [];
+    },
+  },
+  { label: "Brings in", className: "number", value: (row) => row.value, cell: (row) => money(row.value) },
+  {
+    label: "Sell to",
+    className: "sell-to",
+    value: (row) => SELL_TO[row.action],
+    cell: (row) => element("span", { className: row.action === "auction" ? "" : "muted", textContent: SELL_TO[row.action] }),
+  },
+];
+
+// Every unbound item in the bags and banks of the characters chosen, as the
+// addon's Bags lists those of the character playing.
+function drawBags() {
+  const { account, characters } = bags.roster;
   drawSession(account);
   drawCharacterFilter(characters);
   const shown = characters.filter((character) => state.character === "" || characterKey(character) === state.character);
-  const rows = shown
-    .flatMap((character) =>
-      Object.keys(WHERE).flatMap((where) => (character[where]?.rows ?? []).map((row) => ({ ...row, character, where }))))
-    .sort((a, b) => b.value - a.value || (a.name ?? a.key).localeCompare(b.name ?? b.key));
-  const total = (where) => shown.reduce((sum, character) => sum + (character[where]?.total ?? 0), 0);
-  $("bags-sub").textContent = `${plural(rows.length, "item")} of ${plural(shown.length, "character")}`;
-  $("bags-summary").replaceChildren(
-    stat("Worth", money(total("bags") + total("bank")), "after the auction house cut"),
-    stat("Bags", money(total("bags"))),
-    stat("Bank", money(total("bank"))),
-    stat("Items", rows.length.toLocaleString("en")),
-  );
+  const all = bagRows(shown);
+  const needle = bags.q.toLowerCase();
+  const kept = all.filter((row) =>
+    (row.name ?? "").toLowerCase().includes(needle)
+    && (bags.quality === "" || quality(row) === Number(bags.quality))
+    && professionMatches(bags.professions ?? [], row.key, bags.profession, bags.kind));
+  const rows = sorted(kept, BAG_COLUMNS[bags.sort.column].value, bags.sort.descending);
+  bags.offset = Math.min(bags.offset, Math.max(0, Math.floor((rows.length - 1) / PAGE) * PAGE));
+  const page = rows.slice(bags.offset, bags.offset + PAGE);
+  $("bags-sub").textContent = `${plural(all.length, "item")} in ${state.character === "" ? "the bags and banks of " + plural(shown.length, "character") : "these bags and bank"}`;
+  $("bags-worth").replaceChildren("Worth ", money(kept.reduce((total, row) => total + row.value, 0)), " after the cut");
+  drawTable($("bags-table"), BAG_COLUMNS, page, {
+    sort: bags.sort,
+    onSort: (column) => {
+      bags.sort = nextSort(bags.sort, column, BAG_COLUMNS, rows[0]);
+      bags.offset = 0;
+      drawBags();
+    },
+    empty: all.length ? "No items match" : "No unbound items",
+  });
   const without = (where) => shown.filter((character) => character[where] === null).map(({ name }) => name);
-  const missing = [
-    without("bags").length ? `Log out or /reload in game to save the bags of ${without("bags").join(", ")}.` : "",
-    without("bank").length ? `Open the bank once in game to see that of ${without("bank").join(", ")}.` : "",
-  ].filter(Boolean);
-  $("bags-missing").textContent = missing.join(" ");
-  $("bags-missing").hidden = missing.length === 0;
-  const [item, ...rest] = HOLDING_COLUMNS;
-  const columns = [item, ["Character", "character"], ["In", "where"], ...rest];
-  $("bags").replaceChildren(
-    element("thead", {}, [element("tr", {}, columns.map(([text, className]) => element("th", { scope: "col", className, textContent: text })))]),
-    element("tbody", {}, rows.length === 0
-      ? [element("tr", {}, [element("td", { colSpan: columns.length, className: "muted", textContent: "No unbound items." })])]
-      : rows.map((row) => {
-          const line = holdingRow(row);
-          line.firstChild.after(characterCell(row.character), element("td", { className: "where", textContent: WHERE[row.where] }));
-          return line;
-        })),
-  );
+  drawPager($("bags-status"), {
+    offset: bags.offset,
+    count: page.length,
+    total: rows.length,
+    hint: [
+      "Auction prices undercut the lowest buyout, or hold the usual price when it is far off",
+      without("bags").length ? `/reload in game to save the bags of ${without("bags").join(", ")}` : "",
+      without("bank").length ? `open the bank in game to see that of ${without("bank").join(", ")}` : "",
+    ].filter(Boolean).join(" · "),
+    go: (offset) => {
+      bags.offset = offset;
+      run(loadBagTrends);
+    },
+  });
+  return page;
+}
+
+// The 7-day lows of the items on the page, one request per realm they are on.
+// A realm without scans has none.
+async function loadBagTrends() {
+  const realms = new Map();
+  for (const row of drawBags()) {
+    const where = `${row.realm}-${row.faction}`;
+    realms.set(where, [...(realms.get(where) ?? []), row]);
+  }
+  const answers = await latestOnly("listTrends", Promise.all([...realms].map(([where, rows]) =>
+    api("/api/trends", { realm: rows[0].realm, faction: rows[0].faction, items: rows.map((row) => row.key).join(",") })
+      .then((trends) => [where, trends], () => [where, null]))));
+  for (const [where, trends] of answers) {
+    bags.trends.set(where, trends);
+  }
+  drawBags();
 }
 
 async function loadBags() {
-  drawBags(await latestOnly("view", loadRoster()));
+  [bags.roster, bags.professions] = await latestOnly("view", Promise.all([loadRoster(), loadProfessions()]));
+  bags.offset = 0;
+  await loadBagTrends();
 }
+
+const bagsChanged = (change) => () => {
+  change();
+  bags.offset = 0;
+  if (bags.roster) {
+    run(loadBagTrends);
+  }
+};
+let bagsTimer;
+$("bags-search").oninput = (event) => {
+  clearTimeout(bagsTimer);
+  bagsTimer = setTimeout(bagsChanged(() => { bags.q = event.target.value.trim(); }), 150);
+};
+$("bags-profession").onchange = bagsChanged(() => {
+  bags.profession = $("bags-profession").value;
+  bags.kind = bags.profession ? "materials" : "all";
+  $("bags-kind").value = bags.kind;
+});
+$("bags-kind").onchange = bagsChanged(() => { bags.kind = $("bags-kind").value; });
+$("bags-quality").onchange = bagsChanged(() => { bags.quality = $("bags-quality").value; });
 
 // The gold of all `characters` over time: at each time any of them recorded
 // a balance, the sum of their balances then. Before its first balance a
@@ -1316,57 +1518,123 @@ function accountGold(characters) {
   ]);
 }
 
+// A muted label before a figure, as the addon's cards and lists pair them.
+const labelled = (text, figure) => [element("span", { className: "muted", textContent: text }), " ", figure];
+const none = () => element("span", { className: "muted", textContent: "–" });
+
+// Whole UTC days since the character last saved, as Ledger.Summary has them.
+const idleDays = (character) => Math.floor(Date.now() / 1000 / DAY) - Math.floor(character.updatedAt / DAY);
+const balance = (character) => character.gold.at(-1)?.[1] ?? null;
+const todayChange = (character) => (character.gold.length ? goldChange(character.gold, 1).change : 0);
+
 const GOLD_COLUMNS = [
-  ["Name", "name"],
-  ["Gold", "number"],
-  ["Today", "number"],
-  ["7 days", "number week-change"],
-  ["Updated", "updated"],
+  {
+    label: "Name",
+    className: "name",
+    value: (character) => character.name,
+    cell: (character) => {
+      const link = element("a", { href: routeHash({ view: "character", name: character.name, realm: character.realm }), textContent: character.name });
+      link.style.color = classColor(character.class);
+      return link;
+    },
+  },
+  { label: "Gold", className: "number", value: balance, cell: (character) => (character.gold.length ? money(balance(character)) : none()) },
+  {
+    label: "Today",
+    className: "number",
+    value: todayChange,
+    cell: (character) => (todayChange(character) === 0 ? none() : signedMoney(todayChange(character))),
+  },
+  {
+    label: "Played",
+    className: "number played",
+    value: (character) => (character.updatedAt === null ? null : -idleDays(character)),
+    cell: (character) =>
+      element("span", {
+        className: "muted",
+        textContent: character.updatedAt === null ? "–" : idleDays(character) <= 0 ? "today" : `${idleDays(character)}d ago`,
+        title: character.updatedAt === null ? "" : when(character.updatedAt),
+      }),
+  },
 ];
 
-// The gold of the account, or of the character chosen, and a row per
-// character with its changes, the richest first.
-function drawGold({ account, characters }) {
+// The account as a broker would state it, as the addon's Gold cards do.
+function goldCards(gold, worth, worthLabel) {
+  if (gold.length === 0) {
+    return ["Total gold", "Today", "30 days", "Net worth"].map((label) => stat(label, none()));
+  }
+  const now = gold.at(-1)[1];
+  const high = Math.max(...gold.map(([, copper]) => copper));
+  const today = goldChange(gold, 1);
+  const tenths = today.base > 0 ? Math.round((today.change / today.base) * 1000) : 0;
+  return [
+    stat("Total gold", money(now), labelled("High", money(high))),
+    stat("Today", signedMoney(today.change), element("span", {
+      className: "muted",
+      textContent: `${tenths > 0 ? "+" : ""}${(tenths / 10).toFixed(1)}% since yesterday`,
+    })),
+    stat("30 days", signedMoney(goldChange(gold, 30).change), labelled("7 days", signedMoney(goldChange(gold, 7).change))),
+    stat("Net worth", money(now + worth), labelled(worthLabel, money(worth))),
+  ];
+}
+
+// What Gold shows: the roster and the trades it last loaded, and the order of its table.
+const ledger = { roster: null, trades: null, sort: { column: 1, descending: true } };
+
+// The gold of the account, or of the character chosen, the characters with
+// their gold, and the month's accounting beside them.
+function drawGold() {
+  const { account, characters } = ledger.roster;
   drawSession(account);
   drawCharacterFilter(characters);
   const chosen = characters.find((character) => characterKey(character) === state.character);
+  const shown = chosen ? [chosen] : characters;
   const gold = chosen ? chosen.gold : accountGold(characters);
   const title = chosen ? chosen.name : "All characters";
-  $("gold-sub").textContent = plural(characters.length, "character");
-  $("account-gold-summary").replaceChildren(...goldSummary(gold));
+  const held = (where) => shown.reduce((total, character) => total + (character[where]?.total ?? 0), 0);
+  $("gold-sub").textContent = chosen ? about(chosen) : plural(characters.length, "character");
+  $("account-gold-summary").replaceChildren(...goldCards(gold, held("bags") + held("bank"), "Bags and bank"));
   $("account-gold").hidden = gold.length === 0;
   $("account-gold-title").textContent = title;
   if (gold.length > 0) {
     drawGoldChart({ chart: $("account-gold-chart"), range: $("account-gold-range") }, title, gold);
   }
-  const balance = (character) => character.gold.at(-1)?.[1] ?? -1;
-  const rows = characters
-    .toSorted((a, b) => balance(b) - balance(a) || a.name.localeCompare(b.name))
-    .map((character) => {
-      const { gold: held } = character;
-      const change = (span) => (held.length ? signedMoney(goldChange(held, span).change, { aligned: true }) : "–");
-      const row = element("tr", {}, [
-        characterCell(character),
-        element("td", { className: "number" }, [held.length ? aligned(held.at(-1)[1]) : "–"]),
-        element("td", { className: "number" }, [change(1)]),
-        element("td", { className: "number week-change" }, [change(7)]),
-        element("td", { className: "updated muted", textContent: character.updatedAt === null ? "–" : age(character.updatedAt) }),
-      ]);
-      row.setAttribute("aria-selected", String(character === chosen));
-      return row;
-    });
-  $("gold-characters").replaceChildren(
-    element("thead", {}, [element("tr", {}, GOLD_COLUMNS.map(([text, className]) => element("th", { scope: "col", className, textContent: text })))]),
-    element("tbody", {}, rows),
+  const ordered = sorted(characters, GOLD_COLUMNS[ledger.sort.column].value, ledger.sort.descending);
+  const rows = drawTable($("gold-characters"), GOLD_COLUMNS, ordered, {
+    sort: ledger.sort,
+    onSort: (column) => {
+      ledger.sort = nextSort(ledger.sort, column, GOLD_COLUMNS, characters[0]);
+      drawGold();
+    },
+  });
+  ordered.forEach((character, index) => rows[index].setAttribute("aria-selected", String(character === chosen)));
+  drawMonth($("gold-month"), ledger.trades);
+}
+
+// The last 30 days of the account's accounting, as the addon's Gold has it beside its characters.
+function drawMonth(list, trades) {
+  const month = (trades ?? []).filter(({ at }) => at >= Date.now() / 1000 - 30 * DAY);
+  const totals = tradeSums(month);
+  const best = month
+    .filter(({ side }) => SIDES[side].revenue && SIDES[side].goods)
+    .reduce((most, trade) => (tradeNet(trade) > (most ? tradeNet(most) : -Infinity) ? trade : most), null);
+  const line = (label, value) => element("div", {}, [element("dt", { textContent: label }), element("dd", {}, [value])]);
+  list.replaceChildren(
+    line("Revenue", money(totals.revenue)),
+    line("Expenses", money(totals.expenses)),
+    line("Net", signedMoney(totals.net)),
+    line("Realized profit", totals.profit === null ? none() : signedMoney(totals.profit)),
+    line("Best sale", best ? element("span", { className: `quality-${QUALITIES[best.quality] ? best.quality : 1}`, textContent: best.item }) : none()),
   );
 }
 
 async function loadGold() {
-  drawGold(await latestOnly("view", loadRoster()));
+  [ledger.roster, ledger.trades] = await latestOnly("view", Promise.all([loadRoster(), loadTrades()]));
+  drawGold();
 }
 
 async function loadAccounting() {
-  drawTrades($("account-trades"), await latestOnly("view", loadTrades()), { withCharacter: true, heading: "All characters" });
+  drawTrades($("account-trades"), await latestOnly("view", loadTrades()), { withCharacter: true });
 }
 
 // Gold is [[time, copper]], oldest first: the balance at the end of the hour
@@ -1408,10 +1676,8 @@ function dailyGold(gold) {
 // The value and note of a stat: the change, and in the note its share of the
 // balance it started from.
 function goldTrend(change, base, note) {
-  const kind = change > 0 ? "up" : change < 0 ? "down" : "flat";
-  const shown = element("span", { className: `trend ${kind}` }, [`${TRENDS[kind].arrow} `, money(Math.abs(change))]);
   const share = change !== 0 && base > 0 ? percentText(Math.abs(change / base) * 100) : null;
-  return [shown, [note, share].filter(Boolean).join(" · ")];
+  return [signedMoney(change), [note, share].filter(Boolean).join(" · ")];
 }
 
 // As Ledger.Performance has it in game: the change over the last `span` UTC
@@ -1482,19 +1748,34 @@ function dayDates(start, end, width) {
   return dayTicks(start, end, labelRoom(width)).map((time) => [time, shortDate(time), "middle"]);
 }
 
-const SPAN_NAMES = { 1: "day", 7: "7 days", 30: "30 days" };
-let goldSpan = 7;
+const SPAN_NAMES = { 1: "day", 7: "7 days", 30: "30 days", 60: "60 days" };
 
-// The balance hour by hour over the last `goldSpan` days, or since the first
-// one on record when that is later, into `chart`, with a button per span in `range`.
+// The balance hour by hour over the days chosen in `range`, or since the first
+// one on record when that is later, into `chart`. Each range keeps its own
+// choice, the button pressed in the page at first.
 function drawGoldChart(panel, name, gold) {
-  for (const button of panel.range.querySelectorAll("button")) {
-    const span = Number(button.dataset.days);
-    button.setAttribute("aria-pressed", String(span === goldSpan));
+  const buttons = [...panel.range.querySelectorAll("button")];
+  panel.range.dataset.days ??= buttons.find((button) => button.getAttribute("aria-pressed") === "true").dataset.days;
+  const goldSpan = Number(panel.range.dataset.days);
+  for (const button of buttons) {
+    button.setAttribute("aria-pressed", String(button.dataset.days === panel.range.dataset.days));
     button.onclick = () => {
-      goldSpan = span;
+      panel.range.dataset.days = button.dataset.days;
       drawGoldChart(panel, name, gold);
     };
+  }
+  // A month or more is drawn a point a day, as the addon draws every span.
+  if (goldSpan >= 30) {
+    const today = Math.floor(goldNow(gold) / DAY) * DAY;
+    const days = dailyGold(gold).filter(({ day }) => day > today - goldSpan * DAY);
+    drawChart(panel.chart, {
+      times: days.map(({ day }) => day),
+      series: [{ name: "Gold", color: "var(--series-1)", values: days.map(({ copper }) => copper), area: true }],
+      heading: (index) => shortDate(days[index].day, "UTC"),
+      label: `${name}: gold at the end of each day over the last ${SPAN_NAMES[goldSpan]}, from ${moneyText(days[0].copper)} to ${moneyText(days.at(-1).copper)}. Use the arrow keys to read each day.`,
+      dates: dayDates,
+    });
+    return;
   }
   const end = Math.floor(goldNow(gold) / HOUR) * HOUR;
   const times = [];
@@ -1512,45 +1793,19 @@ function drawGoldChart(panel, name, gold) {
   });
 }
 
-const ACTIONS = { auction: "Auction", vendor: "Vendor", unknown: "No price" };
-const HOLDING_COLUMNS = [
-  ["Item", ""],
-  ["Count", "number count"],
-  ["Action", "action"],
-  ["Post", "number amount post"],
-  ["Vendor", "number amount vendor"],
-  ["Value", "number amount"],
-];
-
-function holdingRow(row) {
-  return element("tr", {}, [
-    element("td", { className: `quality-${quality(row)}`, textContent: row.name ?? `Item ${row.key}`, title: QUALITIES[quality(row)] }),
-    element("td", { className: "number", textContent: row.count.toLocaleString("en") }),
-    element("td", { className: "action", textContent: ACTIONS[row.action] }),
-    element("td", { className: "number post" }, [optionalMoney(row.post, { aligned: true })]),
-    element("td", { className: "number vendor" }, [optionalMoney(row.vendor, { aligned: true })]),
-    element("td", { className: "number" }, [optionalMoney(row.value, { aligned: true })]),
-  ]);
-}
-
+// A character's bags or bank as Bags lists them, without the week's prices.
 function holdings(title, snapshot, seen, missing) {
-  const heading = element("h3", { textContent: title });
+  const heading = element("h3", { className: "heading", textContent: title });
   if (snapshot === null) {
-    return element("div", { className: "panel" }, [heading, element("p", { className: "muted", textContent: missing })]);
+    return element("div", { className: "panel list-panel" }, [heading, element("p", { className: "panel-note muted", textContent: missing })]);
   }
-  const table =
-    snapshot.rows.length === 0
-      ? element("p", { textContent: "No unbound items." })
-      : element("table", { className: "holding" }, [
-          element("thead", {}, [
-            element("tr", {}, HOLDING_COLUMNS.map(([text, className]) => element("th", { scope: "col", className, textContent: text }))),
-          ]),
-          element("tbody", {}, snapshot.rows.map(holdingRow)),
-        ]);
-  return element("div", { className: "panel" }, [
+  const table = element("table", { className: "holding" });
+  const [item, ...rest] = BAG_COLUMNS.filter(({ label }) => label !== "7 days");
+  drawTable(table, [{ ...item, label: "Item" }, ...rest], snapshot.rows, { empty: "No unbound items" });
+  return element("div", { className: "panel list-panel" }, [
     heading,
-    element("p", { className: "muted" }, ["Total ", money(snapshot.total), ` · ${seen} ${age(snapshot.at)}`]),
     table,
+    element("p", { className: "panel-note muted" }, ["Worth ", money(snapshot.total), ` after the cut · ${seen} ${age(snapshot.at)}`]),
   ]);
 }
 
@@ -1558,13 +1813,11 @@ function holdings(title, snapshot, seen, missing) {
 // [{ name, realm, at, side, item, itemKey, quality, count, price, fee, party }].
 // `price` is the whole stack's and never negative, `fee` the auction house cut
 // and `party` the other player of a trade, mail or cash on delivery, or null.
-const NEWEST_TRADES = 20;
 
 // Every side an entry can have. Revenue adds its price less the cut to the
 // gold and an expense takes its price away. A goods side moves an item and
-// counts towards that item's profit; the others move gold alone, and `detail`
-// marks those whose `item` says more than the label. `party` joins the label
-// to the other player, as in "Trade sale to Mirelle".
+// counts towards that item's profit; the others move gold alone. `party`
+// joins the entry to the other player, as in "Thorium Ore x20 · to Kargath".
 const SIDES = {
   sell: { label: "Auction sale", revenue: true, goods: true },
   buy: { label: "Auction purchase", revenue: false, goods: true },
@@ -1574,16 +1827,16 @@ const SIDES = {
   tradeBuy: { label: "Trade purchase", revenue: false, goods: true, party: "from" },
   tradeIn: { label: "Trade gold in", revenue: true, goods: false, party: "from" },
   tradeOut: { label: "Trade gold out", revenue: false, goods: false, party: "to" },
-  mailIn: { label: "Mail gold in", revenue: true, goods: false, party: "from", detail: true },
+  mailIn: { label: "Mail gold in", revenue: true, goods: false, party: "from" },
   mailOut: { label: "Mail gold out", revenue: false, goods: false, party: "to" },
   cod: { label: "Cash on delivery", revenue: false, goods: true, party: "from" },
-  quest: { label: "Quest reward", revenue: true, goods: false, detail: true },
+  quest: { label: "Quest reward", revenue: true, goods: false },
   loot: { label: "Looted gold", revenue: true, goods: false },
   repair: { label: "Repairs", revenue: false, goods: false },
   postage: { label: "Postage", revenue: false, goods: false },
-  deposit: { label: "Auction deposit", revenue: false, goods: false, detail: true },
-  travel: { label: "Flight", revenue: false, goods: false, detail: true },
-  training: { label: "Training", revenue: false, goods: false, detail: true },
+  deposit: { label: "Auction deposit", revenue: false, goods: false },
+  travel: { label: "Flight", revenue: false, goods: false },
+  training: { label: "Training", revenue: false, goods: false },
   respec: { label: "Talent reset", revenue: false, goods: false },
   otherIn: { label: "Other income", revenue: true, goods: false },
   otherOut: { label: "Other expense", revenue: false, goods: false },
@@ -1594,18 +1847,17 @@ const ENTRY_FILTERS = {
   revenue: { label: "Revenue", keep: (side) => side.revenue },
   expenses: { label: "Expenses", keep: (side) => !side.revenue },
 };
-let entryFilter = "all";
 
 // What an entry added to the gold: its price less the cut, or minus its price.
 const tradeNet = (trade) => (SIDES[trade.side].revenue ? trade.price - trade.fee : -trade.price);
 
 // A gain in green with a plus, a loss in red with a minus.
-function signedMoney(copper, options) {
+function signedMoney(copper) {
   if (copper === 0) {
-    return money(0, options);
+    return money(0);
   }
   const kind = copper > 0 ? "up" : "down";
-  return element("span", { className: `trend ${kind}` }, [copper > 0 ? "+" : "−", money(Math.abs(copper), options)]);
+  return element("span", { className: `trend ${kind}` }, [copper > 0 ? "+" : "−", money(Math.abs(copper))]);
 }
 
 // One row per item moved, the most recently traded first. Every goods side
@@ -1642,175 +1894,203 @@ function tradedItems(trades) {
 
 const entries = (count) => `${count.toLocaleString("en")} ${count === 1 ? "entry" : "entries"}`;
 
-function tradeTotals(trades, items) {
-  const revenue = trades.filter(({ side }) => SIDES[side].revenue);
-  const expenses = trades.filter(({ side }) => !SIDES[side].revenue);
+// As Trades.Totals has them in game; profit is null when no goods were both bought and sold.
+function tradeSums(trades) {
   const sum = (list, value) => list.reduce((total, trade) => total + value(trade), 0);
-  const cut = sum(revenue, ({ fee }) => fee);
-  const realized = items.filter(({ profit }) => profit !== null);
-  return [
-    stat(
-      "Revenue",
-      money(sum(revenue, ({ price, fee }) => price - fee)),
-      cut > 0 ? `${entries(revenue.length)} · after ${moneyText(cut)} auction cut` : entries(revenue.length),
-    ),
-    stat("Expenses", money(sum(expenses, ({ price }) => price)), entries(expenses.length)),
-    stat("Net", signedMoney(sum(trades, tradeNet)), "revenue less expenses"),
-    stat(
-      "Realized profit",
-      realized.length > 0 ? signedMoney(sum(realized, ({ profit }) => profit)) : "–",
-      "on goods both bought and sold",
-    ),
-  ];
+  const realized = tradedItems(trades).filter(({ profit }) => profit !== null);
+  return {
+    revenue: sum(trades.filter(({ side }) => SIDES[side].revenue), ({ price, fee }) => price - fee),
+    expenses: sum(trades.filter(({ side }) => !SIDES[side].revenue), ({ price }) => price),
+    net: sum(trades, tradeNet),
+    profit: realized.length > 0 ? sum(realized, ({ profit }) => profit) : null,
+  };
 }
 
-function tradedItemCell(name, itemQuality) {
-  const quality = QUALITIES[itemQuality] ? itemQuality : 1;
-  return element("td", { className: `item-name quality-${quality}`, textContent: name, title: QUALITIES[quality] });
-}
+const itemQuality = (value) => (QUALITIES[value] ? value : 1);
 
-function ledgerTable(className, columns, rows) {
-  return element("table", { className }, [
-    element("thead", {}, [element("tr", {}, columns.map(([text, name]) => element("th", { scope: "col", className: name, textContent: text })))]),
-    element("tbody", {}, rows),
+const TRADED_ITEM_COLUMNS = [
+  {
+    label: "Item",
+    className: "item",
+    value: (item) => item.name,
+    cell: (item) => element("span", { className: `quality-${itemQuality(item.quality)}`, textContent: item.name }),
+  },
+  { label: "Bought", className: "number", value: (item) => item.bought, cell: (item) => item.bought.toLocaleString("en") },
+  { label: "Average cost", className: "number average", value: (item) => item.averageCost, cell: (item) => optionalAverage(item.averageCost) },
+  { label: "Sold", className: "number", value: (item) => item.sold, cell: (item) => item.sold.toLocaleString("en") },
+  { label: "Average sale", className: "number average", value: (item) => item.averageSale, cell: (item) => optionalAverage(item.averageSale) },
+  {
+    label: "Profit or loss",
+    className: "number",
+    value: (item) => item.profit,
+    cell: (item) => (item.profit === null ? none() : signedMoney(item.profit)),
+  },
+];
+
+const optionalAverage = (copper) => (copper === null ? none() : money(Math.round(copper)));
+
+// "Runecloth x20 · to Kargath", as the addon names an entry: the goods and
+// how many, or what the gold was for, and who it went to or came from.
+function entryCell(trade) {
+  const side = SIDES[trade.side];
+  return element("span", { className: side.goods ? `quality-${itemQuality(trade.quality)}` : "" }, [
+    trade.item,
+    ...(side.goods ? [element("span", { className: "count", textContent: ` x${trade.count.toLocaleString("en")}` })] : []),
+    ...(side.party && trade.party ? [element("span", { className: "count", textContent: ` · ${side.party} ${trade.party}` })] : []),
   ]);
 }
 
-function tradedItemsTable(items) {
-  const optional = (copper) => (copper === null ? "–" : money(Math.round(copper), { aligned: true }));
-  return ledgerTable(
-    "traded-items",
-    [
-      ["Item", ""],
-      ["Bought", "number"],
-      ["Average cost", "number average"],
-      ["Sold", "number"],
-      ["Average sale", "number average"],
-      ["Profit or loss", "number"],
-    ],
-    items.map((item) =>
-      element("tr", {}, [
-        tradedItemCell(item.name, item.quality),
-        element("td", { className: "number", textContent: item.bought.toLocaleString("en") }),
-        element("td", { className: "number average" }, [optional(item.averageCost)]),
-        element("td", { className: "number", textContent: item.sold.toLocaleString("en") }),
-        element("td", { className: "number average" }, [optional(item.averageSale)]),
-        element("td", { className: "number" }, [item.profit === null ? "–" : signedMoney(item.profit, { aligned: true })]),
-      ]),
-    ),
-  );
+function tradeColumns(withCharacter) {
+  return [
+    { label: "Entry", className: "item", value: (trade) => trade.item, cell: entryCell },
+    {
+      label: "Source",
+      className: "source",
+      value: (trade) => SIDES[trade.side].label,
+      cell: (trade) => element("span", { className: "muted", textContent: SIDES[trade.side].label }),
+    },
+    { label: "Net", className: "number", value: tradeNet, cell: (trade) => signedMoney(tradeNet(trade)) },
+    ...(withCharacter
+      ? [{
+          label: "Character",
+          className: "character",
+          value: (trade) => trade.name,
+          cell: (trade) => element("a", { href: routeHash({ view: "character", name: trade.name, realm: trade.realm }), textContent: trade.name }),
+        }]
+      : []),
+    {
+      label: "When",
+      className: "number when",
+      value: (trade) => trade.at,
+      cell: (trade) => element("span", { className: "muted", textContent: ago(trade.at), title: when(trade.at) }),
+    },
+  ];
 }
 
-// "Trade sale to Mirelle": the side's label, and the other player when known.
-function sourceCell(trade) {
-  const side = SIDES[trade.side];
-  const party = side.party && trade.party ? [` ${side.party} `, element("span", { className: "party", textContent: trade.party })] : [];
-  return element("td", { className: "source" }, [side.label, ...party]);
+// A chip of choices: [value, label] pairs, the first for all of them.
+function chip(label, choices, chosen, onchange) {
+  const select = element("select", { onchange: () => onchange(select.value) },
+    choices.map(([value, text]) => element("option", { value, textContent: text })));
+  select.value = chosen;
+  return element("label", { className: "chip" }, [element("span", { className: "visually-hidden", textContent: label }), select]);
 }
 
-function tradesTable(trades, withCharacter) {
-  const rows = trades.map((trade) => {
-    const side = SIDES[trade.side];
-    const character = element("a", {
-      href: routeHash({ view: "character", name: trade.name, realm: trade.realm }),
-      textContent: trade.name,
-    });
-    const goods = side.goods
-      ? [
-          tradedItemCell(trade.item, trade.quality),
-          element("td", { className: "number", textContent: trade.count.toLocaleString("en") }),
-          element("td", { className: "number each" }, [money(Math.round(trade.price / trade.count), { aligned: true })]),
-        ]
-      : [
-          element("td", { className: "detail", textContent: side.detail ? trade.item : "" }),
-          element("td", { className: "number" }),
-          element("td", { className: "number each" }),
-        ];
-    return element("tr", {}, [
-      element("td", { className: "when", textContent: when(trade.at) }),
-      ...(withCharacter ? [element("td", { className: "character" }, [character])] : []),
-      sourceCell(trade),
-      ...goods,
-      element("td", { className: "number" }, [signedMoney(tradeNet(trade), { aligned: true })]),
-    ]);
-  });
-  return ledgerTable(
-    "trade-list",
-    [
-      ["When", "when"],
-      ...(withCharacter ? [["Character", "character"]] : []),
-      ["Source", "source"],
-      ["Detail", ""],
-      ["Qty", "number"],
-      ["Each", "number each"],
-      ["Net", "number"],
-    ],
-    rows,
-  );
-}
-
-// The accounting of `trades` into `container`: totals, each item's profit, and
-// the entries themselves, those of the chosen filter, the newest
-// NEWEST_TRADES until the rest are asked for.
-function drawTrades(container, trades, { withCharacter = false, heading: title = "Accounting" } = {}) {
-  const heading = element("h3", { textContent: title });
+// The accounting of `trades` into `container`, as the addon's Accounting view
+// has it: a title with the choice of revenue or expenses, the cards of what
+// is shown, a search and chips, the entries, and each item's profit under
+// them. The container keeps its choices from one drawing to the next.
+function drawTrades(container, trades, { withCharacter = false, title = "Accounting", heading = "h1" } = {}) {
   if (trades === null) {
     container.replaceChildren();
     return;
   }
-  if (trades.length === 0) {
-    container.replaceChildren(
-      heading,
-      element("p", {
-        className: "muted",
-        textContent: "Nothing booked yet. Goldbook books the gold each character earns and spends in game. Type /reload or log out to save it.",
-      }),
-    );
-    return;
-  }
-  const items = tradedItems(trades);
-  const list = tradesTable(trades, withCharacter);
-  const rows = [...list.tBodies[0].rows];
-  let expanded = false;
-  const toggle = element("button", { className: "disclosure", type: "button" });
-  const buttons = Object.entries(ENTRY_FILTERS).map(([name, { label }]) => {
-    const button = element("button", { type: "button", textContent: label });
-    button.dataset.filter = name;
-    button.onclick = () => {
-      entryFilter = name;
-      show();
-    };
-    return button;
+  const view = (container.choices ??= { segment: "all", q: "", source: "", sort: null, offset: 0 });
+  const columns = tradeColumns(withCharacter);
+  view.sort ??= { column: columns.length - 1, descending: true };
+  const redraw = () => drawTrades(container, trades, { withCharacter, title, heading });
+  const characters = [...new Map(trades.map((trade) => [characterKey(trade), trade.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const character = withCharacter && characters.some(([key]) => key === state.character) ? state.character : "";
+  const needle = view.q.toLowerCase();
+  const kept = trades.filter((trade) => {
+    const side = SIDES[trade.side];
+    return ENTRY_FILTERS[view.segment].keep(side)
+      && (view.source === "" || trade.side === view.source)
+      && (character === "" || characterKey(trade) === character)
+      && [trade.item, trade.name, side.label, trade.party ?? ""].some((field) => field.toLowerCase().includes(needle));
   });
-  const show = () => {
-    const { keep } = ENTRY_FILTERS[entryFilter];
-    let kept = 0;
-    trades.forEach((trade, index) => {
-      const shown = keep(SIDES[trade.side]);
-      rows[index].hidden = !shown || (!expanded && kept >= NEWEST_TRADES);
-      kept += shown ? 1 : 0;
-    });
-    for (const button of buttons) {
-      button.setAttribute("aria-pressed", String(button.dataset.filter === entryFilter));
-    }
-    toggle.hidden = kept <= NEWEST_TRADES;
-    toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.textContent = expanded ? `Newest ${NEWEST_TRADES} entries` : `All ${entries(kept)}`;
+  const rows = sorted(kept, columns[view.sort.column].value, view.sort.descending);
+  view.offset = Math.min(view.offset, Math.max(0, Math.floor((rows.length - 1) / PAGE) * PAGE));
+  const page = rows.slice(view.offset, view.offset + PAGE);
+
+  const segments = element("div", { className: "segmented", role: "group" }, Object.entries(ENTRY_FILTERS).map(([name, { label }]) => {
+    const button = element("button", { type: "button", textContent: label, onclick: () => {
+      view.segment = name;
+      view.offset = 0;
+      redraw();
+    } });
+    button.setAttribute("aria-pressed", String(name === view.segment));
+    return button;
+  }));
+  segments.setAttribute("aria-label", "Entries");
+  const totals = tradeSums(kept);
+  const present = new Set(trades.map(({ side }) => side));
+  const search = element("input", { type: "search", placeholder: "Search items or characters", autocomplete: "off", value: view.q });
+  search.oninput = () => {
+    clearTimeout(view.timer);
+    view.timer = setTimeout(() => {
+      view.q = search.value.trim();
+      view.offset = 0;
+      redraw();
+      const input = container.querySelector(".search input");
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }, 150);
   };
-  toggle.onclick = () => {
-    expanded = !expanded;
-    show();
-  };
-  show();
-  const filter = element("div", { className: "segmented", role: "group" }, buttons);
-  filter.setAttribute("aria-label", "Entries");
+  const table = element("table", { className: "trade-list" });
+  drawTable(table, columns, page, {
+    sort: view.sort,
+    onSort: (column) => {
+      view.sort = nextSort(view.sort, column, columns, rows[0]);
+      redraw();
+    },
+    empty: trades.length ? "No entries match" : "",
+  });
+  const pager = element("nav", { className: "pager" });
+  pager.setAttribute("aria-label", "Pages");
+  drawPager(pager, {
+    offset: view.offset,
+    count: page.length,
+    total: trades.length ? rows.length : 0,
+    hint: "Open a mailbox in game to book auction sales and purchases",
+    none: "Nothing booked yet. Gold is booked as it moves in game: type /reload or log out to upload it.",
+    go: (offset) => {
+      view.offset = offset;
+      redraw();
+    },
+  });
+  const items = tradedItems(kept);
+  const itemTable = element("table", { className: "traded-items" });
+  view.itemSort ??= { column: 0, descending: false };
+  drawTable(itemTable, TRADED_ITEM_COLUMNS, sorted(items, TRADED_ITEM_COLUMNS[view.itemSort.column].value, view.itemSort.descending), {
+    sort: view.itemSort,
+    onSort: (column) => {
+      view.itemSort = nextSort(view.itemSort, column, TRADED_ITEM_COLUMNS, items[0]);
+      redraw();
+    },
+  });
+
   container.replaceChildren(
-    heading,
-    element("dl", { className: "summary" }, tradeTotals(trades, items)),
-    ...(items.length > 0 ? [element("h4", { textContent: "By item" }), tradedItemsTable(items)] : []),
-    element("div", { className: "panel-head history-head" }, [element("h4", { textContent: "History" }), filter]),
-    list,
-    toggle,
+    element("div", { className: "pagehead" }, [
+      element(heading, { textContent: title }),
+      element("p", { className: "sub", textContent: entries(kept.length) }),
+      segments,
+    ]),
+    element("dl", { className: "cards" }, [
+      stat("Revenue", money(totals.revenue)),
+      stat("Expenses", money(totals.expenses)),
+      stat("Net", signedMoney(totals.net)),
+      stat("Realized profit", totals.profit === null ? none() : signedMoney(totals.profit)),
+    ]),
+    element("div", { className: "toolbar" }, [
+      element("label", { className: "search" }, [element("span", { className: "visually-hidden", textContent: "Entry" }), search]),
+      chip("Source", [["", "All sources"], ...Object.entries(SIDES).filter(([side]) => present.has(side)).map(([side, { label }]) => [side, label])],
+        view.source, (value) => {
+          view.source = value;
+          view.offset = 0;
+          redraw();
+        }),
+      ...(withCharacter
+        ? [chip("Character", [["", "All characters"], ...characters], character, (value) => {
+            state.character = value;
+            view.offset = 0;
+            redraw();
+          })]
+        : []),
+    ]),
+    element("div", { className: "list" }, [element("section", { className: "panel list-panel" }, [table]), pager]),
+    ...(items.length > 0
+      ? [element("section", { className: "panel list-panel" }, [element("h3", { className: "heading", textContent: "By item" }), itemTable])]
+      : []),
   );
 }
 
@@ -1845,10 +2125,10 @@ async function loadCharacter({ name, realm }) {
   drawAccount(account, { name, realm });
   if (character === null) {
     $("no-character-text").textContent = `No character ${name} on ${realm} in this account.`;
-    showPanel("characters", "no-character");
+    showPanel("roster", "no-character");
     return;
   }
-  showPanel("characters", "character");
+  showPanel("roster", "character-page");
   $("character-title").textContent = character.name;
   $("character-title").style.color = classColor(character.class);
   $("character-about").textContent = about(character, { faction: true });
@@ -1861,7 +2141,9 @@ async function loadCharacter({ name, realm }) {
     holdings("Bags", character.bags, "saved", "Log out or /reload in game to save the bags."),
     holdings("Bank", character.bank, "seen", "Open the bank once in game to see it here."),
   );
-  drawTrades($("character-trades"), trades);
+  // Another character's entries start without the filters of the last one.
+  $("character-trades").choices = null;
+  drawTrades($("character-trades"), trades, { heading: "h3" });
 }
 
 function loginError(error) {
@@ -2036,11 +2318,13 @@ function marketChanged() {
   for (const list of Object.values(LISTS)) {
     list.offset = 0;
   }
+  $("clear-filters").hidden = !(state.q || state.profession || state.quality || state.kind !== "all");
   render();
 }
 
 $("realm").onchange = (event) => {
   state.realm = state.realms[Number(event.target.value)];
+  drawLastScan();
   comparisonRequest++;
   comparisonItems = [];
   $("comparison").hidden = true;
@@ -2095,15 +2379,6 @@ for (const button of document.querySelectorAll("[data-sort]")) {
     firstPage();
   };
 }
-
-$("previous").onclick = () => {
-  state.offset = Math.max(0, state.offset - PAGE);
-  run(loadPrices);
-};
-$("next").onclick = () => {
-  state.offset += PAGE;
-  run(loadPrices);
-};
 
 $("show-key").onclick = () => {
   const shown = $("show-key").getAttribute("aria-pressed") !== "true";
@@ -2256,7 +2531,7 @@ const MARKET = ["realm-picker", "market-tools"];
 const NAV = [
   {
     hub: "Market",
-    icon: ["M2 8l6-6h6v6l-6 6z", "M12.2 5a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 1 1 2.4 0"],
+    icon: ["M2 8L8 2H14V8L8 14Z"],
     tabs: [
       { route: "prices", tab: "Prices", shows: [...MARKET, "prices-view"], load: openPrices },
       { route: "deals", tab: "Deals", shows: [...MARKET, "min-profit", "deals-view"], load: () => loadList("deals") },
@@ -2265,12 +2540,12 @@ const NAV = [
   },
   {
     hub: "Inventory",
-    icon: ["M3 5.5h10l-1 9H4z", "M5.5 7.5V4.5a2.5 2.5 0 0 1 5 0v3"],
+    icon: ["M3 5H13L12 14H4Z", "M4.5 5L5.5 .8H10.5L11.5 5"],
     tabs: [{ route: "bags", tab: "Bags", signIn: true, shows: ["bags-view"], load: loadBags }],
   },
   {
     hub: "Ledger",
-    icon: ["M8 4C6.5 3 4.5 2.5 2 2.5v10c2.5 0 4.5.5 6 1.5 1.5-1 3.5-1.5 6-1.5v-10c-2.5 0-4.5.5-6 1.5z", "M8 4v10"],
+    icon: ["M8 2V14", "M3 5H13", "M3 5L1 10H5Z", "M13 5L11 10H15Z"],
     tabs: [
       { route: "gold", tab: "Gold", signIn: true, shows: ["gold-view"], load: loadGold },
       { route: "accounting", tab: "Accounting", signIn: true, shows: ["accounting-view"], load: loadAccounting },
@@ -2359,6 +2634,7 @@ function render() {
   if (tab.shows.includes("market-tools")) {
     $("market-title").textContent = tab.tab;
     $("scan").textContent = "";
+    $("search").placeholder = `Search ${tab.route === "prices" ? "items" : tab.route}`;
   }
   // An answer still on its way belongs to the view that was just left. The
   // market views share their heading, so theirs are dropped too.
@@ -2372,28 +2648,33 @@ function render() {
   run(() => tab.load(route));
 }
 
-// Marks the theme on show; theme.js applied a stored choice before the first paint.
+// The title bar's button names the theme it switches to, as the addon's
+// tooltip does; theme.js applied a stored choice before the first paint.
 function drawTheme() {
-  for (const button of document.querySelectorAll("[data-theme-choice]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.themeChoice === document.documentElement.dataset.theme));
-  }
+  const other = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  $("theme").title = other === "light" ? "Light window" : "Dark window";
+  $("theme").setAttribute("aria-label", `Switch to the ${other} window`);
 }
 
-for (const button of document.querySelectorAll("[data-theme-choice]")) {
-  button.onclick = () => {
-    document.documentElement.dataset.theme = button.dataset.themeChoice;
-    try {
-      localStorage.setItem("goldbook-theme", button.dataset.themeChoice);
-    } catch {
-      // Without storage the choice lasts until the page is left.
-    }
-    drawTheme();
-  };
-}
+$("theme").onclick = () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem("goldbook-theme", theme);
+  } catch {
+    // Without storage the choice lasts until the page is left.
+  }
+  drawTheme();
+};
 
 window.onhashchange = render;
 drawRail();
 drawTheme();
-// The rail shows the session on every view. A failure leaves it blank; the view reports its own.
+// The rail shows the session and the last scan on every view. A failure
+// leaves them blank; the view reports its own.
 loadSession().catch(() => {});
+api("/api/realms").then(({ realms }) => {
+  realmList = realms;
+  drawLastScan();
+}, () => {});
 render();

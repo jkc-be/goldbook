@@ -998,8 +998,10 @@ manual workflow.
 
 ### Website
 
-The website is laid out like the addon's window. The rail on the left has
-three hubs, and each hub has tabs at the top of the page:
+The website is laid out and coloured like the addon's window, in the colours
+the game shows it in. The half-filled ring in the title bar switches between
+the dark and the light window. The rail on the left has three hubs, and each
+hub has tabs at the top of the page:
 
 | Hub | Tabs | Sign-in |
 | --- | --- | --- |
@@ -1028,12 +1030,20 @@ tabs show the login when you are signed out.
   from the start count, not those your characters found at merchants.
 - **Movers** lists the prices that rose, or under **Fallers** fell, since the
   day before each item was last seen, as `/gb movers` does.
-- **Bags** lists the items in the bags and banks of all your characters, the
-  most valuable first, with the values your characters last saved. Choose a
-  character to see only theirs.
-- **Gold** states the gold of all your characters together, or of the one
-  you choose, as a character's page does, with a row per character.
-- **Accounting** books the gold all your characters earned and spent. Each
+- **Bags** lists the items in the bags and banks of all your characters as
+  the addon's Bags lists those of the character playing: a row per item with
+  its count, the price to post it at, what a vendor pays, its last 7 days,
+  what it brings in and where to sell it, with the values your characters
+  last saved. Hover an item to see whose bags hold it. Search, the
+  profession, item and quality filters and a character filter narrow it.
+- **Gold** has the addon's cards for the gold of all your characters, or of
+  the one you choose: the total and its high, today, 30 days and net worth.
+  Under them are the gold over one week, one month or two months, the
+  characters with their gold, today's change and when they last played, and
+  the month's accounting.
+- **Accounting** lists the entries the addon booked for all your characters,
+  with the revenue, expenses, net and realized profit of the entries shown,
+  a search, source and character filters, and each item's profit below. Each
   character's page books its own.
 
 The tables of Prices, Deals and Movers open an item's price history in
@@ -1056,8 +1066,8 @@ and the regeneration command.
 
 ### Compare item prices
 
-In **Prices**, use **Compare** beside an item, then add another item such as
-Copper Ore and Copper Bar. Up to six items share one graph of minimum buyout
+In **Prices**, select an item and use **Compare** in its history, then do
+the same for another item such as Copper Ore and Copper Bar. Up to six items share one graph of minimum buyout
 per unit for the selected realm and faction. The table below shows each item's
 latest price, market value, listed quantity and scan age.
 

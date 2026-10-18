@@ -9,9 +9,10 @@
     <script src="theme.js"></script>
   </head>
   <body>
-    <header class="topbar">
+    <header class="titlebar">
       <a class="brand" href="#prices"><span class="crest" aria-hidden="true"></span>Goldbook</a>
-      <label id="realm-picker" class="realm-picker">
+      <span class="version">0.2.4</span>
+      <label id="realm-picker" class="chip realm-picker">
         <span class="visually-hidden">Realm</span>
         <select id="realm"></select>
       </label>
@@ -19,26 +20,26 @@
         <span class="purse-label">Account</span>
         <span id="purse-gold"></span>
       </p>
+      <button id="theme" class="icon-button" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
+      </button>
     </header>
 
     <div class="shell">
       <aside class="rail">
         <nav id="views" class="views" aria-label="Views"></nav>
         <div class="rail-foot">
+          <p id="last-scan" class="last-scan" hidden></p>
           <p id="session" class="session" hidden></p>
-          <a id="log-in-link" class="button primary" href="#characters" hidden>Log in</a>
+          <a id="log-in-link" class="button" href="#characters" hidden>Log in</a>
           <button id="log-out" class="button" type="button" hidden>Log out</button>
-          <div class="segmented theme-switch" role="group" aria-label="Theme">
-            <button type="button" data-theme-choice="light" aria-pressed="true">Light</button>
-            <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
-          </div>
         </div>
       </aside>
 
       <div class="content">
         <nav id="tabs" class="tabs" aria-label="Tabs" hidden></nav>
 
-        <div id="market-tools">
+        <div id="market-tools" class="tools">
           <div class="pagehead">
             <h1 id="market-title">Prices</h1>
             <p id="scan" class="sub"></p>
@@ -51,9 +52,9 @@
           <div class="toolbar">
             <label class="search">
               <span class="visually-hidden">Item</span>
-              <input id="search" type="search" placeholder="Name or item id" autocomplete="off" />
+              <input id="search" type="search" placeholder="Search items" autocomplete="off" />
             </label>
-            <label class="chip"><span class="visually-hidden">Profession</span><select id="profession"><option value="">All professions</option></select></label>
+            <label class="chip"><span class="visually-hidden">Profession</span><select id="profession" data-profession-filter><option value="">All professions</option></select></label>
             <label class="chip"><span class="visually-hidden">Item type</span><select id="item-kind">
               <option value="all">All items</option>
               <option value="materials-recipes">Materials and recipes</option>
@@ -61,8 +62,8 @@
               <option value="recipes">Recipes</option>
               <option value="crafted">Crafted items</option>
             </select></label>
-            <label class="chip"><span class="visually-hidden">Quality</span><select id="item-quality"><option value="">All qualities</option></select></label>
-            <button id="clear-filters" class="text-button" type="button">Clear filters</button>
+            <label class="chip"><span class="visually-hidden">Quality</span><select id="item-quality" data-quality-filter><option value="">All qualities</option></select></label>
+            <button id="clear-filters" class="chip-button" type="button" hidden>Clear filters</button>
           </div>
         </div>
 
@@ -78,34 +79,30 @@
             <div id="comparison-items" class="comparison-grid"></div>
           </section>
 
-          <section class="panel list-panel" aria-labelledby="prices-title">
-            <h2 id="prices-title" class="visually-hidden">Latest prices</h2>
-            <table id="prices">
-              <thead>
-                <tr>
-                  <th scope="col" class="compare-column"><span class="visually-hidden">Compare</span></th>
-                  <th scope="col"><button data-sort="name">Item</button></th>
-                  <th scope="col" class="number"><button data-sort="min">Min buyout</button></th>
-                  <th scope="col" class="number market">
-                    <button data-sort="market">Market value</button>
-                    <span id="market-age" class="age"></span>
-                  </th>
-                  <th scope="col" class="number listed"><button data-sort="quantity">Listed</button></th>
-                  <th scope="col" class="number week">7 days</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <nav class="pager" aria-label="Pages">
-              <button id="previous">Previous</button>
-              <span id="range" class="range muted"></span>
-              <button id="next">Next</button>
-            </nav>
-          </section>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="prices-title">
+              <h2 id="prices-title" class="visually-hidden">Latest prices</h2>
+              <table id="prices-table">
+                <thead>
+                  <tr>
+                    <th scope="col"><button data-sort="name">Item</button></th>
+                    <th scope="col" class="number"><button data-sort="min">Min buyout</button></th>
+                    <th scope="col" class="number market"><button data-sort="market">Market value</button></th>
+                    <th scope="col" class="spark-column">7 days</th>
+                    <th scope="col" class="number listed"><button data-sort="quantity">Listed</button></th>
+                    <th scope="col" class="number seen">Seen</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </section>
+            <nav class="pager" aria-label="Pages"></nav>
+          </div>
 
           <section id="detail" class="panel" aria-labelledby="detail-title" hidden>
             <div class="detail-head">
               <h2 id="detail-title"></h2>
+              <button id="detail-compare" class="button" type="button" aria-pressed="false">Compare</button>
               <a id="detail-wowhead" class="external" target="_blank" rel="noopener noreferrer">Wowhead</a>
             </div>
             <p id="detail-subtitle" class="muted"></p>
@@ -130,43 +127,56 @@
         </main>
 
         <main id="deals-view" hidden>
-          <section class="panel list-panel" aria-labelledby="deals-title">
-            <h2 id="deals-title" class="visually-hidden">Deals</h2>
-            <table id="deals"></table>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="deals-title">
+              <h2 id="deals-title" class="visually-hidden">Deals</h2>
+              <table id="deals-table"></table>
+            </section>
             <nav class="pager" aria-label="Pages"></nav>
-            <p class="list-note muted">
-              A deal is listed in the newest scan at 70% or less of what it sells for: the lower of the market value that
-              scan measured and the middle of the item's lowest prices on at least three earlier days. Profit is per unit,
-              after the auction house's 5% cut. Goods merchants sell are no deal. Vendor deals need the vendor prices the
-              game shows, which only the addon has: type /gb deals in game to see them.
-            </p>
-          </section>
+          </div>
         </main>
 
         <main id="movers-view" hidden>
-          <section class="panel list-panel" aria-labelledby="movers-title">
-            <h2 id="movers-title" class="visually-hidden">Movers</h2>
-            <table id="movers"></table>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="movers-title">
+              <h2 id="movers-title" class="visually-hidden">Movers</h2>
+              <table id="movers-table"></table>
+            </section>
             <nav class="pager" aria-label="Pages"></nav>
-            <p class="list-note muted">
-              Items in the newest scan whose lowest price differs from their lowest price on the day before they were last
-              seen. Prices under a silver on both days are left out.
-            </p>
-          </section>
+          </div>
         </main>
 
         <main id="bags-view" hidden>
-          <div class="pagehead">
-            <h1>Bags</h1>
-            <p id="bags-sub" class="sub"></p>
-            <label class="chip"><span class="visually-hidden">Character</span><select id="bags-character" data-character-filter></select></label>
+          <div class="tools">
+            <div class="pagehead">
+              <h1>Bags</h1>
+              <p id="bags-sub" class="sub"></p>
+              <p id="bags-worth" class="aside"></p>
+            </div>
+            <div class="toolbar">
+              <label class="search">
+                <span class="visually-hidden">Item</span>
+                <input id="bags-search" type="search" placeholder="Search your bags" autocomplete="off" />
+              </label>
+              <label class="chip"><span class="visually-hidden">Profession</span><select id="bags-profession" data-profession-filter><option value="">All professions</option></select></label>
+              <label class="chip"><span class="visually-hidden">Item type</span><select id="bags-kind">
+                <option value="all">All items</option>
+                <option value="materials-recipes">Materials and recipes</option>
+                <option value="materials">Materials</option>
+                <option value="recipes">Recipes</option>
+                <option value="crafted">Crafted items</option>
+              </select></label>
+              <label class="chip"><span class="visually-hidden">Quality</span><select id="bags-quality" data-quality-filter><option value="">All qualities</option></select></label>
+              <label class="chip"><span class="visually-hidden">Character</span><select id="bags-character" data-character-filter></select></label>
+            </div>
           </div>
-          <dl id="bags-summary" class="summary"></dl>
-          <p id="bags-missing" class="muted" hidden></p>
-          <section class="panel list-panel" aria-labelledby="bags-title">
-            <h2 id="bags-title" class="visually-hidden">Items in bags and banks</h2>
-            <table id="bags" class="holding"></table>
-          </section>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="bags-title">
+              <h2 id="bags-title" class="visually-hidden">Items in bags and banks</h2>
+              <table id="bags-table" class="holding"></table>
+            </section>
+            <p id="bags-status" class="pager"></p>
+          </div>
         </main>
 
         <main id="gold-view" hidden>
@@ -174,31 +184,31 @@
             <h1>Gold</h1>
             <p id="gold-sub" class="sub"></p>
             <label class="chip"><span class="visually-hidden">Character</span><select id="gold-character" data-character-filter></select></label>
-          </div>
-          <dl id="account-gold-summary" class="summary"></dl>
-          <div id="account-gold" class="panel">
-            <div class="panel-head">
-              <h3 id="account-gold-title">All characters</h3>
-              <div id="account-gold-range" class="segmented" role="group" aria-label="Chart span">
-                <button type="button" data-days="1" aria-pressed="false">1 day</button>
-                <button type="button" data-days="7" aria-pressed="true">7 days</button>
-                <button type="button" data-days="30" aria-pressed="false">30 days</button>
-              </div>
+            <div id="account-gold-range" class="segmented" role="group" aria-label="Chart span">
+              <button type="button" data-days="7" aria-pressed="false">1W</button>
+              <button type="button" data-days="30" aria-pressed="true">1M</button>
+              <button type="button" data-days="60" aria-pressed="false">2M</button>
             </div>
+          </div>
+          <dl id="account-gold-summary" class="cards"></dl>
+          <div id="account-gold" class="panel chart-panel">
+            <h3 id="account-gold-title" class="visually-hidden">All characters</h3>
             <div id="account-gold-chart" class="chart" tabindex="0" role="img"></div>
           </div>
-          <section class="panel list-panel" aria-labelledby="gold-characters-title">
-            <h3 id="gold-characters-title">Characters</h3>
-            <table id="gold-characters"></table>
-          </section>
+          <div class="side-by-side">
+            <section class="panel list-panel" aria-labelledby="gold-characters-title">
+              <h3 id="gold-characters-title" class="heading">Characters</h3>
+              <table id="gold-characters"></table>
+            </section>
+            <section class="panel list-panel" aria-labelledby="gold-month-title">
+              <h3 id="gold-month-title" class="heading">Accounting this month</h3>
+              <dl id="gold-month" class="lines"></dl>
+            </section>
+          </div>
         </main>
 
         <main id="accounting-view" hidden>
-          <div class="pagehead">
-            <h1>Accounting</h1>
-            <p class="sub">The gold all characters earned and spent, as the addon booked it</p>
-          </div>
-          <div id="account-trades" class="panel trades"></div>
+          <div id="account-trades" class="trades"></div>
         </main>
 
         <main id="login-view" hidden>
@@ -225,7 +235,7 @@
 
         <main id="account-view" hidden>
 
-          <section id="characters" class="roster" aria-labelledby="characters-title" hidden>
+          <section id="roster" class="roster" aria-labelledby="characters-title" hidden>
             <div class="pagehead roster-head">
               <h1 id="characters-title">Characters</h1>
               <span id="account-id" class="sub"></span>
@@ -249,27 +259,28 @@
             <ul id="character-list" class="character-list"></ul>
           </section>
 
-          <section id="character" aria-labelledby="character-title" hidden>
+          <section id="character-page" aria-labelledby="character-title" hidden>
             <div class="character-head">
               <h2 id="character-title"></h2>
               <p id="character-about" class="sub"></p>
             </div>
             <div class="character-gold">
-              <dl id="gold-summary" class="summary"></dl>
+              <dl id="gold-summary" class="cards"></dl>
               <div id="gold-history" class="panel">
                 <div class="panel-head">
                   <h3>Gold</h3>
                   <div id="gold-range" class="segmented" role="group" aria-label="Chart span">
-                    <button type="button" data-days="1" aria-pressed="false">1 day</button>
-                    <button type="button" data-days="7" aria-pressed="true">7 days</button>
-                    <button type="button" data-days="30" aria-pressed="false">30 days</button>
+                    <button type="button" data-days="1" aria-pressed="false">1D</button>
+                    <button type="button" data-days="7" aria-pressed="true">1W</button>
+                    <button type="button" data-days="30" aria-pressed="false">1M</button>
+                    <button type="button" data-days="60" aria-pressed="false">2M</button>
                   </div>
                 </div>
                 <div id="gold-chart" class="chart" tabindex="0" role="img"></div>
               </div>
             </div>
             <div id="holdings" class="holdings"></div>
-            <div id="character-trades" class="panel trades"></div>
+            <div id="character-trades" class="trades"></div>
           </section>
 
           <section id="no-character" class="panel" hidden>
