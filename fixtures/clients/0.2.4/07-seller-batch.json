@@ -1,0 +1,117 @@
+{
+  "about": "Seller snapshots from GoldbookDB.sellerScans in one batch: named owners, an offer shared by two, unnamed owners, an empty book and a suffixed item key.",
+  "source": "crates/goldbook-sync/src/sync.rs:286",
+  "request": {
+    "method": "POST",
+    "path": "/api/sellers/batch",
+    "headers": {
+      "Authorization": "Bearer dev-token",
+      "Content-Type": "application/json"
+    },
+    "json": [
+      {
+        "realm": "Faramon",
+        "faction": "Horde",
+        "itemKey": "2770",
+        "scannedAt": 1760000002,
+        "offers": [
+          {
+            "unitPrice": 100,
+            "quantity": 15,
+            "owners": [
+              "Alice-Faramon"
+            ],
+            "totalOwners": 1
+          },
+          {
+            "unitPrice": 200,
+            "quantity": 7,
+            "owners": [],
+            "totalOwners": 0
+          }
+        ]
+      },
+      {
+        "realm": "Faramon",
+        "faction": "Horde",
+        "itemKey": "2770",
+        "scannedAt": 1760000011,
+        "offers": []
+      },
+      {
+        "realm": "Faramon",
+        "faction": "Horde",
+        "itemKey": "2589",
+        "scannedAt": 1760000002,
+        "offers": [
+          {
+            "unitPrice": 100,
+            "quantity": 60,
+            "owners": [
+              "Alice"
+            ],
+            "totalOwners": 1
+          },
+          {
+            "unitPrice": 120,
+            "quantity": 10,
+            "owners": [
+              "Bob"
+            ],
+            "totalOwners": 1
+          },
+          {
+            "unitPrice": 130,
+            "quantity": 20,
+            "owners": [
+              "Alice",
+              "Carol"
+            ],
+            "totalOwners": 2
+          },
+          {
+            "unitPrice": 140,
+            "quantity": 10,
+            "owners": [],
+            "totalOwners": 2
+          }
+        ]
+      },
+      {
+        "realm": "Faramon",
+        "faction": "Horde",
+        "itemKey": "7070",
+        "scannedAt": 1760000006,
+        "offers": [
+          {
+            "unitPrice": 300,
+            "quantity": 8,
+            "owners": [
+              "Sultan-Faramon"
+            ],
+            "totalOwners": 1
+          }
+        ]
+      },
+      {
+        "realm": "Faramon",
+        "faction": "Horde",
+        "itemKey": "9775:584",
+        "scannedAt": 1760000008,
+        "offers": [
+          {
+            "unitPrice": 25,
+            "quantity": 1,
+            "owners": [
+              "SuffixSeller"
+            ],
+            "totalOwners": 1
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {
+    "status": "2xx"
+  }
+}

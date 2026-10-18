@@ -1,0 +1,43 @@
+{
+  "about": "After New key in the addon's web login window, the next upload names the key it replaces.",
+  "source": "crates/goldbook-sync/src/sync.rs:322",
+  "request": {
+    "method": "POST",
+    "path": "/api/account",
+    "headers": {
+      "Authorization": "Bearer dev-token",
+      "Content-Type": "application/json"
+    },
+    "json": {
+      "id": "K7Q2M9PX",
+      "keyHash": "8582f0401bebbf68f0492d9590c5b80f40e8f33a29c45cfd13e185b2eb4c0170",
+      "characters": [
+        {
+          "name": "Mirelle",
+          "realm": "Faramon",
+          "faction": null,
+          "class": null,
+          "level": null,
+          "updatedAt": null,
+          "gold": [
+            [
+              1759996800,
+              1260000
+            ],
+            [
+              1760000400,
+              1260000
+            ]
+          ],
+          "bags": null,
+          "bank": null
+        }
+      ],
+      "trades": [],
+      "previousKeyHash": "1f2a4b22637651b9c0e4169e248acbe887d2e3d0ea98321f1bf1452f9b6ecb79"
+    }
+  },
+  "expect": {
+    "status": "2xx"
+  }
+}

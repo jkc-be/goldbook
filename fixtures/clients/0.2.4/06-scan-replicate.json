@@ -1,0 +1,61 @@
+{
+  "about": "A full (replicate) scan from GoldbookDB.scans, which also carries market values and auction counts.",
+  "source": "crates/goldbook-sync/src/sync.rs:228",
+  "request": {
+    "method": "POST",
+    "path": "/api/scans",
+    "headers": {
+      "Authorization": "Bearer dev-token",
+      "Content-Type": "application/json"
+    },
+    "json": {
+      "realm": "Faramon",
+      "faction": "Horde",
+      "region": "EU",
+      "scannedAt": 1760000016,
+      "mode": "replicate",
+      "scanner": "Sultan",
+      "build": "1.60.1.70338",
+      "rows": [
+        [
+          "2589",
+          100,
+          105,
+          100,
+          4
+        ],
+        [
+          "7070",
+          334,
+          334,
+          3,
+          1
+        ],
+        [
+          "9775:584",
+          30000,
+          30000,
+          1,
+          1
+        ]
+      ],
+      "items": {
+        "2589": [
+          "Linen Cloth",
+          1
+        ],
+        "7070": [
+          "Elemental Water",
+          1
+        ],
+        "9775:584": [
+          "Bandit Cinch of the Monkey",
+          2
+        ]
+      }
+    }
+  },
+  "expect": {
+    "status": "2xx"
+  }
+}

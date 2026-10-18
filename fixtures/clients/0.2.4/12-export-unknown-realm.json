@@ -1,0 +1,14 @@
+{
+  "about": "A realm the server has no scans for must answer 404, which the app skips.",
+  "source": "crates/goldbook-sync/src/serverdata.rs:205",
+  "request": {
+    "method": "GET",
+    "path": "/api/export?realm=Nowhere&faction=Alliance",
+    "headers": {
+      "Accept-Encoding": "gzip"
+    }
+  },
+  "expect": {
+    "status": 404
+  }
+}

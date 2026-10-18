@@ -1,0 +1,16 @@
+{
+  "about": "On a server with Battle.net sign-in, upload setup needs a Battle.net session.",
+  "source": "desktop/src-tauri/src/battlenet.rs:31",
+  "server": "battlenet",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/battlenet/status"
+  },
+  "expect": {
+    "status": 200,
+    "maxBytes": 8192,
+    "body": {
+      "enabled": "boolean"
+    }
+  }
+}

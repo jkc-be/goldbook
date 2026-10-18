@@ -77,11 +77,14 @@ class API:
 
 
 @contextlib.contextmanager
-def server(directory, old_repo, binary):
+def server(directory, old_repo, binary, settings=None):
+    """settings(port) returns variables to add to the test environment."""
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     environment = local_environment(directory, port)
+    if settings:
+        environment.update(settings(port))
     if old_repo:
         code = """from wsgiref.simple_server import make_server, WSGIRequestHandler
 from server.app import create_app

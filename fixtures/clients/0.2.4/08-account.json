@@ -1,0 +1,379 @@
+{
+  "about": "The account from GoldbookDB.account, characters from GoldbookDB.characters (bags and bank) and GoldbookDB.gold, and one trade of every side GoldbookDB.trades holds.",
+  "source": "crates/goldbook-sync/src/sync.rs:326",
+  "request": {
+    "method": "POST",
+    "path": "/api/account",
+    "headers": {
+      "Authorization": "Bearer dev-token",
+      "Content-Type": "application/json"
+    },
+    "json": {
+      "id": "K7Q2M9PX",
+      "keyHash": "1f2a4b22637651b9c0e4169e248acbe887d2e3d0ea98321f1bf1452f9b6ecb79",
+      "characters": [
+        {
+          "name": "Mirelle",
+          "realm": "Faramon",
+          "faction": null,
+          "class": null,
+          "level": null,
+          "updatedAt": null,
+          "gold": [
+            [
+              1759996800,
+              1260000
+            ],
+            [
+              1760000400,
+              1260000
+            ]
+          ],
+          "bags": null,
+          "bank": null
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "faction": "Horde",
+          "class": "WARRIOR",
+          "level": 60,
+          "updatedAt": 1760001336,
+          "gold": [
+            [
+              1759993200,
+              1000000
+            ],
+            [
+              1759996800,
+              1260000
+            ]
+          ],
+          "bags": {
+            "at": 1760001336,
+            "rows": [
+              {
+                "key": "2589",
+                "name": "Linen Cloth",
+                "quality": 1,
+                "count": 25,
+                "action": "auction",
+                "post": 99,
+                "vendor": 13,
+                "value": 2350
+              },
+              {
+                "key": "7070",
+                "name": "Elemental Water",
+                "quality": 1,
+                "count": 3,
+                "action": "vendor",
+                "post": null,
+                "vendor": 400,
+                "value": 1200
+              },
+              {
+                "key": "4306",
+                "name": "Silk Cloth",
+                "quality": 1,
+                "count": 2,
+                "action": "vendor",
+                "post": null,
+                "vendor": 150,
+                "value": 300
+              },
+              {
+                "key": "5000",
+                "name": "Rough Stone",
+                "quality": 1,
+                "count": 4,
+                "action": "vendor",
+                "post": null,
+                "vendor": 2,
+                "value": 8
+              }
+            ]
+          },
+          "bank": {
+            "at": 1760001326,
+            "rows": [
+              {
+                "key": "2592",
+                "name": "Thrall's \"Ünicode\" Wool, Fine",
+                "quality": 1,
+                "count": 8,
+                "action": "auction",
+                "post": 300,
+                "vendor": 0,
+                "value": 2280
+              },
+              {
+                "key": "2589",
+                "name": "Linen Cloth",
+                "quality": 1,
+                "count": 17,
+                "action": "auction",
+                "post": 99,
+                "vendor": 13,
+                "value": 1598
+              },
+              {
+                "key": "3576",
+                "name": "Tin Bar",
+                "quality": 1,
+                "count": 5,
+                "action": "vendor",
+                "post": null,
+                "vendor": 25,
+                "value": 125
+              }
+            ]
+          }
+        }
+      ],
+      "trades": [
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759827200,
+          "side": "sell",
+          "item": "Linen Cloth",
+          "itemKey": "2589",
+          "count": 20,
+          "price": 2000,
+          "fee": 100
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759914200,
+          "side": "buy",
+          "item": "Bandit Cinch of the Monkey",
+          "itemKey": "9775:584",
+          "count": 1,
+          "price": 9000,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759920000,
+          "side": "vendor",
+          "item": "Broken Fang",
+          "itemKey": null,
+          "count": 1,
+          "price": 85,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759920100,
+          "side": "merchant",
+          "item": "Simple Flour",
+          "itemKey": "30817",
+          "count": 5,
+          "price": 50,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759930000,
+          "side": "tradeBuy",
+          "item": "Tin Bar",
+          "itemKey": "3576",
+          "count": 2,
+          "price": 400,
+          "fee": 0,
+          "party": "Corvin"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759930000,
+          "side": "tradeSell",
+          "item": "Linen Cloth",
+          "itemKey": "2589",
+          "count": 5,
+          "price": 0,
+          "fee": 0,
+          "party": "Corvin"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759930100,
+          "side": "tradeIn",
+          "item": "Gold",
+          "itemKey": null,
+          "count": 1,
+          "price": 1500,
+          "fee": 0,
+          "party": "Corvin"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759930200,
+          "side": "tradeOut",
+          "item": "Gold",
+          "itemKey": null,
+          "count": 1,
+          "price": 700,
+          "fee": 0,
+          "party": "Corvin"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759940000,
+          "side": "mailIn",
+          "item": "Gold",
+          "itemKey": null,
+          "count": 1,
+          "price": 25000,
+          "fee": 0,
+          "party": "Mirelle"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759940100,
+          "side": "mailOut",
+          "item": "Gold",
+          "itemKey": null,
+          "count": 1,
+          "price": 25000,
+          "fee": 0,
+          "party": "Mirelle"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759940200,
+          "side": "cod",
+          "item": "Elemental Water",
+          "itemKey": "7070",
+          "count": 3,
+          "price": 3600,
+          "fee": 0,
+          "party": "Corvin"
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950000,
+          "side": "loot",
+          "item": "Looted gold",
+          "itemKey": null,
+          "count": 1,
+          "price": 340,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950000,
+          "side": "quest",
+          "item": "A Sample Errand",
+          "itemKey": null,
+          "count": 1,
+          "price": 1200,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950100,
+          "side": "repair",
+          "item": "Repairs",
+          "itemKey": null,
+          "count": 1,
+          "price": 820,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950200,
+          "side": "postage",
+          "item": "Postage",
+          "itemKey": null,
+          "count": 1,
+          "price": 30,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950300,
+          "side": "deposit",
+          "item": "Linen Cloth",
+          "itemKey": null,
+          "count": 1,
+          "price": 60,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950400,
+          "side": "travel",
+          "item": "Sample Landing",
+          "itemKey": null,
+          "count": 1,
+          "price": 110,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950500,
+          "side": "training",
+          "item": "Sample Skill (Rank 2)",
+          "itemKey": null,
+          "count": 1,
+          "price": 1000,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759950600,
+          "side": "respec",
+          "item": "Talent reset",
+          "itemKey": null,
+          "count": 1,
+          "price": 10000,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759996800,
+          "side": "otherIn",
+          "item": "Other",
+          "itemKey": null,
+          "count": 2,
+          "price": 260000,
+          "fee": 0
+        },
+        {
+          "name": "Sultan",
+          "realm": "Faramon",
+          "at": 1759996800,
+          "side": "otherOut",
+          "item": "Other",
+          "itemKey": null,
+          "count": 1,
+          "price": 1500,
+          "fee": 0
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": "2xx"
+  }
+}
