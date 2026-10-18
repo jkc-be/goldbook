@@ -83,9 +83,15 @@ command the script prints, which is also in the build run's summary:
 gh workflow run release-promote.yml --ref main -f build_run_id=<build run ID>
 ```
 
-The script finds each run it started by listing the workflow's
-`workflow_dispatch` runs on `main` before and after the dispatch. If more than
-one new run appears, it asks which one is yours instead of guessing.
+The script finds each run it started by a random request identifier. It
+passes the identifier as the `request` input, both workflows put it in their
+run name as `[<identifier>]`, and the script takes only the run with that
+name, so a run another agent starts at the same moment is never mistaken for
+yours.
+
+Before it asks to promote, the script checks that the build built the commit
+you asked for: the full SHA of `REVISION`, or without `REVISION` the commit the
+build run started on. A build of any other commit stops the script.
 
 ## Build
 

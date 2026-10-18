@@ -14,6 +14,7 @@ import base64
 import json
 from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -44,8 +45,9 @@ def promote_command(build_id):
 
 
 class Release:
-    def __init__(self, run=run_command, ask=input, sleep=time.sleep, say=print):
-        self.run, self.ask, self.sleep, self.say = run, ask, sleep, say
+    def __init__(self, run=run_command, ask=input, sleep=time.sleep, say=print,
+                 request=lambda: secrets.token_hex(6)):
+        self.run, self.ask, self.sleep, self.say, self.request = run, ask, sleep, say, request
 
     def api(self, path):
         return json.loads(self.run(["gh", "api", path]))
@@ -56,35 +58,26 @@ class Release:
 
     def dispatch(self, workflow, fields):
         """Starts a workflow on main and returns the run it created as (ID, URL).
-        The new run is the one that was not listed before the dispatch."""
-        before = {run["id"] for run in self.dispatch_runs(workflow)}
+        The run is found by a request identifier that both workflows put in
+        their run name, so a run someone else starts at the same time is never
+        taken for this one."""
+        request = self.request()
         command = ["gh", "workflow", "run", workflow, "--repo", REPOSITORY, "--ref", "main"]
-        for name, value in fields.items():
+        for name, value in {**fields, "request": request}.items():
             command += ["-f", f"{name}={value}"]
         self.run(command)
         for _ in range(20):
             self.sleep(3)
-            new = [run for run in self.dispatch_runs(workflow) if run["id"] not in before]
-            if len(new) == 1:
-                return new[0]["id"], new[0]["html_url"]
-            if new:
-                return self.choose(workflow, sorted(new, key=lambda run: run["id"]))
-        raise Failure(f"No new {workflow} run appeared within a minute. Look for it under Actions on GitHub.")
-
-    def choose(self, workflow, runs):
-        self.say(f"Several {workflow} runs started at the same time:")
-        for number, run in enumerate(runs, 1):
-            self.say(f"  {number}. {run['html_url']} ({run['display_title']}, {run['created_at']})")
-        answer = self.ask(f"Which one did you start? [1-{len(runs)}, Enter to stop] ").strip()
-        if not answer.isdigit() or not 1 <= int(answer) <= len(runs):
-            raise Failure("No run chosen. Follow the runs under Actions on GitHub.")
-        run = runs[int(answer) - 1]
-        return run["id"], run["html_url"]
+            mine = [run for run in self.dispatch_runs(workflow) if run["display_title"].endswith(f"[{request}]")]
+            if mine:
+                return mine[0]["id"], mine[0]["html_url"]
+        raise Failure(f"No {workflow} run named [{request}] appeared within a minute. "
+                      "Look for it under Actions on GitHub.")
 
     def watch(self, run_id):
-        """Shows the run until it ends and returns its conclusion."""
+        """Shows the run until it ends and returns it."""
         self.run(["gh", "run", "watch", str(run_id), "--repo", REPOSITORY, "--interval", "10"], interactive=True)
-        return self.api(f"repos/{REPOSITORY}/actions/runs/{run_id}")["conclusion"]
+        return self.api(f"repos/{REPOSITORY}/actions/runs/{run_id}")
 
     def built(self, run_id):
         """The version and revision a build run built, from its two small artifacts."""
@@ -103,15 +96,21 @@ class Release:
         login = self.run(["gh", "api", "user", "--jq", ".login"]).strip()
         if login != MAINTAINER:
             raise Failure(f"gh is signed in as {login}. Only {MAINTAINER} starts releases.")
-        build_id, build_url = self.dispatch(BUILD, {"revision": revision} if revision else {})
+        requested = self.run(["gh", "api", f"repos/{REPOSITORY}/commits/{revision}", "--jq", ".sha"]).strip() \
+            if revision else None
+        build_id, build_url = self.dispatch(BUILD, {"revision": requested} if requested else {})
         self.say(f"Release build run {build_id}: {build_url}")
         self.say("Approve release-signing, then production, in the browser.")
-        conclusion = self.watch(build_id)
-        if conclusion != "success":
-            raise Failure(f"Release build run {build_id} ended with {conclusion}: {build_url}\n"
+        build = self.watch(build_id)
+        if build["conclusion"] != "success":
+            raise Failure(f"Release build run {build_id} ended with {build['conclusion']}: {build_url}\n"
                           "Read the failed job, fix the cause, and start a new build with make release. "
                           "Build runs are never rerun.")
         version, built = self.built(build_id)
+        # Without a revision the build takes the commit main pointed at when it started.
+        expected = requested or build["head_sha"]
+        if built != expected:
+            raise Failure(f"Build run {build_id} built {built}, not {expected} as requested. Do not promote it.")
         self.say(f"\nBuild run {build_id} built Goldbook {version} from revision {built}.")
         artifacts = self.api(f"repos/{REPOSITORY}/actions/runs/{build_id}/artifacts?per_page=100")["artifacts"]
         for artifact in sorted(artifacts, key=lambda a: a["name"]):
@@ -124,7 +123,7 @@ class Release:
         self.say(f"Release promote run {promote_id}: {promote_url}")
         self.say("Approve production for server and for publish, then addon-mirror, "
                  "then curseforge in jkc-be/goldbook-addon.")
-        conclusion = self.watch(promote_id)
+        conclusion = self.watch(promote_id)["conclusion"]
         if conclusion != "success":
             raise Failure(f"Release promote run {promote_id} ended with {conclusion}: {promote_url}\n"
                           "Fix the cause, then finish the release by promoting the same build again:\n"

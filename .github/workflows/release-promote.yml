@@ -1,5 +1,5 @@
 name: Release promote
-run-name: Release promote of build run ${{ inputs.build_run_id }}
+run-name: Release promote of build run ${{ inputs.build_run_id }}${{ inputs.request && format(' [{0}]', inputs.request) || '' }}
 # Ships exactly the artifacts of one Release build run: the server, then the
 # update feed, then the addon mirror, then waits for goldbook-addon's release
 # and tags the commit. It builds and uploads nothing and accepts only outputs
@@ -13,6 +13,10 @@ on:
         description: ID of the successful Release build run to ship
         required: true
         type: string
+      request:
+        description: Identifier make release puts in the run name to find this run
+        type: string
+        default: ''
 
 permissions:
   contents: read

@@ -1,5 +1,5 @@
 name: Release build
-run-name: Release build of ${{ inputs.revision || github.sha }}
+run-name: Release build of ${{ inputs.revision || github.sha }}${{ inputs.request && format(' [{0}]', inputs.request) || '' }}
 # Tests one commit of main, builds and signs everything a release ships, and
 # checks OVH access without changing anything on OVH or in either repository.
 # Release promote ships this run's artifacts. See docs/releasing.md.
@@ -9,6 +9,10 @@ on:
     inputs:
       revision:
         description: Commit of main to build; empty builds the commit the run starts on
+        type: string
+        default: ''
+      request:
+        description: Identifier make release puts in the run name to find this run
         type: string
         default: ''
 
