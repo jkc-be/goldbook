@@ -17,6 +17,14 @@ class WebPageTests(unittest.TestCase):
         ids = set(re.findall(r'\bid="([^"]+)"', (ROOT / "web/index.html").read_text()))
         self.assertEqual(routes & ids, set())
 
+    def test_pages_open_dark_unless_light_was_chosen(self):
+        for page in ("web", "desktop/ui"):
+            html = (ROOT / page / "index.html").read_text()
+            self.assertIn('<html lang="en" data-theme="dark">', html, page)
+            script = (ROOT / page / "theme.js").read_text()
+            self.assertIn('localStorage.getItem("goldbook-theme") === "light"', script, page)
+            self.assertIn('dataset.theme = "light"', script, page)
+
     def test_style_sheets_have_the_addons_palettes(self):
         result = subprocess.run([sys.executable, "scripts/web-palette.py", "--check"], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

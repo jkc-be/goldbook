@@ -40,7 +40,7 @@
 
 /* The game's two faces: Friz Quadrata for words, Marcellus standing in for
    it, and Arial Narrow for figures, Roboto Condensed where it is missing.
-   Sizes are the addon window's. The light theme is the default whatever the
+   Sizes are the addon window's. The dark theme is the default whatever the
    system prefers; the title bar's button switches it. */
 :root {
   color-scheme: light;

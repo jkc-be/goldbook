@@ -36,8 +36,8 @@ const EMBED: &str = "{ const mark = () => document.documentElement && (document.
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Theme {
-    #[default]
     Light,
+    #[default]
     Dark,
 }
 
@@ -1023,6 +1023,14 @@ mod tests {
         for input in ["\"Dark\"", "\"sepia\"", "\"dark'; alert(1); '\"", "null"] {
             assert!(serde_json::from_str::<Theme>(input).is_err(), "{input}");
         }
+    }
+
+    #[test]
+    fn website_view_is_dark_until_the_app_shares_its_theme() {
+        assert_eq!(
+            Theme::default().script(),
+            "document.documentElement.dataset.theme = 'dark'; try { localStorage.setItem('goldbook-theme', 'dark'); } catch {}"
+        );
     }
 
     #[test]
