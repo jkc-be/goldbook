@@ -21,3 +21,6 @@ desktop/dist/
 *.sqlite-*
 *.db
 *.db-*
+
+.claude/
+.playwright-mcp/
