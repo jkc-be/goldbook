@@ -55,4 +55,5 @@ names its rule and how to fix it.
 
 To prepare a release, branch from `main`, run
 `make prepare-release VERSION=x.y.z`, edit the new section's prose, and open
-the pull request with the `release` label.
+the pull request with the `release` label and the release template:
+`gh pr create --label release --template release.md`.
