@@ -9,6 +9,8 @@ permissions:
 jobs:
   desktop:
     uses: ./.github/workflows/desktop.yml
+    secrets: inherit
     with:
       runner: macos-latest
       bundles: app,dmg
+      sign-macos: true
