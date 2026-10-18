@@ -16,8 +16,9 @@ RELEASE_FIX = ("To prepare a release, run make prepare-release VERSION=x.y.z on 
 MISSING = ("Change file rule: this pull request changes addon/Goldbook/Core.lua but adds no change file. "
            "Add changes/<section>-<slug>.md as changes/README.md describes, "
            "or the no-changes label if no player or user would notice.\n")
-PASSED = "Change files are in order. The version and CHANGELOG.md are unchanged.\n"
-NO_CHANGES = "The no-changes label is set, so no change file is needed. The version and CHANGELOG.md are unchanged.\n"
+PASSED = "Change files are in order. The version and the CHANGELOG.md sections are unchanged.\n"
+NO_CHANGES = ("The no-changes label is set, so no change file is needed. "
+              "The version and the CHANGELOG.md sections are unchanged.\n")
 CHANGELOG = """# Changelog
 
 The changes in each Goldbook version, newest first.
@@ -158,8 +159,19 @@ class CheckChangesTests(unittest.TestCase):
     def test_refuses_a_changelog_edit_with_only_no_changes(self):
         self.edit("CHANGELOG.md", "- An older entry.", "- An older entry, reworded.")
         self.assertEqual(self.check('["no-changes"]'), (1, "", (
-            "Changelog rule: this pull request edits CHANGELOG.md, but only a release pull request does. "
-            f"Describe the change in a file under changes/ instead, as changes/README.md describes. {RELEASE_FIX}\n")))
+            "Changelog rule: this pull request edits the version sections of CHANGELOG.md, but only a release "
+            "pull request does. Describe the change in a file under changes/ instead, as changes/README.md "
+            f"describes. {RELEASE_FIX}\n")))
+
+    def test_passes_a_reworded_changelog_introduction(self):
+        self.edit("CHANGELOG.md", "newest first.", "newest first, one section per version.")
+        self.assertEqual(self.check('["no-changes"]'), (0, NO_CHANGES, ""))
+
+    def test_refuses_a_section_in_the_changelog_introduction(self):
+        self.edit("CHANGELOG.md", "newest first.\n", "newest first.\n\n## Unreleased\n\n- Sync every hour.\n")
+        self.assertEqual(self.check('["no-changes"]'), (1, "", (
+            "Changelog rule: the introduction of CHANGELOG.md holds no sections. Describe unreleased changes "
+            "in files under changes/, as changes/README.md describes.\n")))
 
     def test_passes_a_dependency_edit_to_package_json(self):
         self.edit("package.json", '"devDependencies": {', '"devDependencies": {\n    "left-pad": "1.3.0",')

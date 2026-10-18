@@ -44,7 +44,9 @@ names its rule and how to fix it.
   `version` in `desktop/src-tauri/tauri.conf.json`, or any other field that
   `scripts/set-version.py` writes. Other edits to those files, such as a
   dependency in `package.json` or `Cargo.toml`, are fine.
-- **Changelog rule.** Only a release pull request edits `CHANGELOG.md`.
+- **Changelog rule.** Only a release pull request edits the version sections of
+  `CHANGELOG.md`. Rewording its introduction is allowed; the introduction holds
+  no sections.
 - **Release rule.** A release pull request has the `release` label and is
   what `make prepare-release VERSION=x.y.z` produces: every version field
   holds one version, higher than `main`'s; `CHANGELOG.md` has a

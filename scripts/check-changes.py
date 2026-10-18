@@ -10,7 +10,8 @@ does not count. See changes/README.md for the rules.
   well-formed change file. The no-changes label waives this rule only.
 - Version rule: only a release pull request changes a field that
   set-version.py writes.
-- Changelog rule: only a release pull request edits CHANGELOG.md.
+- Changelog rule: only a release pull request edits the version sections of
+  CHANGELOG.md. Others may reword its introduction, which holds no sections.
 - Release rule: a pull request with the release label is what
   make prepare-release produces. It sets a higher version in every field,
   adds that version's CHANGELOG.md section, deletes every change file, and
@@ -102,6 +103,12 @@ def change_file_problems(changed):
     return found
 
 
+def changelog_parts(text):
+    """CHANGELOG.md split into its introduction and its version sections."""
+    match = re.search(r"^## \d+\.\d+\.\d+ - ", text, flags=re.MULTILINE)
+    return (text[:match.start()], text[match.start():]) if match else (text, "")
+
+
 def ordinary_problems(base, changed):
     found = []
     paths = {path for _, path in changed}
@@ -121,9 +128,14 @@ def ordinary_problems(base, changed):
                      "but only a release pull request changes version fields. "
                      f"Restore them from main. {RELEASE_FIX}")
     if "CHANGELOG.md" in paths:
-        found.append("Changelog rule: this pull request edits CHANGELOG.md, but only a release pull request does. "
-                     "Describe the change in a file under changes/ instead, as changes/README.md describes. "
-                     + RELEASE_FIX)
+        introduction, sections = changelog_parts(show("HEAD", "CHANGELOG.md"))
+        if sections != changelog_parts(show(base, "CHANGELOG.md"))[1]:
+            found.append("Changelog rule: this pull request edits the version sections of CHANGELOG.md, "
+                         "but only a release pull request does. Describe the change in a file under changes/ "
+                         "instead, as changes/README.md describes. " + RELEASE_FIX)
+        elif re.search(r"^## ", introduction, flags=re.MULTILINE):
+            found.append("Changelog rule: the introduction of CHANGELOG.md holds no sections. Describe "
+                         "unreleased changes in files under changes/, as changes/README.md describes.")
     return found
 
 
@@ -185,9 +197,9 @@ def main():
               "and collects every change file.")
     elif "no-changes" in labels:
         print("The no-changes label is set, so no change file is needed. "
-              "The version and CHANGELOG.md are unchanged.")
+              "The version and the CHANGELOG.md sections are unchanged.")
     else:
-        print("Change files are in order. The version and CHANGELOG.md are unchanged.")
+        print("Change files are in order. The version and the CHANGELOG.md sections are unchanged.")
 
 
 if __name__ == "__main__":
