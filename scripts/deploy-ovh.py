@@ -127,16 +127,17 @@ def deploy(run_id, revision, token, verify_only=False):
                                f"(GitHub reports {relation}); reconcile them by hand")
         would_deploy = relation == "behind"
 
+        # A skipped deploy reports success, so the running server must be healthy too.
+        if (verify_only or not would_deploy) and inspect(container, "--format", "{{.State.Health.Status}}") != "healthy":
+            raise RuntimeError("Goldbook is not healthy")
         if verify_only:
-            if inspect(container, "--format", "{{.State.Health.Status}}") != "healthy":
-                raise RuntimeError("Goldbook is not healthy")
             print(json.dumps({"verified_revision": revision, "active_revision": active,
                               "active_image": previous, "would_deploy": would_deploy,
                               "health": "healthy", "service_changed": False}), flush=True)
             return
         if not would_deploy:
             print(json.dumps({"skipped": True, "revision": revision, "active_revision": active,
-                              "active_image": previous}), flush=True)
+                              "active_image": previous, "health": "healthy"}), flush=True)
             return
 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")

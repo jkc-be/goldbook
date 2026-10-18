@@ -108,9 +108,11 @@ above, the helper reads the `org.opencontainers.image.revision` label of the
 running container and asks GitHub how the requested commit relates to it:
 
 - The running commit is the requested one, or is newer and contains it, for
-  example after a **Deploy to OVH** hotfix. `deploy` changes nothing, takes no
-  backup and prints `{"skipped": true, "revision": ..., "active_revision": ...,
-  "active_image": ...}`. `verify` prints `"would_deploy": false`.
+  example after a **Deploy to OVH** hotfix. `deploy` changes nothing and takes
+  no backup. It fails when the running server is not healthy, and otherwise
+  prints `{"skipped": true, "revision": ..., "active_revision": ...,
+  "active_image": ..., "health": "healthy"}`. `verify` prints
+  `"would_deploy": false`.
 - The requested commit is newer and contains the running one. `deploy` goes
   ahead, and `verify` prints `"would_deploy": true`.
 - The two commits have diverged. Both commands refuse and name both commits.

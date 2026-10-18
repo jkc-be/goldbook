@@ -229,14 +229,21 @@ class DeploymentTest(unittest.TestCase):
     def test_server_already_running_the_revision_is_left_alone(self):
         self.active_labels["org.opencontainers.image.revision"] = REVISION
         self.assertEqual(self.run_deploy(), {"skipped": True, "revision": REVISION, "active_revision": REVISION,
-                                             "active_image": "goldbook"})
+                                             "active_image": "goldbook", "health": "healthy"})
         self.assertEqual(self.compares, [])
+        self.assert_nothing_changed()
+
+    def test_skipping_an_unhealthy_server_fails(self):
+        self.active_labels["org.opencontainers.image.revision"] = REVISION
+        self.healthy = False
+        with self.assertRaisesRegex(RuntimeError, "^Goldbook is not healthy$"):
+            self.run_deploy()
         self.assert_nothing_changed()
 
     def test_server_running_a_newer_commit_is_not_moved_back(self):
         self.relation = "ahead"
         self.assertEqual(self.run_deploy(), {"skipped": True, "revision": REVISION, "active_revision": ACTIVE,
-                                             "active_image": "goldbook"})
+                                             "active_image": "goldbook", "health": "healthy"})
         self.assertEqual(self.compares, [REVISION + "..." + ACTIVE])
         self.assert_nothing_changed()
 
