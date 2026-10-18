@@ -62,6 +62,11 @@ were released with.
 ### Desktop app
 
 - The app icon is Goldbook's crest, the gold coin of the website.
+- The rail has the addon's hubs: **Market**, **Inventory** and **Ledger**
+  open the website's Prices, Bags and Gold inside the app, whose tabs reach
+  the rest, then **Sync**. Inventory and Ledger sign in with the login the
+  game saved and open on their own tab. Characters is gone.
+- The app opens in the dark theme unless you chose the light one.
 - A development build (`make run`) always installs the addon of its checkout,
   and no longer installs a published addon update over it.
 - `make build` also installs this checkout's addon into the World of Warcraft
@@ -83,6 +88,9 @@ were released with.
 - Add `/api/deals` and `/api/movers`. They apply the addon's deal and mover
   rules to the realm's newest scan and the lowest price of each day in the
   last 60, with the same search and filters as `/api/prices`.
+- `/api/desktop-login` opens the website's view named by `?view=`, such as
+  `bags`. Without one it opens `#characters` as before, which the website
+  now sends on to Gold.
 
 ### Website
 
@@ -91,11 +99,11 @@ were released with.
   or expenses. Each entry names its source, such as "Trade sale to Mirelle"
   or "Mail gold in from Mirelle".
 - The website has the addon's navigation: **Market**, **Inventory** and
-  **Ledger** in the rail, with **Characters** and **Download** under Account.
-  Each hub has tabs at the top of the page: Market has Prices, Deals and
-  Movers, Inventory has Bags, and Ledger has Gold and Accounting. Every tab
-  has its own address, such as `#deals`, so links, back and forward work.
-  Mail stays in game.
+  **Ledger** in the rail, with **Download** under Account. Each hub has tabs
+  at the top of the page: Market has Prices, Deals and Movers, Inventory has
+  Bags, and Ledger has Gold, Accounting and By item. Every tab has its own
+  address, such as `#deals`, so links, back and forward work. Mail stays in
+  game.
 - Add **Deals**: what the newest scan lists at 70% or less of its resale
   price, found as the addon finds resale deals, with the profit per unit
   after the cut. Vendor deals stay in game, because the server has no vendor
@@ -105,12 +113,19 @@ were released with.
 - Add **Bags**: the bags and banks of all the account's characters in one
   list, with a character filter.
 - Add **Gold**: the account's gold over time, all characters summed or one
-  of them, with the same figures and chart as a character's page, and a row
-  per character.
-- The account's Accounting moves from Characters to Ledger. Each character's
-  page keeps its own.
-- A character's page is at `#character/<name>-<realm>`. Links to the old
-  `#characters/<name>-<realm>` still open it.
+  of them, and a row per character. A character's name picks it in the
+  character chip, here and in Accounting. The account's ID and **Link another
+  computer** are under the characters.
+- Remove **Characters**: Gold, Bags and Accounting show everything it did.
+  `#characters` opens Gold, and an old `#character/<name>-<realm>` or
+  `#characters/<name>-<realm>` link opens Gold with that character chosen.
+- The account's Accounting moves to Ledger.
+- Add **By item** (`#items`): each item bought or sold with the units, the
+  average cost and sale, the profit realized on the units both bought and
+  sold, and when it last moved, with Bought, Sold, Realized profit and Best
+  item cards, a search and the profession, item, quality and character
+  chips. It replaces the By item panel under Accounting.
+- The website opens in the dark theme unless you chose the light one.
 - The website and the desktop app's own pages look like the addon's window, in
   its palettes as the game shows them, with its fonts, title bar, theme
   button, tables, filters and status lines; Bags, Gold and Accounting now

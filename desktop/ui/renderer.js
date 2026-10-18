@@ -96,7 +96,7 @@ for (const tab of document.querySelectorAll(".views button")) {
   tab.addEventListener("click", async () => {
     let result;
     try {
-      const accountId = tab.dataset.view === "characters" ? await pickAccount() : null;
+      const accountId = "signIn" in tab.dataset ? await pickAccount() : null;
       if (accountId === undefined) {
         return;
       }

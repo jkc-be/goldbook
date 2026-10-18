@@ -40,7 +40,7 @@
 
 /* The game's two faces: Friz Quadrata for words, Marcellus standing in for
    it, and Arial Narrow for figures, Roboto Condensed where it is missing.
-   Sizes are the addon window's. The light theme is the default whatever the
+   Sizes are the addon window's. The dark theme is the default whatever the
    system prefers; the title bar's button switches it. */
 :root {
   color-scheme: light;
@@ -842,14 +842,8 @@ th[aria-sort] button:hover {
 }
 
 td button:hover,
-td button:focus-visible,
-td a:hover {
+td button:focus-visible {
   text-decoration: underline;
-}
-
-td a {
-  color: inherit;
-  text-decoration: none;
 }
 
 tbody tr:hover td {
@@ -1448,16 +1442,16 @@ tbody tr:is(:hover, [aria-selected="true"]) td:first-child {
   min-width: 600px;
 }
 
-.roster {
-  display: grid;
-  gap: 10px;
+/* Under Gold's characters: the account's ID, and the form to link another. */
+.account-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
 }
 
-.roster-head .link {
-  margin-left: auto;
-}
-
-.roster-head .link[open] {
+.account-link .link[open] {
   flex-basis: 100%;
 }
 
@@ -1478,115 +1472,8 @@ tbody tr:is(:hover, [aria-selected="true"]) td:first-child {
 }
 
 .link .login {
-  margin: 10px 0 0 auto;
-}
-
-.character-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.character-list a {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 2px 12px;
-  height: 100%;
-  padding: 8px 10px 9px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.character-list a:hover {
-  border-color: var(--edge);
-  background: linear-gradient(var(--tint), var(--tint)), var(--panel);
-}
-
-.character-list a[aria-current] {
-  border-color: var(--gold-edge);
-  box-shadow: inset 0 2px 0 var(--gold);
-}
-
-.character-list .name {
-  font: 18px/1.2 var(--serif);
-  overflow-wrap: anywhere;
-}
-
-.character-list .money {
-  font-size: 15px;
-}
-
-.character-list .about {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-#character-page {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  grid-template-areas:
-    "head head"
-    "gold holdings"
-    "trades trades";
-  gap: 10px;
-  align-items: start;
-}
-
-.character-head {
-  grid-area: head;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 12px;
-  margin-top: 6px;
-}
-
-#character-title {
-  font-size: 24px;
-  line-height: 1.2;
-}
-
-.character-gold {
-  grid-area: gold;
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.character-gold .cards {
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-}
-
-.panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.panel-head .segmented {
-  margin-left: auto;
-}
-
-#character-page .holdings {
-  grid-area: holdings;
-}
-
-#character-trades {
-  grid-area: trades;
-}
-
-.holdings {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
+  margin: 10px 0 2px auto;
+  font-size: 14px;
 }
 
 .trades {
@@ -1597,22 +1484,6 @@ tbody tr:is(:hover, [aria-selected="true"]) td:first-child {
 
 .trades:empty {
   display: none;
-}
-
-.trades h3 {
-  color: var(--gold-ink);
-  font-size: 18px;
-}
-
-.back {
-  display: inline-block;
-  margin-block: -6px 6px;
-  padding-block: 6px;
-  font-size: 13px;
-}
-
-.back::before {
-  content: "← " / "";
 }
 
 .login {
@@ -1719,17 +1590,6 @@ code {
   font-size: 12.5px;
 }
 
-@media (max-width: 1299px) {
-  #character-page {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "head"
-      "gold"
-      "holdings"
-      "trades";
-  }
-}
-
 @media (max-width: 1099px) {
   .side-by-side {
     grid-template-columns: minmax(0, 1fr);
@@ -1778,7 +1638,7 @@ code {
     flex-direction: row;
   }
 
-  /* Five hubs share a phone's width, each its icon over its name. */
+  /* The hubs share a phone's width, each its icon over its name. */
   .views a {
     flex: 1 1 0;
     flex-direction: column;
@@ -1862,7 +1722,6 @@ code {
   #bags-table :is(.vendor, .spark-column, .sell-to),
   #gold-characters .played,
   #history .mode,
-  .holding :is(.vendor, .sell-to),
   .traded-items .average,
   .trade-list :is(.source, .character) {
     display: none;
