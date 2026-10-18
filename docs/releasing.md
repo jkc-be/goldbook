@@ -8,6 +8,21 @@ for goldbook-addon's own release and tags the commit.
 
 Only `jkc-be` starts these workflows and approves their environments.
 
+![How a Goldbook release works](release-flow/overview.png)
+
+The examples use illustrative PR and run numbers.
+
+- [Several agent PRs become one release](release-flow/example-release.png)
+- [Finishing a stopped promotion, and what the guards refuse](release-flow/example-stops.png)
+- [Hotfixes](release-flow/example-hotfixes.png)
+
+The diagrams are the four pages of `docs/release-flow.drawio`. After editing it
+in draw.io, export each page again, numbered from 1:
+
+```sh
+drawio -x -f png -s 1.25 --theme light -b 10 -p 1 -o docs/release-flow/overview.png docs/release-flow.drawio
+```
+
 ## Release outputs
 
 A release has six outputs. `scripts/release-state.py` reads five of them and
