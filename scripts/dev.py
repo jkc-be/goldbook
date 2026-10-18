@@ -14,6 +14,24 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'data/dev'
 TOKEN = 'goldbook-local-development'
+ENV_LOCAL = ROOT / 'server/.env.local'
+BATTLENET = ('BNET_CLIENT_ID', 'BNET_CLIENT_SECRET', 'GOLDBOOK_PUBLIC_URL')
+
+
+def battlenet_settings():
+    """The Battle.net client from the ignored server/.env.local, or none without the file."""
+    if not ENV_LOCAL.exists():
+        return {}
+    settings = {}
+    for line in ENV_LOCAL.read_text().splitlines():
+        name, equals, value = line.strip().partition('=')
+        if equals and not name.startswith('#'):
+            settings[name.strip()] = value.strip().strip('"\'')
+    # Only the Battle.net client, so a copied production .env cannot load its upload tokens.
+    unknown = sorted(set(settings) - set(BATTLENET))
+    if unknown:
+        raise SystemExit(f'{ENV_LOCAL} sets only {", ".join(BATTLENET)}, not {", ".join(unknown)}.')
+    return settings
 
 
 def compose(*args, **kwargs):
@@ -24,6 +42,7 @@ def compose(*args, **kwargs):
                GOLDBOOK_IMAGE='goldbook-local', GOLDBOOK_DATA=str(DATA),
                GOLDBOOK_USER=f'{os.getuid()}:{os.getgid()}', UPLOAD_TOKEN=TOKEN,
                SELF_REGISTRATION='true')
+    env.update(battlenet_settings())
     command = ['docker', 'compose', '-p', 'goldbook-dev', '--env-file', os.devnull]
     for name in ('compose.yaml', 'compose.traefik.yaml', 'compose.path.yaml', 'compose.local.yaml'):
         command += ['-f', str(ROOT / 'server' / name)]
@@ -86,6 +105,7 @@ def verify():
         time.sleep(1)
     else:
         raise RuntimeError('Local Traefik did not become ready')
+    battlenet = json.loads(request('localhost', '/goldbook/api/auth/battlenet/status')[1])['enabled']
     # Invalid JSON padded above the old proxy limit reaches app validation,
     # without adding any test records to the user's development database.
     body = b' ' * 70000 + b'['
@@ -104,14 +124,19 @@ def verify():
             payload = json.dumps({'fingerprint': secrets.token_hex(32),
                                   'fingerprintVersion': 1}).encode()
             status, response = request(host, prefix + '/api/installations', payload, scheme=scheme)
-            assert status == 200, f'automatic setup returned {status}'
-            token = json.loads(response)['token']
-            assert token.startswith('gb_')
-            assert request(host, prefix + '/api/sellers/batch', body, token, scheme)[0] == 400
+            if battlenet:
+                # Only an app signed in with Battle.net sets up uploads.
+                assert status == 401, f'automatic setup without Battle.net sign-in returned {status}'
+            else:
+                assert status == 200, f'automatic setup returned {status}'
+                token = json.loads(response)['token']
+                assert token.startswith('gb_')
+                assert request(host, prefix + '/api/sellers/batch', body, token, scheme)[0] == 400
             assert request(host, prefix + '/api/sellers/batch', body, scheme=scheme)[0] == 401
             assert request(host, prefix + '/api/login', body, scheme=scheme)[0] == 413
             assert b'id="chart"' in request(host, prefix + '/', scheme=scheme)[1]
     print('Verified HTTP and HTTPS routes, automatic upload setup, authentication and upload buffering.')
+    print(f'Battle.net sign-in is {"on, from server/.env.local" if battlenet else "off"}.')
 
 
 def main():
@@ -130,7 +155,7 @@ def main():
         print('Desktop API and web: http://localhost:8080/goldbook/\n'
               'HTTPS web: https://localhost:8443/goldbook/\n'
               'Dedicated host: https://goldbook.localhost:8443/\n'
-              'TLS uses a local self-signed certificate; no production credentials are loaded.\n'
+              'TLS uses a local self-signed certificate; no production upload credentials are loaded.\n'
               f'Data: {DATA}\nStop with make dev-down; data is kept.')
     elif args.command == 'check':
         verify()

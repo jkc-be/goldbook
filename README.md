@@ -94,9 +94,24 @@ HTTP routes are derived from the production labels and bind only to loopback.
 
 HTTPS remains available at **https://localhost:8443/goldbook/**. Its dedicated-host equivalent is
 **https://goldbook.localhost:8443/**. Local TLS uses Traefik's self-signed
-certificate, so the browser shows a certificate warning. ACME, Cloudflare,
-production credentials and Battle.net sign-in are not used locally. The proxy
+certificate, so the browser shows a certificate warning. ACME, Cloudflare
+and production upload credentials are not used locally. The proxy
 ports bind only to loopback. The existing desktop app settings are unchanged.
+
+Battle.net sign-in is off locally unless the ignored `server/.env.local`
+configures a client. Add `http://localhost:8080/goldbook/api/auth/battlenet/callback`
+as a redirect URL of the client in the Battle.net developer portal, then
+create the file:
+
+```dotenv
+BNET_CLIENT_ID=<client ID>
+BNET_CLIENT_SECRET=<client secret>
+GOLDBOOK_PUBLIC_URL=http://localhost:8080/goldbook
+```
+
+`make dev` refuses any other setting in it, so it never loads upload tokens.
+Then, as on the server, uploads need **Sign in with Battle.net** in the app.
+Delete the file and run `make dev` again to turn it off.
 
 Data persists in ignored `data/dev/`. For real market data, copy an existing
 SQLite database on the first start:
