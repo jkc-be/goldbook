@@ -1028,8 +1028,10 @@ impl Viewer {
             params![token, now()],
             |r| Ok((r.get(0)?, r.get(1)?)),
         ).optional()?;
+        // A block signs the player out, so that the website offers the login
+        // again; lifting it lets the session back in.
         match player {
-            Some((_, true)) => Err(Error::new(403, "this player is blocked")),
+            Some((_, true)) => Err(Error::new(401, "this player is blocked")),
             Some((identity, false)) => Ok(Self::Player { identity }),
             None => Err(Error::new(401, "not logged in")),
         }

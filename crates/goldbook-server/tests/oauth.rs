@@ -1274,7 +1274,45 @@ async fn website_sign_in_refuses_bad_cookies_replays_expiry_and_blocked_players(
     assert!(cookies(&blocked.1).is_empty());
     assert_eq!(
         view(&f.app, "/api/account", &web).await,
-        (403, json!({"error":"this player is blocked"})),
-        "a block ends the player's website sessions too"
+        (401, json!({"error":"this player is blocked"})),
+        "a block signs the player out of the website too"
+    );
+}
+
+#[tokio::test]
+async fn website_sign_in_starts_leave_the_apps_starts_alone() {
+    let f = Fixture::new().await;
+    let mut started = 0;
+    while call(
+        &f.app,
+        "GET",
+        "/api/auth/battlenet/web/start",
+        Value::Null,
+        &[],
+    )
+    .await
+    .0 == 303
+    {
+        started += 1;
+    }
+    assert_eq!(started, 20);
+    assert_eq!(
+        call(
+            &f.app,
+            "GET",
+            "/api/auth/battlenet/web/start",
+            Value::Null,
+            &[]
+        )
+        .await
+        .2,
+        json!({"error":"too many sign-in attempts, try again later"})
+    );
+    assert_eq!(
+        call(&f.app, "POST", "/api/auth/battlenet/start", json!({}), &[])
+            .await
+            .0,
+        200,
+        "another site sending a browser to the website's sign-in cannot stop the app's"
     );
 }

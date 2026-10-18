@@ -290,7 +290,7 @@ fn web_start(
     config: &BattleNetConfig,
     db: &mut Connection,
 ) -> Result<Reply> {
-    if app.oauth_starts.lock().unwrap().begin(
+    if app.web_starts.lock().unwrap().begin(
         None,
         Some(input.client.as_deref().unwrap_or("unknown")),
         now(),
