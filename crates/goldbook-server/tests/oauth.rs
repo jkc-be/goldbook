@@ -675,3 +675,222 @@ async fn enrollment_binds_verified_players_revokes_legacy_credentials_and_blocks
         401
     );
 }
+
+const KEY: &str = "7KQ2M9PXABCDEFGHJKMN";
+const OTHER_KEY: &str = "ABCDEFGHJKMNPQRSTVWX";
+fn account(id: &str, key: &str) -> Value {
+    json!({"id":id,"keyHash":goldbook_core::key_hash(key),
+        "characters":[{"name":"Sultan","realm":"Faramon","faction":"Horde","class":"MAGE","level":60,
+            "updatedAt":1791970261_u64,"gold":[[1791932400_u64,2]],"bags":null,"bank":null}],
+        "trades":[{"name":"Sultan","realm":"Faramon","at":1791970000_u64,"side":"sell","item":"Linen Cloth",
+            "itemKey":"2589","count":20,"price":2000,"fee":100}]})
+}
+async fn install(f: &Fixture, digit: &str, session: &str) -> String {
+    let registered = call(
+        &f.app,
+        "POST",
+        "/api/installations",
+        registration(digit),
+        &[("authorization", &format!("Bearer {session}"))],
+    )
+    .await;
+    assert_eq!(registered.0, 200);
+    format!("Bearer {}", registered.2["token"].as_str().unwrap())
+}
+fn recorded(f: &Fixture) -> Vec<(String, String)> {
+    let db = db::connect(&f.database()).unwrap();
+    let mut rows = db
+        .prepare("SELECT account_id,identity_hash FROM account_identities ORDER BY account_id,identity_hash")
+        .unwrap();
+    rows.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+}
+fn player(subject: &str) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(format!("battlenet:{subject}")))
+}
+// Every answer that uploads with `upload` and the website after them get, in order.
+async fn account_answers(app: &Router, upload: &str) -> Vec<(u16, Value)> {
+    let auth = [("authorization", upload)];
+    let mut answers = Vec::new();
+    let mut answer = |(status, _, body): (u16, HeaderMap, Value)| answers.push((status, body));
+    answer(call(app, "POST", "/api/account", account("K7Q2M9PX", KEY), &auth).await);
+    answer(
+        call(
+            app,
+            "POST",
+            "/api/account",
+            account("K7Q2M9PX", OTHER_KEY),
+            &auth,
+        )
+        .await,
+    );
+    answer(
+        call(
+            app,
+            "POST",
+            "/api/account",
+            account("ABCDEFGH", OTHER_KEY),
+            &auth,
+        )
+        .await,
+    );
+    let login = call(
+        app,
+        "POST",
+        "/api/login",
+        json!({"id":"K7Q2M9PX","key":KEY}),
+        &[],
+    )
+    .await;
+    let cookie = login.1["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+    answer(login);
+    let session = [("cookie", cookie.as_str())];
+    for target in [
+        "/api/account",
+        "/api/character?name=Sultan&realm=Faramon",
+        "/api/trades",
+    ] {
+        answer(call(app, "GET", target, Value::Null, &session).await);
+    }
+    answer(
+        call(
+            app,
+            "POST",
+            "/api/link",
+            json!({"id":"ABCDEFGH","key":OTHER_KEY}),
+            &session,
+        )
+        .await,
+    );
+    answer(call(app, "GET", "/api/account", Value::Null, &session).await);
+    let mut rotated = account("K7Q2M9PX", OTHER_KEY);
+    rotated["previousKeyHash"] = json!(goldbook_core::key_hash(KEY));
+    answer(call(app, "POST", "/api/account", rotated, &auth).await);
+    answer(call(app, "GET", "/api/account", Value::Null, &session).await);
+    answers
+}
+
+#[tokio::test]
+async fn account_uploads_record_the_bound_player_and_answer_exactly_as_before() {
+    let bound = Fixture::new().await;
+    let session = bound.session("approved").await;
+    let upload = install(&bound, "a", &session).await;
+    let recording = account_answers(&bound.app, &upload).await;
+    let admin = Fixture::new().await;
+    let unrecorded = account_answers(&admin.app, "Bearer admin-token").await;
+    assert_eq!(
+        recording, unrecorded,
+        "recording the player changes no answer"
+    );
+    let character = json!({"name":"Sultan","realm":"Faramon","faction":"Horde","class":"MAGE","level":60,"updatedAt":1791970261_u64,"gold":2});
+    assert_eq!(
+        recording,
+        vec![
+            (200, json!({"stored":true,"characters":1})),
+            (409, json!({"error":"this ID belongs to another key"})),
+            (200, json!({"stored":true,"characters":1})),
+            (200, json!({"id":"K7Q2M9PX"})),
+            (
+                200,
+                json!({"id":"K7Q2M9PX","linked":[],"characters":[character]})
+            ),
+            (
+                200,
+                json!({"name":"Sultan","realm":"Faramon","faction":"Horde","class":"MAGE","level":60,"updatedAt":1791970261_u64,
+                    "gold":[[1791932400_u64,2]],"bags":null,"bank":null})
+            ),
+            (
+                200,
+                json!({"trades":[{"name":"Sultan","realm":"Faramon","at":1791970000_u64,"side":"sell","item":"Linen Cloth",
+                    "itemKey":"2589","quality":null,"count":20,"price":2000,"fee":100,"party":null}]})
+            ),
+            (200, json!({"linked":["ABCDEFGH"]})),
+            (
+                200,
+                json!({"id":"K7Q2M9PX","linked":["ABCDEFGH"],"characters":[character]})
+            ),
+            (200, json!({"stored":true,"characters":1})),
+            (401, json!({"error":"not logged in"})),
+        ]
+    );
+    let mine = player("123");
+    let both = vec![
+        ("ABCDEFGH".to_owned(), mine.clone()),
+        ("K7Q2M9PX".to_owned(), mine.clone()),
+    ];
+    assert_eq!(recorded(&bound), both);
+    assert_eq!(recorded(&admin), vec![]);
+
+    let other = install(&bound, "b", &bound.session("other-player").await).await;
+    let refused = call(
+        &bound.app,
+        "POST",
+        "/api/account",
+        account("K7Q2M9PX", KEY),
+        &[("authorization", &other)],
+    )
+    .await;
+    assert_eq!(refused.0, 409);
+    let admin_upload = call(
+        &bound.app,
+        "POST",
+        "/api/account",
+        account("MNPQRSTV", KEY),
+        &[("authorization", "Bearer admin-token")],
+    )
+    .await;
+    assert_eq!(admin_upload.0, 200);
+    let mut legacy = bound.config.clone();
+    legacy.battlenet = None;
+    let legacy = router(legacy).unwrap();
+    let unbound = call(
+        &legacy,
+        "POST",
+        "/api/installations",
+        registration("c"),
+        &[],
+    )
+    .await;
+    let unbound = format!("Bearer {}", unbound.2["token"].as_str().unwrap());
+    let unbound_upload = call(
+        &legacy,
+        "POST",
+        "/api/account",
+        account("XYZW2345", KEY),
+        &[("authorization", &unbound)],
+    )
+    .await;
+    assert_eq!(unbound_upload.0, 200);
+    assert_eq!(
+        recorded(&bound),
+        both,
+        "refused uploads, admin tokens and installs without a player record nothing"
+    );
+    let shared = call(
+        &bound.app,
+        "POST",
+        "/api/account",
+        account("ABCDEFGH", OTHER_KEY),
+        &[("authorization", &other)],
+    )
+    .await;
+    assert_eq!(shared.0, 200);
+    assert_eq!(
+        recorded(&bound),
+        vec![
+            ("ABCDEFGH".to_owned(), mine.clone()),
+            ("ABCDEFGH".to_owned(), player("456")),
+            ("K7Q2M9PX".to_owned(), mine)
+        ],
+        "an ID keeps every player whose installs uploaded it"
+    );
+}

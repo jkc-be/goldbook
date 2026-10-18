@@ -138,6 +138,8 @@ struct Input {
     body: Vec<u8>,
     client: Option<String>,
     secure: bool,
+    // The fingerprint of the registered install that authorized an upload.
+    uploader: Option<String>,
 }
 impl Input {
     fn cookie(&self) -> &str {
@@ -446,6 +448,7 @@ async fn handle(State(state): State<Arc<App>>, request: Request) -> Response {
         body: bytes,
         client,
         secure,
+        uploader: upload_fingerprint.clone(),
     };
     let reply = tokio::task::spawn_blocking(move || routes::respond(input, &state)).await;
     let reply = match reply {

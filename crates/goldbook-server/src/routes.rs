@@ -898,6 +898,12 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
             *copy += 1;
         }
     }
+    if let Some(fingerprint) = &input.uploader {
+        tx.execute(
+            "INSERT INTO account_identities (account_id,identity_hash,first_seen) SELECT ?1,battlenet_identity,?3 FROM upload_identities WHERE fingerprint=?2 AND battlenet_identity IS NOT NULL ON CONFLICT DO NOTHING",
+            params![account.id, fingerprint, now()],
+        )?;
+    }
     tx.commit()?;
     Ok(Reply::json(
         json!({"stored":true,"characters":characters.len()}),
