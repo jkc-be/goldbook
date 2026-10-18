@@ -8,6 +8,26 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.2.5 - 2026-10-18
+
+### Addon
+
+- The **Profession** filter offers Herbalism, which shows the herbs you
+  gather. Those that alchemists and other professions use, such as
+  Peacebloom, still show under those professions too.
+- The **Profession** filter offers Skinning, which shows the leathers, hides
+  and scales you skin. Those that leatherworkers use, such as Light Leather,
+  still show under Leatherworking too.
+
+### Website
+
+- The **Profession** filter offers Herbalism, which shows the herbs you
+  gather. Those that alchemists and other professions use, such as
+  Peacebloom, still show under those professions too.
+- The **Profession** filter offers Skinning, which shows the leathers, hides
+  and scales you skin. Those that leatherworkers use, such as Light Leather,
+  still show under Leatherworking too.
+
 ## 0.2.4 - 2026-10-17
 
 ### Addon
