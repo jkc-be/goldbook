@@ -1,4 +1,5 @@
 """Exercise update-feed publication through the restricted SSH helper."""
+import base64
 import importlib.util
 import io
 import fcntl
@@ -15,7 +16,14 @@ SPEC = importlib.util.spec_from_file_location('update_deployment', Path(__file__
 DEPLOY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DEPLOY)
 REVISION = 'a' * 40
-ADDON = '{"payload":"data","signature":"signed"}'
+
+
+def addon(sequence):
+    payload = json.dumps({'version': '0.1.3', 'sequence': sequence, 'revision': REVISION, 'files': {}})
+    return json.dumps({'payload': base64.b64encode(payload.encode()).decode(), 'signature': 'signed'})
+
+
+ADDON = addon(1760000000)
 
 
 class PublishUpdates(unittest.TestCase):
@@ -54,7 +62,7 @@ class PublishUpdates(unittest.TestCase):
         (destination / ('c' * 40)).mkdir(parents=True)
         (destination / ('c' * 40) / 'client.tar.gz').write_text('old package')
         (destination / 'latest.json').write_text('{"version": "0.1.2"}')
-        (destination / 'addon.json').write_text('{"payload":"old","signature":"old"}')
+        (destination / 'addon.json').write_text(addon(1750000000))
         return self.snapshot()
 
     def snapshot(self, destination=None):
@@ -185,6 +193,59 @@ class PublishUpdates(unittest.TestCase):
                 self.assertEqual(set(self.snapshot(destination)), partial)
                 self.publish()
                 self.assertEqual(self.snapshot(destination), uninterrupted)
+
+    def test_older_client_version_does_not_replace_the_published_feed(self):
+        before = self.published_before()
+        (self.root / 'data/updates/latest.json').write_text('{"version": "0.1.10"}')
+        before['latest.json'] = b'{"version": "0.1.10"}'
+        self.release_build()
+        for check_only in (False, True):
+            with self.subTest(check_only=check_only), self.assertRaisesRegex(
+                    RuntimeError, '^latest.json has version 0.1.3, older than the published version 0.1.10$'):
+                self.publish(check_only=check_only)
+            self.assertEqual(self.snapshot(), before)
+
+    def test_older_addon_sequence_does_not_replace_the_published_feed(self):
+        before = self.published_before()
+        (self.root / 'data/updates/addon.json').write_text(addon(1770000000))
+        before['addon.json'] = addon(1770000000).encode()
+        self.release_build()
+        for check_only in (False, True):
+            with self.subTest(check_only=check_only), self.assertRaisesRegex(
+                    RuntimeError, '^addon.json has sequence 1760000000, older than the published sequence 1770000000$'):
+                self.publish(check_only=check_only)
+            self.assertEqual(self.snapshot(), before)
+
+    def test_same_version_and_sequence_replace_the_published_feed(self):
+        self.published_before()
+        destination = self.root / 'data/updates'
+        (destination / 'latest.json').write_text('{"version": "0.1.3", "notes": "earlier build"}')
+        (destination / 'addon.json').write_text(addon(1760000000).replace('signed', 'earlier'))
+        self.release_build()
+        self.assertEqual(self.publish(check_only=True), {'checked': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual((destination / 'latest.json').read_text(), json.dumps(self.manifest))
+        self.assertEqual((destination / 'addon.json').read_text(), ADDON)
+
+    def test_unreadable_published_manifests_count_as_nothing_published(self):
+        destination = self.root / 'data/updates'
+        destination.mkdir(parents=True)
+        (destination / 'latest.json').write_text('not json')
+        (destination / 'addon.json').write_text('{"payload":"old","signature":"old"}')
+        self.release_build()
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual((destination / 'addon.json').read_text(), ADDON)
+
+    def test_feed_with_an_unreadable_manifest_changes_nothing(self):
+        before = self.published_before()
+        for name, content in [('addon.json', '{"payload":"data","signature":"signed"}'),
+                              ('latest.json', json.dumps(dict(self.manifest, version='0.1')))]:
+            self.release_build()
+            self.files[name] = content
+            with self.subTest(name=name), self.assertRaisesRegex(RuntimeError, f'^Update feed has an invalid {name}$'):
+                self.publish()
+            self.assertEqual(self.snapshot(), before)
+            self.files['latest.json'] = json.dumps(self.manifest)
 
     def test_check_publish_validates_without_changing_the_feed(self):
         before = self.published_before()

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Forced SSH command for Goldbook's GitHub Actions deployment key."""
 
+import base64
 import fcntl
 import json
 import os
@@ -51,7 +52,26 @@ def atomic_write(path, text):
             temporary.unlink(missing_ok=True)
 
 
-def deploy(revision, token, verify_only=False):
+def built_image(run_id, revision, token):
+    """Returns the image, by digest, that the run built for the revision."""
+    with tempfile.TemporaryDirectory(prefix="goldbook-image-") as temporary:
+        archive = Path(temporary) / "image.zip"
+        download_artifact(run_id, "Goldbook-server-image", token, archive)
+        with zipfile.ZipFile(archive) as bundle:
+            if bundle.namelist() != ["image.json"] or bundle.getinfo("image.json").file_size > 4096:
+                raise RuntimeError(f"Run {run_id}'s Goldbook-server-image artifact must hold only image.json")
+            record = json.loads(bundle.read("image.json"))
+    if not isinstance(record, dict) or record.keys() != {"revision", "digest"}:
+        raise RuntimeError(f"Run {run_id}'s image.json must hold exactly a revision and a digest")
+    if record["revision"] != revision:
+        raise RuntimeError(f"Run {run_id}'s image.json is for revision {record['revision']}, not {revision}")
+    if not isinstance(record["digest"], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", record["digest"]):
+        raise RuntimeError(f"Run {run_id}'s image.json has an invalid digest")
+    return REPOSITORY + "@" + record["digest"]
+
+
+def deploy(run_id, revision, token, verify_only=False):
+    image = built_image(run_id, revision, token)
     with tempfile.TemporaryDirectory(prefix="goldbook-registry-") as docker_config:
         env = dict(os.environ, DOCKER_CONFIG=docker_config)
 
@@ -64,12 +84,10 @@ def deploy(revision, token, verify_only=False):
 
         run("docker", "login", "ghcr.io", "--username", "jkc-be",
             "--password-stdin", input=token, timeout=60)
-        run("docker", "pull", f"{REPOSITORY}:{revision}", timeout=300)
-        metadata = json.loads(inspect(f"{REPOSITORY}:{revision}"))[0]
+        run("docker", "pull", image, timeout=300)
+        metadata = json.loads(inspect(image))[0]
         if metadata["Config"].get("Labels", {}).get("org.opencontainers.image.revision") != revision:
             raise RuntimeError("Image revision does not match requested commit")
-        image = next(digest for digest in metadata["RepoDigests"]
-                     if digest.startswith(REPOSITORY + "@sha256:"))
 
         path = ROOT / ".env"
         original = path.read_text()
@@ -179,24 +197,37 @@ def verify_run(run_id, revision, token, workflows):
     return workflow
 
 
+def download_artifact(run_id, name, token, archive):
+    with github_request(f"/actions/runs/{run_id}/artifacts", token) as response:
+        artifacts = json.load(response)["artifacts"]
+    matches = [a for a in artifacts if a["name"] == name and not a["expired"]]
+    if len(matches) != 1:
+        raise RuntimeError(f"Run {run_id} has {len(matches)} unexpired {name} artifacts; expected exactly one")
+    with github_request(f"/actions/artifacts/{matches[0]['id']}/zip", token) as response, archive.open("wb") as output:
+        shutil.copyfileobj(response, output)
+
+
+def feed_order(name, text):
+    """Returns how a manifest sorts against another: by client version or addon sequence."""
+    if name == "latest.json":
+        version = json.loads(text)["version"]
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+            raise ValueError(version)
+        return tuple(map(int, version.split("."))), "version " + version
+    sequence = json.loads(base64.b64decode(json.loads(text)["payload"], validate=True))["sequence"]
+    if type(sequence) is not int:
+        raise ValueError(sequence)
+    return sequence, f"sequence {sequence}"
+
+
 def publish_updates(run_id, revision, token, check_only=False):
     workflow = verify_run(run_id, revision, token, tuple(FEED_MANIFESTS))
     manifests = FEED_MANIFESTS[workflow]
-
-    def request(path):
-        return github_request(path, token)
-    with request(f"/actions/runs/{run_id}/artifacts") as response:
-        artifacts = json.load(response)["artifacts"]
-    feeds = [a for a in artifacts if a["name"] == "Goldbook-update-feed" and not a["expired"]]
-    if len(feeds) != 1:
-        raise RuntimeError(f"Run {run_id} has {len(feeds)} unexpired Goldbook-update-feed artifacts; expected exactly one")
-    artifact, = feeds
     destination = ROOT / "data/updates"
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="goldbook-publish-", dir=destination.parent) as temporary:
         archive = Path(temporary) / "feed.zip"
-        with request(f"/actions/artifacts/{artifact['id']}/zip") as response, archive.open("wb") as output:
-            shutil.copyfileobj(response, output)
+        download_artifact(run_id, "Goldbook-update-feed", token, archive)
         staged = Path(temporary) / "feed"
         staged.mkdir()
         with zipfile.ZipFile(archive) as bundle:
@@ -229,6 +260,18 @@ def publish_updates(run_id, revision, token, check_only=False):
             if existing.exists() and ({p.name: p.read_bytes() for p in existing.iterdir()}
                                       != {p.name: p.read_bytes() for p in package_dir.iterdir()}):
                 raise RuntimeError("This revision already has different update packages")
+        # A stale promotion must not replace a newer feed; a retry republishes the same one.
+        for name in manifests:
+            try:
+                staged_order, staged_label = feed_order(name, (staged / name).read_bytes())
+            except (ValueError, KeyError, TypeError) as error:
+                raise RuntimeError(f"Update feed has an invalid {name}") from error
+            try:
+                published_order, published_label = feed_order(name, (destination / name).read_bytes())
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            if staged_order < published_order:
+                raise RuntimeError(f"{name} has {staged_label}, older than the published {published_label}")
         if check_only:
             print(json.dumps({"checked": list(manifests), "revision": revision}), flush=True)
             return
@@ -256,7 +299,7 @@ def main():
             publish_updates(command[2], command[3], token, check_only=command[1] == "check-publish")
         else:
             verify_run(command[2], command[3], token, DEPLOY_WORKFLOWS)
-            deploy(command[3], token, verify_only=command[1] == "verify")
+            deploy(command[2], command[3], token, verify_only=command[1] == "verify")
 
 
 if __name__ == "__main__":

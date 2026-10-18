@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from contextlib import closing, redirect_stdout
 from datetime import datetime, timezone
 from unittest import mock
@@ -15,7 +16,9 @@ spec = importlib.util.spec_from_file_location("deploy_ovh", SCRIPT)
 deployment = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deployment)
 REVISION = "a" * 40
-IMAGE = deployment.REPOSITORY + "@sha256:" + "b" * 64
+DIGEST = "sha256:" + "b" * 64
+IMAGE = deployment.REPOSITORY + "@" + DIGEST
+REPOINTED = deployment.REPOSITORY + "@sha256:" + "c" * 64
 
 
 class DeploymentTest(unittest.TestCase):
@@ -45,16 +48,33 @@ class DeploymentTest(unittest.TestCase):
         self.healthy = True
         self.label = REVISION
         self.starts = []
+        self.pulls = []
         self.registry_config = None
+        # A later build for the same commit has repointed the tag.
+        self.registry = {deployment.REPOSITORY + ":" + REVISION: REPOINTED, IMAGE: IMAGE}
+        self.image_record = {"revision": REVISION, "digest": DIGEST}
+        self.artifacts = [{"id": 456, "name": "Goldbook-server-image", "expired": False},
+                          {"id": 789, "name": "Goldbook-update-feed", "expired": False}]
+
+    def github(self, request, **_):
+        if request.full_url.endswith("/actions/runs/123/artifacts"):
+            return io.BytesIO(json.dumps({"artifacts": self.artifacts}).encode())
+        self.assertTrue(request.full_url.endswith("/actions/artifacts/456/zip"))
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr("image.json", json.dumps(self.image_record))
+        return io.BytesIO(archive.getvalue())
 
     def docker(self, args, **options):
         self.registry_config = Path(options["env"]["DOCKER_CONFIG"])
         self.assertTrue(self.registry_config.is_dir())
         stdout = ""
-        if args[:2] == ("docker", "inspect"):
+        if args[:2] == ("docker", "pull"):
+            self.pulls.append(args[2])
+        elif args[:2] == ("docker", "inspect"):
             if len(args) == 3:
                 stdout = json.dumps([{"Config": {"Labels": {"org.opencontainers.image.revision": self.label}},
-                                      "RepoDigests": [IMAGE]}])
+                                      "RepoDigests": [self.registry[args[2]]]}])
             elif args[-1] == "{{.Config.Image}}":
                 stdout = self.active_image
             else:
@@ -74,11 +94,19 @@ class DeploymentTest(unittest.TestCase):
                     self.assertIn(str(self.root / "app/server/compose.traefik.yaml"), args)
         return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
 
-    def run_deploy(self):
+    def run_deploy(self, verify_only=False):
         with mock.patch.object(deployment.subprocess, "run", side_effect=self.docker), \
+             mock.patch.object(deployment.OPENER, "open", side_effect=self.github), \
              redirect_stdout(io.StringIO()) as output:
-            deployment.deploy(REVISION, "test-registry-token")
+            deployment.deploy("123", REVISION, "test-registry-token", verify_only=verify_only)
         return json.loads(output.getvalue())
+
+    def assert_refused(self, message):
+        with self.assertRaisesRegex(RuntimeError, message):
+            self.run_deploy()
+        self.assertIsNone(self.registry_config)
+        self.assertEqual(self.env_file.read_text(), self.original)
+        self.assertEqual(self.starts, [])
 
     def run_main(self, command, workflow):
         run = dict(head_sha=REVISION, head_branch="main", path=workflow + "@refs/heads/main",
@@ -104,9 +132,35 @@ class DeploymentTest(unittest.TestCase):
         self.assertEqual(self.env_file.stat().st_mode & 0o777, 0o600)
         self.assertFalse(self.registry_config.exists())
 
+    def test_deploys_the_digest_the_run_recorded_not_the_current_tag(self):
+        result = self.run_deploy()
+        self.assertEqual(self.pulls, [IMAGE])
+        self.assertEqual(result["active_image"], IMAGE)
+        self.assertEqual(self.starts, [IMAGE])
+        self.assertEqual(self.env_file.read_text(), self.original + "GOLDBOOK_IMAGE=" + IMAGE + "\n")
+
+    def test_run_needs_exactly_one_unexpired_image_artifact(self):
+        image = self.artifacts[0]
+        for artifacts, count in [([], 0), ([dict(image, expired=True)], 0), ([image, dict(image, id=457)], 2)]:
+            self.artifacts = artifacts
+            with self.subTest(artifacts=artifacts):
+                self.assert_refused(f"^Run 123 has {count} unexpired Goldbook-server-image artifacts; expected exactly one$")
+
+    def test_image_record_for_another_revision_is_refused(self):
+        self.image_record["revision"] = "c" * 40
+        self.assert_refused("^Run 123's image.json is for revision " + "c" * 40 + ", not " + REVISION + "$")
+
+    def test_image_record_with_an_invalid_digest_is_refused(self):
+        for digest in ("sha256:" + "B" * 64, "sha256:" + "b" * 63, "b" * 64, "sha256:" + "b" * 64 + "\n", 1):
+            self.image_record["digest"] = digest
+            with self.subTest(digest=digest):
+                self.assert_refused("^Run 123's image.json has an invalid digest$")
+        self.image_record = {"revision": REVISION, "digest": DIGEST, "tag": "latest"}
+        self.assert_refused("^Run 123's image.json must hold exactly a revision and a digest$")
+
     def test_verify_only_does_not_change_running_service_or_configuration(self):
-        with mock.patch.object(deployment.subprocess, "run", side_effect=self.docker), redirect_stdout(io.StringIO()):
-            deployment.deploy(REVISION, "test-registry-token", verify_only=True)
+        self.run_deploy(verify_only=True)
+        self.assertEqual(self.pulls, [IMAGE])
         self.assertEqual(self.env_file.read_text(), self.original)
         self.assertEqual(self.starts, [])
         self.assertEqual(self.active_image, "goldbook")
@@ -198,7 +252,8 @@ class DeploymentTest(unittest.TestCase):
                                   ("deploy", ".github/workflows/deploy.yml")]:
             with self.subTest(command=command, workflow=workflow):
                 self.run_main(command, workflow)
-                self.assertEqual(self.deploy_calls, [mock.call(REVISION, "test-token", verify_only=command == "verify")])
+                self.assertEqual(self.deploy_calls,
+                                 [mock.call("123", REVISION, "test-token", verify_only=command == "verify")])
 
     def test_other_workflows_cannot_deploy(self):
         for workflow in (".github/workflows/release-desktop.yml", ".github/workflows/update-addon.yml",

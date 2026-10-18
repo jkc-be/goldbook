@@ -85,18 +85,32 @@ SHA. The run must be the one that built what is being shipped.
 
 | Command | Accepted workflows | Effect |
 | --- | --- | --- |
-| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the image and the running service. Changes nothing. |
-| `deploy` | `deploy.yml`, `release-build.yml` | Backs up the database, then replaces the running image. |
+| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the run's image and the running service. Changes nothing. |
+| `deploy` | `deploy.yml`, `release-build.yml` | Backs up the database, then replaces the running image with the run's image. |
 | `check-publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
 | `publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Validates and publishes the run's update feed. |
+
+The run's image is the one it pushed, not whatever its commit's tag points at
+now, because another run for the same commit can push the tag again. The run
+must have exactly one unexpired `Goldbook-server-image` artifact holding only
+`image.json`, `{"revision": "<commit SHA>", "digest": "sha256:<64 hex digits>"}`.
+The helper refuses the run when the revision differs from the command's or the
+digest is malformed. It pulls `ghcr.io/jkc-be/goldbook-server@<digest>`, checks
+that its `org.opencontainers.image.revision` label is the commit, and pins that
+digest in `GOLDBOOK_IMAGE`. A **Deploy to OVH** run from before this artifact
+existed cannot deploy; start a new run.
 
 A feed must come from a run with exactly one unexpired `Goldbook-update-feed`
 artifact. A `release-desktop.yml` feed publishes `latest.json` and its package
 folder, an `update-addon.yml` feed publishes `addon.json`, and a
 `release-build.yml` feed publishes `latest.json`, its package folder and
 `addon.json`. The helper rejects the feed before
-it replaces anything when a manifest is missing, a package is missing, or the
-revision already has different packages. It moves the package folder into
+it replaces anything when a manifest is missing, a package is missing, the
+revision already has different packages, or a manifest is older than the one
+already published. A `latest.json` is older when its `version` is lower; an
+`addon.json` is older when the `sequence` in its signed payload is lower. An
+equal version or sequence is accepted, so a retry can publish again. A missing
+or unreadable published manifest counts as nothing published. It moves the package folder into
 place first, then replaces `latest.json`, then `addon.json`. Publishing the same
 run again after an interruption finishes the publication with the same files.
 `check-publish` runs every one of these checks and prints
@@ -104,8 +118,9 @@ run again after an interruption finishes the publication with the same files.
 `{"published": [...], "revision": ...}`.
 
 Use **Actions > Deploy to OVH > Run workflow** on `main`. The default
-`verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, checks
-the restricted SSH connection, pulls and validates the image, and checks the
+`verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, records
+the pushed digest as the run's `Goldbook-server-image` artifact, checks the
+restricted SSH connection, pulls and validates that image, and checks the
 running service without replacing it. Approve the `production` job after
 reviewing the run. Uncheck `verify_only` for a deployment. That copies the
 database through SQLite's backup API to
