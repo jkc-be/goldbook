@@ -1037,7 +1037,7 @@ Installers are built by hand, to save GitHub runner minutes. In **Actions**,
 choose **Build macOS**, **Build Windows**, **Build Ubuntu**, or **Build Fedora**.
 Click **Run workflow**, select a branch, then click **Run workflow** to build
 only that installer. **Build macOS** runs only on `main`, requires the owner's
-approval in `release-signing`, and signs and notarizes the app and DMG with Apple.
+approval in `release-signing`, and signs the app and DMG with Apple's Developer ID.
 Other branches can use the **Check** workflow's installer build for an ad hoc
 macOS build. These buttons appear after the workflows reach `main`.
 Download the installer from the run's **Artifacts**. Downloads stay available
@@ -1065,7 +1065,13 @@ The builder uses team `P5339LSR49`, imports the signing key into a temporary
 keychain, and deletes the keychain and certificate export when it exits.
 It checks the app and DMG signatures, Apple notarization tickets and Gatekeeper
 acceptance before uploading artifacts. Missing signing or notarization credentials
-fail the build. The update feed still requires its separate
+fail the build.
+
+Notarization is off for now, because Apple does not yet accept the team for it.
+`NOTARIZE: 'false'` in `.github/workflows/desktop.yml` makes the builder sign
+without notarizing and skip the notarization and Gatekeeper checks, so macOS
+still warns on first launch. [Issue #24](https://github.com/jkc-be/goldbook/issues/24)
+tracks turning it back on. The update feed still requires its separate
 `TAURI_SIGNING_PRIVATE_KEY` secret in the same protected environment.
 
 To run all checks and build every installer, use **Actions > Check > Run

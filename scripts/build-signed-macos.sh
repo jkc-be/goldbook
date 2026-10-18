@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID RUNNER_TEMP; do
+notarize=${NOTARIZE:-true}
+required=(APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_TEAM_ID RUNNER_TEMP)
+if [[ "$notarize" == true ]]; then
+  required+=(APPLE_ID APPLE_PASSWORD)
+else
+  # Tauri notarizes whenever these are set.
+  unset APPLE_ID APPLE_PASSWORD
+  echo '::warning::Notarization is off, so Gatekeeper warns on first launch. See https://github.com/jkc-be/goldbook/issues/24.'
+fi
+for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
     echo "::error::Missing $name in the protected release-signing environment."
     exit 1
@@ -58,8 +67,10 @@ npm run desktop:pack -- --ci --bundles "${BUNDLES:-app,dmg}" --config "$signing_
 app=target/release/bundle/macos/Goldbook.app
 codesign --verify --deep --strict --verbose=2 "$app"
 codesign -dv --verbose=4 "$app" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
-xcrun stapler validate "$app"
-spctl --assess --type execute --verbose=2 "$app"
+if [[ "$notarize" == true ]]; then
+  xcrun stapler validate "$app"
+  spctl --assess --type execute --verbose=2 "$app"
+fi
 shopt -s nullglob
 dmgs=(target/release/bundle/dmg/*.dmg)
 if [[ ${#dmgs[@]} -eq 0 ]]; then
@@ -68,6 +79,7 @@ if [[ ${#dmgs[@]} -eq 0 ]]; then
 fi
 for dmg in "${dmgs[@]}"; do
   codesign --verify --strict --verbose=2 "$dmg"
+  [[ "$notarize" == true ]] || continue
   # Tauri notarizes the app; submit the signed DMG separately as well.
   xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" \
     --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
