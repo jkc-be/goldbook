@@ -146,7 +146,7 @@ stopped promote run and choose **Re-run all jobs**. Both are safe:
 
 | Stopped after | A second promotion |
 | --- | --- |
-| Server deployed | Deploys the same image again, then continues. |
+| Server deployed | Deploys the same image again, then continues. If a **Deploy to OVH** went out in between, this puts the build's older image back; reject the `server` approval and prepare a new version instead. |
 | `latest.json` published | Skips the deploy and publishes the same feed again. |
 | Both manifests published | Skips the deploy, publishes again and mirrors. |
 | Mirror pushed | Finds HEAD already holding the revision and waits for its run. |
@@ -211,6 +211,9 @@ PR with a patch bump, a build and a promotion.
 
 A fix that touches only the server can go out through **Deploy to OVH**. It
 runs the full checks for its commit first and shares the promotion lock.
+A promotion of an earlier build that has not published its feed yet would
+deploy that build's image over the fix, so finish or abandon such a promotion
+before the hotfix.
 
 When `main` is not releasable, either switch off or revert the unfinished work
 and release as above, or add release branches. A release branch is

@@ -58,7 +58,7 @@
         <mxCell id="n18" value="&lt;b&gt;addon&lt;/b&gt;&lt;br&gt;signed&lt;br&gt;addon.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="720" y="235" width="80" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="n19" value="&lt;b&gt;image&lt;/b&gt;&lt;br&gt;ghcr.io&lt;br&gt;server:&amp;lt;sha&amp;gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="n19" value="&lt;b&gt;image&lt;/b&gt;&lt;br&gt;ghcr.io, records&lt;br&gt;its digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="810" y="235" width="80" height="60" as="geometry" />
         </mxCell>
         <mxCell id="n20" value="release-signing&lt;br&gt;(one approval)" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;size=10;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;shape=rect;rounded=1;dashed=1;fillColor=none;verticalAlign=bottom;fontColor=#b46504;" vertex="1" parent="1">
@@ -73,8 +73,8 @@
         <mxCell id="n23" value="production" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;size=10;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="800" y="439" width="100" height="22" as="geometry" />
         </mxCell>
-        <mxCell id="n24" value="&lt;b&gt;Build run ID&lt;/b&gt;&lt;br&gt;artifacts kept 30 days" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="600" y="580" width="220" height="45" as="geometry" />
+        <mxCell id="n24" value="&lt;b&gt;Build run ID&lt;/b&gt;&lt;br&gt;installers, feed, addon, image digest&lt;br&gt;kept 30 days" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="580" y="575" width="260" height="55" as="geometry" />
         </mxCell>
         <mxCell id="e25" value="you start it" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="n9" target="n15">
           <mxGeometry relative="1" as="geometry" />
@@ -124,14 +124,14 @@
         <mxCell id="n36" value="Release promote (Actions, input: build run ID)" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;fillColor=#f6fbf5;" vertex="1" parent="1">
           <mxGeometry x="950" y="100" width="380" height="560" as="geometry" />
         </mxCell>
-        <mxCell id="n37" value="&lt;b&gt;guard&lt;/b&gt;&lt;br&gt;build run is a green first attempt;&lt;br&gt;every output absent or matches this build" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="970" y="135" width="340" height="55" as="geometry" />
+        <mxCell id="n37" value="&lt;b&gt;guard&lt;/b&gt;&lt;br&gt;build run is a green first attempt;&lt;br&gt;every output absent or matches this build;&lt;br&gt;records its attempt for the jobs below" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="970" y="130" width="340" height="65" as="geometry" />
         </mxCell>
-        <mxCell id="n38" value="&lt;b&gt;server&lt;/b&gt;&lt;br&gt;check-publish, then deploy&lt;br&gt;(database backup first)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="n38" value="&lt;b&gt;server&lt;/b&gt;&lt;br&gt;check-publish, then deploy the&lt;br&gt;build's image digest (backup first)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="970" y="220" width="240" height="55" as="geometry" />
         </mxCell>
-        <mxCell id="n39" value="&lt;b&gt;publish&lt;/b&gt;&lt;br&gt;installers, then latest.json, then addon.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="970" y="300" width="240" height="50" as="geometry" />
+        <mxCell id="n39" value="&lt;b&gt;publish&lt;/b&gt;&lt;br&gt;installers, then latest.json, then addon.json;&lt;br&gt;helper refuses an older feed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="970" y="295" width="240" height="60" as="geometry" />
         </mxCell>
         <mxCell id="n40" value="&lt;b&gt;mirror&lt;/b&gt;&lt;br&gt;addon/ &amp;#8594; jkc-be/goldbook-addon" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="970" y="375" width="240" height="50" as="geometry" />
@@ -177,8 +177,8 @@
         <mxCell id="e52" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n41" target="n42">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n53" value="Promote builds nothing. Run it again with the same&lt;br&gt;build run ID to finish a release that stopped." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="970" y="600" width="340" height="40" as="geometry" />
+        <mxCell id="n53" value="Promote builds nothing. To finish a release that stopped,&lt;br&gt;start a new run with the same build run ID or use&lt;br&gt;&lt;b&gt;Re-run all jobs&lt;/b&gt;. &lt;b&gt;Re-run failed jobs&lt;/b&gt; is refused:&lt;br&gt;it would skip guard." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="970" y="595" width="340" height="60" as="geometry" />
         </mxCell>
         <mxCell id="n54" value="What users get" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;fillColor=#faf6fc;" vertex="1" parent="1">
           <mxGeometry x="1370" y="100" width="300" height="560" as="geometry" />
@@ -218,7 +218,7 @@
         <mxCell id="e64" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="n42" target="n59">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n65" value="&lt;b&gt;Deploy to OVH&lt;/b&gt; (server-only hotfix)&lt;br&gt;runs check.yml, then build and deploy.&lt;br&gt;Shares the lock &lt;i&gt;goldbook-production&lt;/i&gt; with promote,&lt;br&gt;so the two never interleave." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" vertex="1" parent="1">
+        <mxCell id="n65" value="&lt;b&gt;Deploy to OVH&lt;/b&gt; (server-only hotfix)&lt;br&gt;runs check.yml, then builds and deploys that image's digest.&lt;br&gt;Shares the lock &lt;i&gt;goldbook-production&lt;/i&gt; with promote,&lt;br&gt;so the two never interleave." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" vertex="1" parent="1">
           <mxGeometry x="950" y="690" width="380" height="70" as="geometry" />
         </mxCell>
         <mxCell id="e66" value="server-only fix" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;dashed=1;" edge="1" parent="1" source="n9" target="n65">
@@ -453,16 +453,16 @@
           <mxGeometry x="880" y="480" width="250" height="30" as="geometry" />
         </mxCell>
         <mxCell id="n30" value="D. Promoting a different build of a version that is partly out" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
-          <mxGeometry x="20" y="570" width="1640" height="170" as="geometry" />
+          <mxGeometry x="20" y="570" width="800" height="200" as="geometry" />
         </mxCell>
-        <mxCell id="n31" value="latest.json on OVH is from build &lt;b&gt;4101&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="40" y="620" width="260" height="45" as="geometry" />
+        <mxCell id="n31" value="latest.json on OVH is&lt;br&gt;from build &lt;b&gt;4101&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="180" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="n32" value="&lt;b&gt;Release promote&lt;/b&gt;&lt;br&gt;build_run_id = &lt;b&gt;4103&lt;/b&gt;, also 0.2.5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="350" y="615" width="240" height="55" as="geometry" />
+        <mxCell id="n32" value="&lt;b&gt;Release promote&lt;/b&gt;&lt;br&gt;build_run_id = &lt;b&gt;4103&lt;/b&gt;,&lt;br&gt;also 0.2.5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="250" y="612" width="190" height="65" as="geometry" />
         </mxCell>
         <mxCell id="n33" value="&lt;b&gt;guard&lt;/b&gt;: client feed is a &lt;b&gt;conflict&lt;/b&gt;&lt;br&gt;(0.2.5 from another build). Stops before&lt;br&gt;anything changes; you decide." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
-          <mxGeometry x="640" y="610" width="300" height="65" as="geometry" />
+          <mxGeometry x="480" y="610" width="310" height="65" as="geometry" />
         </mxCell>
         <mxCell id="e34" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;endArrow=none;" edge="1" parent="1" source="n31" target="n32">
           <mxGeometry relative="1" as="geometry" />
@@ -470,8 +470,34 @@
         <mxCell id="e35" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n32" target="n33">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n36" value="Usual decision: finish with 4101, or prepare 0.2.6." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="990" y="625" width="320" height="35" as="geometry" />
+        <mxCell id="n36" value="Usual decision: finish with 4101, or prepare 0.2.6.&lt;br&gt;An older build never replaces a newer feed: the&lt;br&gt;OVH helper refuses it as well." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="480" y="690" width="310" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n37" value="E. Re-running only the failed jobs of a promote run" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="860" y="570" width="800" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="n38" value="&lt;b&gt;Promote run 5&lt;/b&gt;, attempt 1&lt;br&gt;publish approval rejected" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="880" y="615" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n39" value="&lt;b&gt;Re-run failed jobs&lt;/b&gt; (attempt 2)&lt;br&gt;publish fails: guard passed in&lt;br&gt;attempt 1, not 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="610" width="230" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="n40" value="&lt;b&gt;Re-run all jobs&lt;/b&gt; or a new run:&lt;br&gt;guard reads every output again" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1390" y="612" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e41" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="n38" target="n39">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e42" value="instead" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="n38" target="n40">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="980" y="700" />
+              <mxPoint x="1515" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="n43" value="The production lock is held only while an attempt runs.&lt;br&gt;Between attempts another release or deploy could ship." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="880" y="715" width="380" height="40" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
@@ -493,8 +519,8 @@
         <mxCell id="n4" value="&lt;b&gt;main&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="310" y="115" width="100" height="45" as="geometry" />
         </mxCell>
-        <mxCell id="n5" value="&lt;b&gt;Deploy to OVH&lt;/b&gt;&lt;br&gt;check.yml for this SHA, then build and deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="460" y="110" width="300" height="55" as="geometry" />
+        <mxCell id="n5" value="&lt;b&gt;Deploy to OVH&lt;/b&gt;&lt;br&gt;check.yml for this SHA, then build,&lt;br&gt;record the digest and deploy it" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="460" y="105" width="300" height="65" as="geometry" />
         </mxCell>
         <mxCell id="n6" value="production" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;size=10;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="670" y="99" width="100" height="22" as="geometry" />
