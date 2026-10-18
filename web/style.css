@@ -842,14 +842,8 @@ th[aria-sort] button:hover {
 }
 
 td button:hover,
-td button:focus-visible,
-td a:hover {
+td button:focus-visible {
   text-decoration: underline;
-}
-
-td a {
-  color: inherit;
-  text-decoration: none;
 }
 
 tbody tr:hover td {
