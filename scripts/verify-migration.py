@@ -301,11 +301,23 @@ def exercise_upgrade(directory, old_repo, server_binary):
     with sqlite3.connect(database) as db:
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("SELECT id, uploaded_at FROM scans").fetchall() == [(7, 1760000010)], "upgrade lost or duplicated a historical scan"
-        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == (5 if old_repo else 11)
+        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == (5 if old_repo else 12)
     with server(directory, old_repo, server_binary) as restarted:
         restarted.check("upgrade-restart", "GET", "/api/character?name=Legacy&realm=Legacy", cookie="goldbook_session=legacy-session")
         api.transcript.update(restarted.transcript)
     return api.transcript
+
+
+# The original addon booked only auction house and vendor trades. Accounting
+# entries of any other side (the run test books gold it cannot explain as
+# other income) are left out of the fixture, so that the account upload still
+# compares with the original; verify-trades.py and the sync tests cover them.
+ORIGINAL_SIDES = ("buy", "sell", "vendor")
+
+
+def original_trades(saved):
+    entry = re.compile(r'^\{\n(?:(?!^\}).*\n)*?\["side"\] = "(\w+)",\n(?:(?!^\}).*\n)*?^\}, -- \[\d+\]\n', re.M)
+    return entry.sub(lambda match: match.group(0) if match.group(1) in ORIGINAL_SIDES else "", saved)
 
 
 def main():
@@ -318,9 +330,10 @@ def main():
     if args.capture_baseline and not args.old_repo:
         parser.error("--capture-baseline requires --old-repo")
     run(["luajit", "addon/tests/run.lua"], cwd=ROOT)
-    fixture = ROOT / "fixtures/Goldbook.lua"
     with tempfile.TemporaryDirectory(prefix="goldbook-verify-") as temporary:
         directory = Path(temporary)
+        fixture = directory / "Goldbook.lua"
+        fixture.write_text(original_trades((ROOT / "fixtures/Goldbook.lua").read_text()))
         with server(directory, args.old_repo, args.server.resolve()) as api:
             transcript = exercise(api, directory, fixture, args.old_repo, args.sync.resolve())
         transcript.update(exercise_upgrade(directory / "upgrade", args.old_repo, args.server.resolve()))

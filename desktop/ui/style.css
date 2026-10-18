@@ -30,68 +30,125 @@
   src: url("fonts/roboto-condensed-latin-700-normal.woff2") format("woff2");
 }
 
-/* The website's colours and sizes; a desktop test keeps the shared tokens equal to web/style.css. */
+/* The website's faces, sizes and colours; a desktop test keeps the shared tokens equal to web/style.css. */
 :root {
   color-scheme: light;
-  --serif: "Marcellus", Georgia, serif;
-  --sans: "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
-  --top: 56px;
-  --page: #f4ecdb;
-  --rail: #ebe0c8;
-  --panel: #fbf6ea;
-  --field: #fffaf0;
-  --line: #e0d3b6;
-  --edge: #cbb88f;
-  --ink: #2b2216;
-  --ink-soft: #5a4a30;
-  --muted: #6e5f45;
-  --gold: #a8761a;
-  --gold-ink: #7f5507;
-  --gold-edge: #b8913a;
-  --tint: rgb(168 118 26 / 8%);
-  --tint-strong: rgb(168 118 26 / 15%);
-  --press: #ecd9a8;
-  --top-1: #efe3c8;
-  --top-2: #e6d8b8;
-  --brand-1: #b8860b;
-  --brand-2: #946a0d;
-  --brand-3: #7a5208;
-  --button-1: #f3dc9a;
-  --button-2: #e2c06a;
-  --button-ink: #3a2a08;
-  --up: #276b2b;
-  --down: #b83224;
-  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-6' fill='none' stroke='%237f5507' stroke-width='1.8'/%3E%3C/svg%3E");
+  --serif: "Friz digits", "Marcellus", Georgia, serif;
+  --sans: "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --top: 46px;
+  --rail-width: 160px;
+  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-6' fill='none' stroke='%2397691c' stroke-width='1.8'/%3E%3C/svg%3E");
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #120f0b;
-  --rail: #17130e;
-  --panel: #1c1813;
-  --field: #0d0b08;
-  --line: #2c251b;
-  --edge: #3d3324;
-  --ink: #ece4d4;
-  --ink-soft: #cfc4ae;
-  --muted: #a89c86;
-  --gold: #e9b949;
-  --gold-ink: #ffe08a;
-  --gold-edge: #7a5a1c;
-  --tint: rgb(233 185 73 / 8%);
-  --tint-strong: rgb(233 185 73 / 14%);
-  --press: #3a2d14;
-  --top-1: #1f1a12;
-  --top-2: #15110c;
-  --brand-1: #ffe9a8;
-  --brand-2: #d9a22c;
-  --brand-3: #a8761a;
-  --button-1: #3a2d14;
-  --button-2: #261d0d;
-  --button-ink: #ffe08a;
-  --up: #5fd35a;
-  --down: #ff6d63;
-  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-6' fill='none' stroke='%23ffe08a' stroke-width='1.8'/%3E%3C/svg%3E");
+  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-6' fill='none' stroke='%23ffffc0' stroke-width='1.8'/%3E%3C/svg%3E");
+}
+
+/* The addon's palettes, written by scripts/web-palette.py. Edit UI.lua and run it again. */
+
+:root {
+  --page: #ffffff;
+  --rail: #ffffce;
+  --panel: #ffffff;
+  --field: #ffffff;
+  --line: #efd6a1;
+  --edge: #dac089;
+  --ink: #41392d;
+  --ink-soft: #60513b;
+  --muted: #786850;
+  --gold: #c08621;
+  --gold-ink: #97691c;
+  --gold-edge: #c09945;
+  --brand: #b47c26;
+  --tint: rgb(192 134 33 / 14%);
+  --tint-strong: rgb(192 134 33 / 16%);
+  --press: #ffffca;
+  --top-1: #ffffd1;
+  --top-2: #fff4a5;
+  --button-1: #ffffd3;
+  --button-2: #fff292;
+  --button-ink: #4c3e1f;
+  --series-1: #c08621;
+  --series-2: #6e6e7a;
+  --compare-1: #c08621;
+  --compare-2: #1a64dc;
+  --compare-3: #2c7c32;
+  --compare-4: #963ddc;
+  --compare-5: #c5392d;
+  --compare-6: #6e6e7a;
+  --up: #2c7c32;
+  --down: #c5392d;
+  --warn: #b4551a;
+  --info: #1a64dc;
+  --coin-g: #96701a;
+  --coin-s: #6e6e7a;
+  --coin-c: #b95532;
+  --q-poor: #767676;
+  --q-common: #41392d;
+  --q-uncommon: #2b7c23;
+  --q-rare: #1a64dc;
+  --q-epic: #963ddc;
+  --q-legendary: #b4551a;
+  --q-artifact: #836928;
+  --q-heirloom: #1a7391;
+}
+
+:root[data-theme="dark"] {
+  --page: #2f2c27;
+  --rail: #38332d;
+  --panel: #3d3832;
+  --field: #292723;
+  --line: #605544;
+  --edge: #7f6f52;
+  --ink: #ffffff;
+  --ink-soft: #fffff5;
+  --muted: #e8d9bf;
+  --gold: #fff872;
+  --gold-ink: #ffffc0;
+  --gold-edge: #c09945;
+  --brand: #fff873;
+  --tint: rgb(255 248 114 / 8%);
+  --tint-strong: rgb(255 248 114 / 16%);
+  --press: #605032;
+  --top-1: #4f4537;
+  --top-2: #433b31;
+  --button-1: #605032;
+  --button-2: #483d29;
+  --button-ink: #ffffc0;
+  --series-1: #fff872;
+  --series-2: #ffffff;
+  --compare-1: #fff872;
+  --compare-2: #63d4ff;
+  --compare-3: #8cff86;
+  --compare-4: #ffb0ff;
+  --compare-5: #ff9d86;
+  --compare-6: #ffffff;
+  --up: #8cff86;
+  --down: #ff9d86;
+  --warn: #ffb41a;
+  --info: #63d4ff;
+  --coin-g: #ffff76;
+  --coin-s: #ffffff;
+  --coin-c: #ffe08c;
+  --q-poor: #dedede;
+  --q-common: #ffffff;
+  --q-uncommon: #3eff1a;
+  --q-rare: #63d4ff;
+  --q-epic: #ffb0ff;
+  --q-legendary: #ffb41a;
+  --q-artifact: #ffffb4;
+  --q-heirloom: #1affff;
+}
+
+/* End of the addon's palettes. */
+
+/* Friz Quadrata has lining figures and Marcellus has not, so a computer with
+   Optima draws the digits in words with it, as the website does. */
+@font-face {
+  font-family: "Friz digits";
+  src: local("Optima Regular"), local("Optima");
+  unicode-range: U+0030-0039;
 }
 
 * {
@@ -104,13 +161,13 @@
 
 body {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
   height: 100vh;
   margin: 0;
   overflow: hidden;
   background: var(--page);
   color: var(--ink);
-  font: 14px/1.4 var(--sans);
+  font: 14px/1.35 var(--serif);
 }
 
 p {
@@ -128,7 +185,7 @@ p {
 }
 
 .sub {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 h1,
@@ -139,7 +196,7 @@ h2 {
 }
 
 h1 {
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.2;
 }
 
@@ -154,9 +211,10 @@ input:not([type="checkbox"]),
 select {
   width: 100%;
   min-width: 0;
-  padding: 5px 9px;
+  height: 28px;
+  padding: 0 9px;
   border: 1px solid var(--edge);
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--field);
 }
 
@@ -169,16 +227,13 @@ input:disabled {
   opacity: 0.5;
 }
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* The website's title bar, which its view continues beside the rail. */
+.titlebar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 18px;
-  min-height: var(--top);
-  padding: 0 20px;
+  gap: 6px 12px;
+  height: var(--top);
+  padding: 0 14px;
   border-top: 2px solid var(--gold);
   border-bottom: 1px solid var(--edge);
   background: linear-gradient(var(--top-1), var(--top-2));
@@ -187,51 +242,34 @@ input:disabled {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font: 26px/1.1 var(--serif);
-  letter-spacing: 0.5px;
-  background: linear-gradient(var(--brand-1), var(--brand-2) 70%, var(--brand-3));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  gap: 12px;
+  color: var(--brand);
+  font: 24px/1 var(--serif);
   white-space: nowrap;
 }
 
 .crest {
   flex: none;
-  width: 24px;
-  height: 24px;
-  border: 2px solid #a8761a;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #fff1b3, #e9b949 45%, #8a5f10);
-  box-shadow: 0 0 6px rgb(233 185 73 / 40%);
+  background: radial-gradient(circle at 42% 36%, #fff3c4 0, #e9b949 34%, #a8761a 72%, #8a5f10 100%);
+  box-shadow: 0 0 0 2px #a8761a, 0 0 6px rgb(233 185 73 / 40%);
 }
 
-.purse {
-  margin-left: auto;
-  padding: 4px 12px;
-  border: 1px solid var(--edge);
-  border-radius: 2px;
-  background: var(--field);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.purse-label {
-  margin-right: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-/* The rail's top is the left end of the top bar, which the website view continues. */
+/* The addon's rail: its own colour inside an edge, the views at the top and
+   the app's state at its foot. */
 .rail {
   display: flex;
   flex-direction: column;
   height: 100vh;
   overflow-y: auto;
-  background: linear-gradient(90deg, var(--rail) 189px, var(--edge) 189px 190px);
+  background: var(--rail);
+  box-shadow: inset -1px 0 0 var(--edge);
+}
+
+.rail .titlebar {
+  box-shadow: inset -1px 0 0 var(--edge);
 }
 
 .views {
@@ -245,17 +283,17 @@ input:disabled {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 20px;
+  min-height: 36px;
+  padding: 0 14px;
   border: 0;
   background: none;
   color: var(--ink-soft);
-  font: 17px var(--serif);
+  font: 16px var(--serif);
   text-align: left;
   cursor: pointer;
 }
 
 .views button:hover {
-  color: var(--ink);
   background: var(--tint);
 }
 
@@ -271,9 +309,9 @@ input:disabled {
   height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.5;
   stroke-linejoin: round;
-  opacity: 0.85;
+  stroke-linecap: round;
 }
 
 .views button:focus-visible {
@@ -284,7 +322,7 @@ input:disabled {
   display: grid;
   gap: 10px;
   margin-top: auto;
-  padding: 12px 14px 14px;
+  padding: 12px 14px 13px;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
@@ -294,20 +332,66 @@ input:disabled {
   text-align: center;
 }
 
+.rail-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rail-version strong {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+/* The addon's square buttons. */
+.icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  background: var(--page);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: linear-gradient(var(--tint), var(--tint)), var(--page);
+}
+
+.icon-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-button circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.icon-button path {
+  fill: currentColor;
+}
+
+/* The addon's gold button. */
 .button {
   display: inline-block;
-  padding: 4px 14px;
+  min-height: 26px;
+  padding: 3px 14px;
   border: 1px solid var(--gold-edge);
-  border-radius: 2px;
   background: linear-gradient(var(--button-1), var(--button-2));
   color: var(--button-ink);
-  font: 15px/1.3 var(--serif);
+  font: 14px/18px var(--serif);
   white-space: nowrap;
   cursor: pointer;
 }
 
 .button:hover {
-  border-color: var(--gold);
+  background: linear-gradient(var(--tint-strong), var(--tint-strong)), linear-gradient(var(--button-1), var(--button-2));
 }
 
 .button:disabled {
@@ -316,8 +400,8 @@ input:disabled {
 }
 
 .button.primary {
-  padding-block: 6px;
-  font-size: 16px;
+  min-height: 28px;
+  font-size: 15px;
 }
 
 .text-button {
@@ -333,42 +417,6 @@ input:disabled {
   text-decoration: underline;
 }
 
-.segmented {
-  display: inline-flex;
-  flex-wrap: wrap;
-  border: 1px solid var(--edge);
-  border-radius: 2px;
-  background: var(--field);
-}
-
-.segmented button {
-  flex: 1 1 auto;
-  padding: 3px 10px;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.segmented button + button {
-  border-left: 1px solid var(--edge);
-}
-
-.segmented button:hover {
-  color: var(--ink);
-}
-
-.segmented button[aria-pressed="true"] {
-  background: var(--press);
-  color: var(--gold-ink);
-  font-weight: 500;
-}
-
-.segmented button:focus-visible {
-  outline-offset: -2px;
-}
-
 .stage {
   height: 100vh;
   min-width: 0;
@@ -378,82 +426,65 @@ input:disabled {
 .content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   max-width: 1680px;
-  padding: 18px 22px 28px;
+  padding: 12px 16px 16px;
 }
 
 .pagehead {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 14px;
+  gap: 4px 12px;
 }
 
 .message {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--edge);
   border-left: 3px solid var(--gold);
-  border-radius: 2px;
   background: var(--panel);
 }
 
 main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
   align-items: start;
 }
 
+/* A panel: the panel colour inside a line, under a heading across its top. */
 .panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding: 14px 16px;
+  padding: 0 0 12px;
   border: 1px solid var(--line);
-  border-radius: 2px;
   background: var(--panel);
 }
 
+.panel > :not(h2, .panel-head, table, form) {
+  margin-inline: 10px;
+}
+
 .panel h2 {
+  padding: 5px 9px 4px;
+  border-bottom: 1px solid var(--line);
   color: var(--gold-ink);
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .panel .muted {
-  font-size: 13px;
+  font-size: 12px;
 }
 
-/* A panel whose table runs edge to edge under a ruled heading. */
+/* A panel whose table runs edge to edge. */
 .ruled {
   gap: 0;
-  padding: 0;
-}
-
-.ruled > h2 {
-  padding: 9px 14px 7px;
-  border-bottom: 1px solid var(--line);
-}
-
-.ruled > :not(h2, table) {
-  margin-inline: 14px;
 }
 
 .ruled > p {
   margin-block: 8px;
-}
-
-.ruled > :last-child {
-  margin-bottom: 14px;
-}
-
-.ruled :is(th, td):first-child {
-  padding-left: 14px;
-}
-
-.ruled :is(th, td):last-child {
-  padding-right: 14px;
 }
 
 table {
@@ -463,36 +494,31 @@ table {
 
 th,
 td {
-  padding: 3px 8px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
 }
 
 td {
-  height: 27px;
+  height: 25px;
 }
 
 th {
-  padding-block: 9px 6px;
+  height: 28px;
   border-bottom-color: var(--edge);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.9px;
+  font: 12px var(--sans);
   text-transform: uppercase;
   white-space: nowrap;
-  vertical-align: bottom;
 }
 
 #client-version,
 .component {
-  font-weight: 500;
   white-space: nowrap;
 }
 
 #client-update[data-phase="ready"] {
   color: var(--gold-ink);
-  font-weight: 500;
 }
 
 #client-update[data-phase="failed"] {
@@ -509,7 +535,6 @@ th {
   gap: 10px;
   min-height: 1.4em;
   font-size: 15px;
-  font-weight: 500;
 }
 
 .status:not(:empty)::before {
@@ -542,16 +567,30 @@ th {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-head h2 {
+  border: 0;
+}
+
+.settings:has(> form[hidden]) {
+  padding-bottom: 0;
+}
+
+.settings:has(> form[hidden]) .panel-head {
+  border-bottom: 0;
 }
 
 .panel-head .text-button {
-  margin-left: auto;
+  margin: 0 10px 0 auto;
 }
 
 .settings form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 18px;
+  padding: 0 10px;
 }
 
 form label {
@@ -560,12 +599,10 @@ form label {
   gap: 4px;
   color: var(--muted);
   font-size: 11px;
-  letter-spacing: 0.9px;
   text-transform: uppercase;
 }
 
 form label :is(input, select, button) {
-  letter-spacing: normal;
   text-transform: none;
 }
 
@@ -579,10 +616,6 @@ form label select {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
-}
-
-.secret .button {
-  padding-block: 5px;
 }
 
 .battlenet {
@@ -599,7 +632,6 @@ form label select {
 
 #battlenet-code {
   color: var(--gold-ink);
-  font-weight: 500;
 }
 
 .schedule {
@@ -615,7 +647,6 @@ form label:is(.check, .inline) {
   gap: 8px;
   color: var(--ink);
   font-size: 14px;
-  letter-spacing: normal;
   text-transform: none;
 }
 
@@ -625,7 +656,7 @@ form label.inline {
 
 .inline input:not([type="checkbox"]) {
   width: 64px;
-  padding-block: 2px;
+  height: 24px;
 }
 
 .check input {
@@ -649,7 +680,6 @@ dialog {
   padding: 0;
   border: 1px solid var(--edge);
   border-top: 2px solid var(--gold);
-  border-radius: 2px;
   background: var(--panel);
   color: var(--ink);
 }
@@ -676,21 +706,12 @@ dialog::backdrop {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .stage .topbar {
-    padding: 8px 12px;
-    gap: 8px 12px;
-  }
-
   .content {
-    padding: 14px 12px 24px;
+    padding: 10px;
   }
 
   h1 {
-    font-size: 25px;
-  }
-
-  .panel:not(.ruled) {
-    padding: 12px;
+    font-size: 22px;
   }
 }
 

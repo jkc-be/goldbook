@@ -1,5 +1,5 @@
 -- Books auction house invoices from a simulated mailbox and lists them in the
--- Trades view. With a path as its argument it writes the SavedVariables file
+-- Accounting view. With a path as its argument it writes the SavedVariables file
 -- that scripts/verify-trades.py uploads.
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
 local Stub = dofile(here .. "/wowstub.lua")
@@ -71,7 +71,7 @@ local printed = #Stub.printed
 Stub.fire("MAIL_INBOX_UPDATE")
 eq(booked(), "sell Gnomish Widget nil 1 700 35 -172800 / sell Linen Cloth 2589 20 2000 100 -43200 / buy Bandit Cinch of the Monkey 9775:584 1 9000 0 0",
   "sales and purchases are booked oldest first, dated by the days their mail has left, keyed by name or by the mailed item's link")
-eq(plain(Stub.printed[#Stub.printed]), "Goldbook Booked 2 sales and 1 purchase from the mailbox. Type /gb trades.", "new trades are announced")
+eq(plain(Stub.printed[#Stub.printed]), "Goldbook Booked 2 sales and 1 purchase from the mailbox. Type /gb accounting.", "new trades are announced")
 eq(#Stub.printed, printed + 1, "a pending sale and a letter are not booked")
 
 Stub.advance(600)
@@ -83,7 +83,7 @@ table.remove(inbox, 1)
 inbox[#inbox + 1] = mail(30, { "seller", "Linen Cloth", "Erin", 2000, 2000, 60, 100, 20 })
 inbox[#inbox + 1] = mail(30, { "seller", "Linen Cloth", "Frank", 2000, 2000, 60, 100, 20 })
 Stub.fire("MAIL_INBOX_UPDATE")
-eq(#ns.db.trades["Sultan-Faramon"] .. " " .. plain(Stub.printed[#Stub.printed]), "5 Goldbook Booked 2 sales from the mailbox. Type /gb trades.",
+eq(#ns.db.trades["Sultan-Faramon"] .. " " .. plain(Stub.printed[#Stub.printed]), "5 Goldbook Booked 2 sales from the mailbox. Type /gb accounting.",
   "two equal sales in one mailbox are two trades, and a mail taken out does not unbook its trade")
 Stub.fire("MAIL_INBOX_UPDATE")
 eq(#ns.db.trades["Sultan-Faramon"], 5, "equal sales read again stay two trades")
@@ -94,7 +94,7 @@ inbox = { mail(29, { "buyer", "Linen Cloth", "Alice", 1500, 1500, 0, 0, 20 }) }
 Stub.fire("MAIL_INBOX_UPDATE")
 eq(booked("Mirelle-Faramon"), "buy Linen Cloth 2589 20 1500 0 -86400", "each character books its own trades; a purchase without a link is keyed by name")
 
-SlashCmdList.GOLDBOOK("trades")
+SlashCmdList.GOLDBOOK("accounting")
 -- The text of the row's cells the view uses.
 local function cells(index)
   local texts = {}
@@ -119,28 +119,41 @@ local function segment(index)
 end
 eq(GoldbookWindow.version.text .. " " .. tostring(GoldbookWindow.version.point[2] ~= nil), Stub.metadata.Version .. " true",
   "the window shows the addon's version beside its title")
-eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[3].text .. " " .. GoldbookWindow.headers[4].text .. " " .. GoldbookWindow.headers[5].text,
-  "ITEM NET CHARACTER WHEN ↓", "the trades view has its own columns, newest first")
-eq(cells(1), "Linen Cloth x20 | 1s 00c | +19s 00c | Sultan | just now", "the newest trade comes first; a sale nets its price less the cut")
-eq(cells(3), "Bandit Cinch of the Monkey x1 | 90s 00c | -90s 00c | Sultan | 10m ago", "a purchase costs its price")
-eq(cells(5), "Linen Cloth x20 | 75c | -15s 00c | Mirelle | 1d ago", "every character's trades are listed")
-eq(cells(6), "Gnomish Widget x1 | 7s 00c | +6s 65c | Sultan | 2d ago", "a sale without a count is one item")
+eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[2].text .. " " .. GoldbookWindow.headers[3].text .. " "
+  .. GoldbookWindow.headers[4].text .. " " .. GoldbookWindow.headers[5].text,
+  "ENTRY SOURCE NET CHARACTER WHEN ↓", "the accounting view has its own columns, newest first")
+eq(cells(1), "Linen Cloth x20 | Auction sale | +19s 00c | Sultan | just now", "the newest entry comes first; a sale nets its price less the cut")
+eq(cells(3), "Bandit Cinch of the Monkey x1 | Auction purchase | -90s 00c | Sultan | 10m ago", "a purchase costs its price")
+eq(cells(5), "Linen Cloth x20 | Auction purchase | -15s 00c | Mirelle | 1d ago", "every character's entries are listed")
+eq(cells(6), "Gnomish Widget x1 | Auction sale | +6s 65c | Sultan | 2d ago", "a sale without a count is one item")
 eq(GoldbookWindow.rows[3].cells[1].text:sub(1, 10), "|cff1eff00", "an item booked under a known key keeps its quality colour")
 eq(GoldbookWindow.rows[3].cells[3].text:sub(1, 10), "|cffff6d5a", "a purchase is red, a sale green")
 eq(GoldbookWindow.rows[1].hit.shown, false, "trades are not items to hover")
-eq(plain(GoldbookWindow.head.sub.text) .. " / " .. cards(), "6 booked / SOLD 63s 65c / BOUGHT 1g 05s 00c / NET -41s 35c / REALIZED PROFIT +4s 00c",
-  "the cards total the trades shown, sales after the cut, and the profit on the 20 Linen Cloth bought at 75c and sold at 95c")
-eq(tostring(GoldbookWindow.filters.controls.profession.shown) .. " " .. tostring(GoldbookWindow.filters.controls.character.shown), "false true",
-  "the trades view filters by character, not by item")
+eq(plain(GoldbookWindow.head.sub.text) .. " / " .. cards(), "6 entries / REVENUE 63s 65c / EXPENSES 1g 05s 00c / NET -41s 35c / REALIZED PROFIT +4s 00c",
+  "the cards total the entries shown, revenue after the cut, and the profit on the 20 Linen Cloth bought at 75c and sold at 95c")
+eq(tostring(GoldbookWindow.filters.controls.profession.shown) .. " " .. tostring(GoldbookWindow.filters.controls.source.shown) .. " "
+  .. tostring(GoldbookWindow.filters.controls.character.shown), "false true true", "the accounting view filters by source and character, not by item")
 
 segment(2)
-eq(cards() .. " / " .. cells(1):match("^[^|]+"), "SOLD 63s 65c / BOUGHT 0c / NET +63s 65c / REALIZED PROFIT – / Linen Cloth x20 ", "Sales lists the sales alone")
+eq(cards() .. " / " .. cells(1):match("^[^|]+"), "REVENUE 63s 65c / EXPENSES 0c / NET +63s 65c / REALIZED PROFIT – / Linen Cloth x20 ",
+  "Revenue lists what brought gold in")
 segment(3)
-eq(cells(1):match("^[^|]+") .. "/ " .. cells(4) .. " / " .. GoldbookWindow.head.sub.text, "Bandit Cinch of the Monkey x1 /  |  |  |  |  / 2 booked",
-  "Purchases lists what was bought")
-segment(4)
-eq(GoldbookWindow.head.sub.text, "0 booked", "Vendor lists the sales to vendors")
+eq(cells(1):match("^[^|]+") .. "/ " .. cells(4) .. " / " .. GoldbookWindow.head.sub.text, "Bandit Cinch of the Monkey x1 /  |  |  |  |  / 2 entries",
+  "Expenses lists what cost gold")
 segment(1)
+
+local sources = GoldbookWindow.filters.controls.source
+sources.scripts.OnClick(sources)
+local offered = {}
+for index, option in ipairs(sources.menu.options) do
+  if option.shown then
+    offered[index] = option.label.text
+  end
+end
+eq(table.concat(offered, ", "), "All sources, Auction sale, Auction purchase", "the source chip offers the sources booked, in the order of the sides")
+sources.menu.options[3].scripts.OnClick(sources.menu.options[3])
+eq(sources.label.text .. " / " .. GoldbookWindow.head.sub.text, "Auction purchase / 2 entries", "choosing a source lists its entries")
+GoldbookWindow.filters.clear.scripts.OnClick(GoldbookWindow.filters.clear)
 
 local chip = GoldbookWindow.filters.controls.character
 chip.scripts.OnClick(chip)
@@ -152,35 +165,41 @@ for index, option in ipairs(chip.menu.options) do
 end
 eq(table.concat(options, ", "), "All characters, Mirelle, Sultan", "the character chip offers each character with trades")
 chip.menu.options[2].scripts.OnClick(chip.menu.options[2])
-eq(chip.label.text .. " / " .. cells(1) .. " / " .. GoldbookWindow.head.sub.text, "Mirelle / Linen Cloth x20 | 75c | -15s 00c | Mirelle | 1d ago / 1 booked",
-  "choosing a character lists that character's trades")
+eq(chip.label.text .. " / " .. cells(1) .. " / " .. GoldbookWindow.head.sub.text,
+  "Mirelle / Linen Cloth x20 | Auction purchase | -15s 00c | Mirelle | 1d ago / 1 entry", "choosing a character lists that character's entries")
 eq(GoldbookWindow.filters.clear.shown, true, "a chosen character can be cleared")
 GoldbookWindow.filters.clear.scripts.OnClick(GoldbookWindow.filters.clear)
-eq(chip.label.text .. " " .. GoldbookWindow.head.sub.text, "All characters 6 booked", "clearing the filters lists every character again")
+eq(chip.label.text .. " " .. GoldbookWindow.head.sub.text, "All characters 6 entries", "clearing the filters lists every character again")
 
 GoldbookWindow.search:SetText("mirelle")
-eq(cells(1) .. " / " .. cells(2), "Linen Cloth x20 | 75c | -15s 00c | Mirelle | 1d ago /  |  |  |  | ", "the search matches the character")
-eq(cards(), "SOLD 0c / BOUGHT 15s 00c / NET -15s 00c / REALIZED PROFIT –", "and the cards follow it, without a profit where nothing was both bought and sold")
+eq(cells(1) .. " / " .. cells(2), "Linen Cloth x20 | Auction purchase | -15s 00c | Mirelle | 1d ago /  |  |  |  | ", "the search matches the character")
+eq(cards(), "REVENUE 0c / EXPENSES 15s 00c / NET -15s 00c / REALIZED PROFIT –", "and the cards follow it, without a profit where nothing was both bought and sold")
 GoldbookWindow.search:SetText("widget")
 eq(cells(1):match("^[^|]+"), "Gnomish Widget x1 ", "the search matches the item")
 GoldbookWindow.search:SetText("")
 GoldbookWindow.headerButtons[3].scripts.OnClick()
 eq(cells(1):match("^[^|]+") .. "/ " .. cells(6):match("^[^|]+"), "Linen Cloth x20 / Bandit Cinch of the Monkey x1 ", "sorted by net the best trade leads")
 GoldbookWindow.tabs.gold.scripts.OnClick()
-GoldbookWindow.tabs.trades.scripts.OnClick()
-eq(GoldbookWindow.tabs.trades.selected.shown, true, "the Trades tab is drawn selected")
-eq(GoldbookWindow.tabs.trades.point[3] .. " " .. GoldbookWindow.tabs.gold.point[3], "-190 -154", "the tabs run down the rail")
+GoldbookWindow.tabs.accounting.scripts.OnClick()
+eq(tostring(GoldbookWindow.tabs.accounting.selected.shown) .. " " .. GoldbookWindow.tabs.accounting.label.text, "true Accounting", "the Accounting tab is drawn selected")
+local hubs = GoldbookWindow.hubs
+eq(table.concat({ hubs.market.point[3], hubs.inventory.point[3], hubs.ledger.point[3], hubs.ledger.label.text, tostring(hubs.ledger.selected.shown) }, " "),
+  "-10 -46 -82 Ledger true", "the hubs run down the rail, Ledger last and picked")
+eq(tostring(GoldbookWindow.tabs.accounting.label.point[2] == GoldbookWindow.tabs.gold) .. " " .. tostring(GoldbookWindow.tabs.mail.shown),
+  "true false", "Accounting's tab follows Gold's, and the other hubs' tabs are hidden")
 
-local window = { trades = {} }
+local window = { trades = {}, accruing = {} }
 local old = {}
-for index = 1, 1005 do
+for index = 1, 3005 do
   old[index] = { side = "sell", item = "Linen Cloth", count = 1, price = index, fee = 0, at = 100 * DAY + index }
 end
-Trades.Book(window, "A", old, 100 * DAY + 2000)
-eq(#window.trades.A .. " " .. window.trades.A[1].price, "1000 6", "a character keeps its newest 1000 trades")
+Trades.Book(window, "A", old, 100 * DAY + 4000)
+eq(#window.trades.A .. " " .. window.trades.A[1].price, "3005 1", "past 3000 entries, those the mailbox may still show are kept")
+Trades.Book(window, "A", {}, 140 * DAY)
+eq(#window.trades.A .. " " .. window.trades.A[1].price, "3000 6", "a character keeps its newest 3000 entries older than a month")
 Trades.Book(window, "A", {}, 280 * DAY + 1000)
-eq(#window.trades.A .. " " .. window.trades.A[1].price, "6 1000", "trades older than 180 days are dropped")
-eq(table.concat({ Trades.Book(window, "A", { old[1005] }, 280 * DAY + 1000) }, " "), "0 0", "Book says nothing was new")
+eq(#window.trades.A .. " " .. window.trades.A[1].price, "2006 1000", "entries older than 180 days are dropped")
+eq(table.concat({ Trades.Book(window, "A", { old[3005] }, 280 * DAY + 1000) }, " "), "0 0", "Book says nothing was new")
 
 -- The merchant's buyback list: { item, count, price, link }, oldest first.
 local buyback = {}
@@ -232,7 +251,6 @@ Stub.money = Stub.money + 3100
 Stub.fire("MERCHANT_UPDATE")
 Stub.fire("MERCHANT_UPDATE")
 eq(vendored(), "Jagged Star of the Eagle 15301:1019 1 3100 0 0", "a new buyback entry is a vendor sale, booked once, keyed by its link")
-eq(ns.Database.Vendor(ns.db, "15301"), 3100, "the buyback list tells what a vendor pays")
 buyback[3] = { "Broken Fang", 1, 85 }
 buyback[4] = { "Broken Fang", 1, 85 }
 Stub.fire("MERCHANT_UPDATE")
@@ -242,7 +260,7 @@ Stub.fire("MERCHANT_UPDATE")
 eq(select(2, vendored():gsub("Broken Fang", "")), 1, "an item bought back takes its sale off again")
 printed = #Stub.printed
 Stub.fire("MERCHANT_CLOSED")
-eq(plain(Stub.printed[#Stub.printed]), "Goldbook Booked 2 vendor sales. Type /gb trades.", "closing the merchant says how many sales it booked")
+eq(plain(Stub.printed[#Stub.printed]), "Goldbook Booked 2 vendor sales. Type /gb accounting.", "closing the merchant says how many sales it booked")
 eq(#Stub.printed, printed + 1, "and says it once")
 
 buyback = {}
@@ -296,13 +314,35 @@ GetMerchantItemInfo, GetMerchantItemCostInfo, C_MerchantFrame = merchantItemInfo
 goods = {}
 
 SlashCmdList.GOLDBOOK("trades jagged")
-eq(cells(1), "Jagged Star of the Eagle x1 · vendor | 31s 00c | +31s 00c | Mirelle | just now", "a vendor sale is marked and nets what the vendor paid")
-eq(cards(), "SOLD 31s 00c / BOUGHT 23s 00c / NET +8s 00c / REALIZED PROFIT +8s 00c", "bought at 23s and sold to a vendor at 31s makes 8s")
-local loss = { trades = { A = {
+eq(GoldbookWindow.tabs.accounting.selected.shown, true, "/gb trades still opens the Accounting view")
+eq(cells(1), "Jagged Star of the Eagle x1 | Vendor sale | +31s 00c | Mirelle | just now", "a vendor sale nets what the vendor paid")
+eq(cards(), "REVENUE 31s 00c / EXPENSES 23s 00c / NET +8s 00c / REALIZED PROFIT +8s 00c", "bought at 23s and sold to a vendor at 31s makes 8s")
+local loss = { accruing = {}, trades = { A = {
   { at = 1, side = "buy", item = "Jagged Star of the Eagle", count = 1, price = 2300, fee = 0 },
   { at = 2, side = "vendor", item = "Jagged Star of the Eagle", count = 1, price = 1900, fee = 0 },
 } }, items = {} }
 eq(Trades.Totals(Trades.Rows(loss)).profit, -400, "sold to a vendor for less than it cost is a loss")
+local mixed = { accruing = {}, items = {}, trades = {
+  ["A-R"] = {
+    { at = 10, side = "buy", item = "Runecloth", count = 20, price = 2000, fee = 0 },
+    { at = 20, side = "repair", item = "Repairs", count = 1, price = 500, fee = 0 },
+    { at = 30, side = "sell", item = "Runecloth", count = 10, price = 1500, fee = 75 },
+  },
+  ["B-R"] = { { at = 40, side = "merchant", item = "Coarse Thread", count = 5, price = 50, fee = 0 } },
+} }
+local perItem = {}
+for _, item in ipairs(Trades.Items(Trades.Rows(mixed))) do
+  perItem[#perItem + 1] = table.concat({ item.name, item.bought, item.cost, tostring(item.averageCost), item.sold, item.proceeds,
+    tostring(item.averageSale), tostring(item.profit), item.last }, " ")
+end
+eq(table.concat(perItem, " / "), "Coarse Thread 5 50 10 0 0 nil nil 40 / Runecloth 20 2000 100 10 1425 142.5 425 30",
+  "By item adds up the goods per item, realizes profit on the units both bought and sold, and leaves out gold-only entries")
+SlashCmdList.GOLDBOOK("items jagged")
+eq(GoldbookWindow.tabs.items.selected.shown, true, "/gb items opens the By item view")
+eq(cells(1), "Jagged Star of the Eagle | 1 | 23s 00c | 1 | 31s 00c | +8s 00c | just now", "an item bought for 23s and sold for 31s")
+eq(cards() .. " " .. plain(GoldbookWindow.cards.cards[4].detail.text),
+  "BOUGHT 23s 00c / SOLD 31s 00c / REALIZED PROFIT +8s 00c / BEST ITEM +8s 00c Jagged Star of the Eagle",
+  "the cards total the items shown, the best item under its profit")
 GoldbookWindow.search:SetText("")
 
 -- The file the end-to-end check uploads, with the account the sync tests use.

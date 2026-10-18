@@ -35,6 +35,7 @@ jobs:
           luajit addon/tests/orderbook.lua
           luajit addon/tests/professions.lua
           luajit addon/tests/trades.lua
+          luajit addon/tests/mail.lua
       - run: npm ci
       - run: python3 scripts/package-updates.py addon update-feed
         env:

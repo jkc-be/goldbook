@@ -21,7 +21,7 @@ local function addPrices(tooltip, link)
     return
   end
   local record = Database.Lookup(ns.db, realmKey, key)
-  local vendor = Database.Vendor(ns.db, key) or select(11, C_Item.GetItemInfo(link)) or 0
+  local vendor = Database.Vendor(ns.db, key) or ns.SellPrice(link) or 0
   local stocked = Database.MerchantSells(ns.db, key)
   if not record and vendor == 0 then
     return

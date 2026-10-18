@@ -184,9 +184,10 @@ Open the desktop app:
 npm run desktop
 ```
 
-The window has three tabs. **Prices** and **Characters** show the website
-inside the app, and Characters signs in with the login the game saved.
-**Sync** holds the status and settings.
+The window's rail has the addon's hubs. **Market**, **Inventory** and
+**Ledger** show the website's Prices, Bags and Gold inside the app, with the
+website's tabs for the rest; Inventory and Ledger sign in with the login the
+game saved. **Sync** holds the status and settings.
 
 Open **Sync**, confirm the game folder, set the server to
 `http://localhost:8787`, and enter `dev-token` as the upload token for this
@@ -205,7 +206,7 @@ the Goldbook menu.
 
 Change the game folder, server, or upload token from **Settings** in the
 window. **Sync now** checks for new scans immediately. **Open website** signs
-you in to the character pages with the ID and key saved by the addon. After
+you in to the website's Gold with the ID and key saved by the addon. After
 your first game login, type `/reload` once so they are available. If several
 accounts are saved, choose which one to open.
 
@@ -287,15 +288,14 @@ snapshot uploads.
 
 From then on, steps 3 and 4 are all you start before playing.
 
-Click **Characters** at the top of the page to see your own characters. Type
-`/gb web` in game for your account's ID and key, and log in with them. Case,
-spaces and dashes do not matter. The list shows each character's level, class,
-realm and gold, richest first. Click a character for the change in its gold
-today, over 7 days and over 30 days, a chart of its gold hour by hour over the
-last day, 7 days or 30 days, and what its bags and bank would bring, item by
-item. The game saves the bags when you log out or type
-`/reload`, and the bank as it was the last time you opened it. A login lasts
-30 days.
+Click **Ledger** in the rail to see your own characters. Type `/gb web` in
+game for your account's ID and key, and log in with them. Case, spaces and
+dashes do not matter. **Gold** shows the gold of all your characters and a
+row per character, richest first; click a name or choose it in the character
+chip for its own gold, today, over 7 and 30 days and on a chart. **Bags**
+under Inventory shows what the bags and banks would bring, item by item. The
+game saves the bags when you log out or type `/reload`, and the bank as it
+was the last time you opened it. A login lasts 30 days.
 
 ### Verify without scanning
 
@@ -344,16 +344,32 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 
 ## In game
 
+The Goldbook window has three hubs down its left rail. Each hub has tabs
+across the top of the page:
+
+| Hub | Tabs |
+|---|---|
+| Market | Prices, Deals, Movers |
+| Inventory | Bags, Mail |
+| Ledger | Gold, Accounting |
+
+Click a hub to open the tab it showed last, or its first tab the first time.
+Click a tab to switch to it. Each command below opens its own tab, and so its
+hub.
+
 | Action | Result |
 |---|---|
 | Left click **Goldbook scan**, or `/gb scan` | Quick scan: lowest price and quantity per item |
 | Right click **Goldbook scan**, or `/gb scan full` | Full scan: every auction, adds a market value. The server allows one per 15 minutes per account |
 | `/gb deals` | What is listed right now below its resale or vendor value. Click a row to search the auction house for it |
-| `/gb sell` | Your bags: what to auction, at what price, and what to vendor instead |
+| `/gb bags` | Your bags: what to auction, at what price, and what to vendor instead. `/gb sell` opens it too |
 | `/gb movers` | The prices that rose and fell most since the day before. Top gains first |
 | `/gb gold` | Your account: gold per character, gains, a 30 day chart and net worth |
-| `/gb trades` | Your auction house sales and purchases and your sales to vendors, newest first, with what each added to your gold. See [Trades](#trades) |
+| `/gb mail [text]`, or open a mailbox | The open mailbox: every mail with its items, sender, days left and gold, and a button that collects the mails shown. See [Mail](#mail) |
+| `/gb accounting` | Your revenue and expenses, newest first: auction and vendor sales, purchases, trades with players, mail, repairs, flights and every other gold movement, with what each did to your gold. `/gb trades` opens it too. See [Accounting](#accounting) |
+| `/gb items [text]` | Your accounting per item: units bought and sold, the average cost and sale, the profit or loss realized and when the item last moved. See [Accounting](#accounting) |
 | Alt+click an item, or `/gb item <link or name>` | The item's price history. Works on items in bags, the bank, chat links, loot, the auction house and the Goldbook lists |
+| Shift+click an item at the auction house | Also opens its price history, for an item Goldbook has a price for. Works in the auction house's own lists, in your bags and in addons such as Auctionator, and not while you are writing in chat |
 | Click a column header | Sorts the list by that column. Click again to reverse |
 | `/gb show [text]`, or left click the minimap button | Price list, filtered by item name |
 | `/gb autoscan` | Turns on a quick scan each time the auction house opens, at most every 15 minutes. Off at first |
@@ -377,20 +393,17 @@ Every item tooltip gets these lines, as far as they are known:
 | Min buyout | The lowest price in the newest scan that saw the item |
 | Market value | A per-unit price from the last full scan that ignores overpriced listings. It takes the cheapest 15% of units, extends to 30% while the price rises by less than 20% per step, and drops prices beyond 1.5 standard deviations |
 | Usual over N days | The median of the lowest price on each of the last 14 days the item was seen. Needs 3 days |
-| Post at | The price `/gb sell` would post it at. Not shown for goods merchants sell |
+| Post at | The price `/gb bags` would post it at. Not shown for goods merchants sell |
 | Vendor | What a vendor pays. See [Vendor prices](#vendor-prices) |
 | Merchant sells | What a merchant asks for one, or "Sold by merchants" when no merchant selling it was seen yet. See [Goods merchants sell](#goods-merchants-sell) |
 | Deal | Shown when the item is a deal right now |
 
 ### Vendor prices
 
-The game's item data says what a vendor pays, but for some items the server
-pays less: the data says 9s 62c for Rough Bronze Leggings, a vendor pays 5s 77c.
-Goldbook therefore reads what a vendor really paid from the merchant's buyback
-list whenever a merchant is open, and from the vendor sales booked under
-`/gb trades`. That price replaces the item data's from then on. In `/gb deals`,
-a vendor deal whose price was not seen paid yet says `Vendor?` instead of
-`Vendor`. Sell one to a vendor to confirm it.
+Goldbook takes what a vendor pays from the sell price the game's own tooltip
+shows, for every item, whether you hold it or not. The item data addons read
+with `C_Item.GetItemInfo` is wrong for some items: it says 9s 62c for Rough
+Bronze Leggings, while the tooltip and the vendor say 5s 77c.
 
 ### Goods merchants sell
 
@@ -400,7 +413,7 @@ above the merchant's price are a trap: only buyers who do not know the
 merchant pay them. Goldbook therefore never counts on reselling them:
 
 - `/gb deals` lists them only as vendor deals, never as resale deals;
-- `/gb sell` sends them to the vendor, and the bags and net worth count them at
+- `/gb bags` sends them to the vendor, and the bags and net worth count them at
   what a vendor pays.
 
 Goldbook knows the common ones from the start. It learns the rest at every
@@ -411,8 +424,8 @@ alone, at the lowest price seen.
 
 A deal is an item in the newest scan that sells for more than it costs:
 
-- **Vendor deal.** The lowest listing is below what a vendor pays. The profit
-  is certain once the vendor price is confirmed; see [Vendor prices](#vendor-prices).
+- **Vendor deal.** The lowest listing is below what a vendor pays. See
+  [Vendor prices](#vendor-prices).
 - **Resale deal.** Not for [goods merchants sell](#goods-merchants-sell). The
   lowest listing is at most 70% of the resale price, and the
   profit after the 5% auction house cut clears `/gb minprofit`. The resale price
@@ -432,7 +445,7 @@ auction from a buyout, and a price can simply have dropped.
 
 ### How the sell price is chosen
 
-`/gb sell` posts one copper under the lowest listing, within limits:
+`/gb bags` posts one copper under the lowest listing, within limits:
 
 - never below 60% of the normal price, where normal is the usual price, else
   the market value, else the lowest listing;
@@ -466,40 +479,130 @@ price differs from the day before it was last seen, with the change in
 percent. It needs two days of scans. Prices under a silver on both days are
 left out.
 
-### Trades
+### Mail
 
-Goldbook books every auction house sale and purchase, and every sale to a
-vendor, like a broker's statement. The auction house mails an invoice for each one: a sale with its
-price and the 5% cut, a purchase with what you paid. Each time you open a
+When you open a mailbox, the Goldbook window opens on the **Mail** tab of
+**Inventory** and closes again with the mailbox. To keep it shut, clear
+**Open the Mail view when a mailbox opens** in Options > AddOns > Goldbook.
+`/gb mail` opens the view at any time, but it lists mail only while a mailbox
+is open. While it is open, **Inventory** in the rail shows how many mails it
+holds.
+
+Each row is one mail: its first item in its quality's colour and how many,
+`+1 more` when it holds other items too, or its subject when it holds none.
+A sale names the item it sold. The tag says what the mail is:
+
+| Tag | The mail |
+|---|---|
+| Sold | The money from an auction that sold |
+| Bought | An item you won at auction |
+| Cancelled | An item from an auction you cancelled |
+| Expired | An item from an auction that did not sell |
+| Other | Anything else: mail from players, the postmaster, COD mail |
+
+The next columns show the sender, the days left before the mail is returned or
+deleted (orange at 3 days or less), and the gold it holds in green or the COD
+it asks in red. The title counts the mails and items and says how much gold
+waits. The segments filter by tag and count each tag; the search box matches
+item names, subjects and senders. Click a column header to sort.
+
+**Collect N mails** takes the money and items of the mails shown, so pick a
+segment or search first to collect only those. It takes the oldest mail first,
+one take at a time, and waits for the mailbox to answer each one. While it
+runs, the button reads **Stop**. It skips COD mails and stops when your bags
+have no free slot left, when you close the mailbox, or when you click
+**Stop**. With full bags it still takes the gold. Chat then says what it took.
+The mailbox shows at most 50 mails; the status line says how many more arrive
+after you collect some.
+
+Goldbook books auction house sales and purchases from the invoices in the
+mailbox as soon as it opens, so collecting does not change your accounting.
+
+### Accounting
+
+Goldbook books where your gold comes from and where it goes, per character,
+like a broker's statement. Each entry has a source:
+
+| Source | Booked when |
+|---|---|
+| Auction sale, Auction purchase | You open a mailbox with the auction house invoice. See below |
+| Vendor sale | The item appears in the merchant's buyback list, with what the vendor paid. Buying it back takes the sale off again |
+| Merchant purchase | You buy from a merchant, with the item and how many |
+| Trade sale, Trade purchase | A trade with a player completes: what you gave and what you got, see below |
+| Trade gold in, Trade gold out | A trade moves gold and no items the other way |
+| Mail gold in, Mail gold out | You take gold from a player's mail, or send gold, with the subject and the player |
+| Cash on delivery | You pay for an item mailed cash on delivery |
+| Quest reward | You turn in a quest that pays gold, with its title |
+| Looted gold | You loot gold or get your share of a group's, added up per hour |
+| Repairs, Postage, Auction deposit, Flight, Training, Talent reset | You pay for them; a flight names where to, training the spell and rank, a deposit the item posted |
+| Other income, Other expense | Gold moves and nothing above explains it, added up per hour |
+
+The auction house mails an invoice for each sale and purchase: a sale with
+its price and the 5% cut, a purchase with what you paid. Each time you open a
 mailbox, Goldbook reads those invoices and books the new ones under the
 character whose mailbox it is. Chat says how many it booked. You do not have
 to take the mail out first, and opening the mailbox again does not book a
-trade twice.
+sale twice. The gold you collect from that mail, a bid you placed, and a bid
+the auction house returns are not booked again. When the merchant closes,
+chat says how many vendor sales it booked.
 
-A sale to a vendor is booked when it appears in the merchant's buyback list,
-with what the vendor paid. Buying it back takes the sale off again. When the
-merchant closes, chat says how many vendor sales it booked.
+A trade with a player is booked when the game says "Trade complete". Each
+item you gave is a trade sale, each item you got a trade purchase, both with
+the player's name. The gold you got is shared over the items you gave in
+proportion to their market value, or to their count when one of them has no
+market value; the gold you paid is shared over the items you got the same
+way. An item given for no gold is a sale at 0. Chat says when a trade is
+booked.
 
-`/gb trades` lists them, newest first: the item and how many, the price each,
-the net (the sale less the cut in green, or the price paid in red), the
-character and when. A vendor sale is marked `vendor`. The status line totals
-the trades shown: what the sales brought in after the cut, what the purchases
-cost, the net, and the profit or loss realized on items both bought and sold.
-Buy a Jagged Star of the Eagle for 23s and sell it to a vendor for 31s, and
-that is a profit of 8s; sell it for 19s, and a loss of 4s. Type in the search box to filter by item or character.
-Goldbook keeps 180 days and at most 1,000 trades per character.
+Looted gold and other income and expense are added up per character and
+hour, and booked when the hour has ended. Until then the view lists the hour
+so far.
 
-On the web page, after the next sync, **Characters** shows the trades of the
-whole account and each character page shows its own:
+`/gb accounting` lists the entries, newest first: what the entry is (the
+item and how many, or what the gold was for, and the player it went to or
+came from), its source, the net (green for revenue after the auction house
+cut, red for an expense), the character and when. **All**, **Revenue** and
+**Expenses** switch between them. The source and character chips filter the
+list, and the search box matches the item, the character, the source and the
+player. The cards total the entries shown: revenue, expenses, the net, and
+the profit or loss realized on goods both bought and sold, however they were
+bought and sold. Buy a Jagged Star of the Eagle for 23s and sell it to a
+vendor for 31s, and that is a profit of 8s; sell it for 19s, and a loss of
+4s. The Gold view shows the same totals for the last 30 days.
 
-- auction sales, vendor sales, purchases, the auction house cut, the net,
-  and the profit or loss;
-- **By item**: units bought and sold, at auction or to a vendor, the average
-  cost and the average sale after the cut, and the profit or loss on the units
-  that were both bought and sold;
-- **History**: every trade, the newest 20 until you show them all.
+**By item**, the tab after Accounting, or `/gb items`, adds the entries up
+per item: units bought and sold, the average cost and the average sale after
+the cut, the profit or loss on the units that were both bought and sold, and
+when the item last moved. The search box matches the item, and the
+profession, item, quality and character chips filter it. The cards total what
+was bought and sold, the realized profit and the item that made the most.
 
-The server keeps every trade it receives, also after the addon drops it.
+Goldbook keeps 180 days and at most 3,000 entries per character, never
+dropping one less than 30 days old, so that an invoice still in the mailbox is
+not booked again.
+
+On the web page, after the next sync, **Ledger** shows the **Accounting**
+of the whole account, or of the character chosen in its chip:
+
+- **Revenue** after the auction house cut, **Expenses**, the **Net** of the
+  two, and the **Realized profit** on goods;
+- **By item**, a tab of its own: units bought and sold, the average cost and
+  the average sale after the cut, and the profit or loss on the units that
+  were both bought and sold. Sales count at auction, to vendors and in player
+  trades; purchases at auction, from merchants, in player trades and by cash
+  on delivery;
+- **History**: every entry with its source, such as "Auction sale", "Trade
+  sale to Mirelle", "Mail gold in from Mirelle", "Quest reward" or "Repairs",
+  and what it added to the gold or took from it. **All**, **Revenue** and
+  **Expenses** above it filter the list. It shows the newest 20 until you show
+  them all.
+
+Entries between two of your own characters, such as gold mailed to an alt,
+show on the account page twice: once as revenue and once as an expense. They
+cancel out in the net.
+
+The server keeps every entry it receives, also after the addon drops it,
+together with the other player of a trade or mail.
 
 ### Price history
 
@@ -531,7 +634,7 @@ that account played on that computer.
 
 A second computer makes a login of its own. To see the characters of both
 together, log in on the web page with one computer's ID and key, open **Link
-another computer** under **Characters**, and enter the other computer's ID and
+another computer** under the characters in **Gold**, and enter the other computer's ID and
 key. From then on either login shows the characters of both. A character
 played on both shows once, with the gold of both and its newest bags and bank.
 Linking a login that is already linked with others brings those along.
@@ -542,7 +645,7 @@ browsers that logged in with that computer's key.
 for reading as `K7Q2-M9PX` and `7KQ2M-9PXAB-CDEFG-HJKMN`. **Show ID and key**
 under Options > AddOns > Goldbook opens the same window. Chat text cannot be
 copied, so the window shows each in a text box. Click a box to select it, then
-press Ctrl+C. On the web page, log in under **Characters**. To use your own
+press Ctrl+C. On the web page, click **Log in** in the rail. To use your own
 server, change `X-Website` in `addon/Goldbook/Goldbook.toc` to its address and
 install the addon again.
 
@@ -560,7 +663,7 @@ stops working and every browser logged in with it is logged out. Until that
 sync the web page still takes the old key.
 
 At each `/reload` and logout, Goldbook saves what the character pages show:
-the character's class and level, and its bags with the advice of `/gb sell`.
+the character's class and level, and its bags with the advice of `/gb bags`.
 Gold comes from the balances `/gb gold` keeps. The game lets an addon read the
 bank only while it is open, so Goldbook keeps its contents from the last
 visit. Open the bank once on each character to have it on the web page.
@@ -624,7 +727,7 @@ the token in your shell history.
 
 Reading prices needs no token. Uploading needs a token.
 
-The Characters view of the web page asks for the ID and key that `/gb web`
+The signed-in views of the web page ask for the ID and key that `/gb web`
 shows in game. The server stores only a hash of the key. A login lasts 30 days.
 Five wrong tries for one ID from one address lock that ID for that address for
 15 minutes. Linking another computer's ID counts the same tries.
@@ -857,10 +960,15 @@ npm run preview
 
 `make check` runs the checks of the Check workflow. `make hooks`, once per
 clone, makes `git push` run it first. Skip it once with `git push --no-verify`.
-`make build` is `npm run desktop:pack` with dependencies installed first.
+`make build` is `npm run desktop:pack` with dependencies installed first,
+followed by `make install-addon`, which copies this checkout's addon into every
+game in the World of Warcraft folder and keeps each one's `ServerData.lua`
+(`make install-addon WOW=/path` for another folder).
 `make app` builds only the app without an installer, which is faster and needs
-no `rpmbuild` on Linux. `make run`, `make test` and `make clean` do what they
-say. `make clean` removes `target/release/bundle`.
+no `rpmbuild` on Linux. `make run` starts the local server stack with `make dev`,
+rebuilt from this checkout when it changed, and then the desktop app in
+development mode. `make test` and `make clean` do what they say. `make clean`
+removes `target/release/bundle`.
 
 The default Cargo workspace builds the protocol, sync CLI, and server. The
 Tauri app is a separate workspace member so server builds need no desktop
@@ -897,10 +1005,72 @@ workflow**. Pull requests and pushes to `main` run the test, local Docker stack,
 scan jobs, including the local HTTP checks and sandbox smoke test. Production deployment is a separate
 manual workflow.
 
+### Website
+
+The website is laid out and coloured like the addon's window, in the colours
+the game shows it in. It opens dark; the half-filled ring in the title bar
+switches between the dark and the light window, and the site remembers the
+choice. The rail on the left has three hubs, and each hub has tabs at the top
+of the page:
+
+| Hub | Tabs | Sign-in |
+| --- | --- | --- |
+| **Market** | Prices, Deals, Movers | No |
+| **Inventory** | Bags | Yes |
+| **Ledger** | Gold, Accounting, By item | Yes |
+
+Under **Account** the rail has **Download**. Mail is in game only. Each tab
+has its own address, such as `#prices`, `#deals`, `#movers`, `#bags`, `#gold`,
+`#accounting` or `#items`. The character pages of earlier versions are gone:
+`#characters` opens Gold, and `#character/<name>-<realm>` opens Gold with that
+character chosen. The Market tabs show the realm chosen at the top. The other
+tabs show the login when you are signed out.
+
+- **Prices** lists the newest scan's prices. See
+  [Filter item lists](#filter-item-lists), [Compare item prices](#compare-item-prices)
+  and [Order book history](#order-book-history).
+- **Deals** lists the resale deals of the newest scan, found as in
+  [How deals are found](#how-deals-are-found): at most 70% of the lower of the
+  market value the newest scan measured and the median of at least three
+  earlier days, for an item merchants do not sell, with at least 10s profit
+  after the cut. It differs from `/gb deals` in three ways. Vendor deals are
+  left out, because the server has no vendor prices. Profit is per unit,
+  because the server keeps no price levels, as after a quick scan in game.
+  Only [the goods merchants sell](#goods-merchants-sell) that Goldbook knows
+  from the start count, not those your characters found at merchants.
+- **Movers** lists the prices that rose, or under **Fallers** fell, since the
+  day before each item was last seen, as `/gb movers` does.
+- **Bags** lists the items in the bags and banks of all your characters as
+  the addon's Bags lists those of the character playing: a row per item with
+  its count, the price to post it at, what a vendor pays, its last 7 days,
+  what it brings in and where to sell it, with the values your characters
+  last saved. Hover an item to see whose bags hold it. Search, the
+  profession, item and quality filters and a character filter narrow it.
+- **Gold** has the addon's cards for the gold of all your characters, or of
+  the one you choose: the total and its high, today, 30 days and net worth.
+  Under them are the gold over one week, one month or two months, the
+  characters with their gold, today's change and when they last played, and
+  the month's accounting. Click a character's name to choose it, and again
+  for all of them. Under the characters are the account's ID and **Link
+  another computer**.
+- **Accounting** lists the entries the addon booked for all your characters,
+  with the revenue, expenses, net and realized profit of the entries shown,
+  and a search, source and character filters.
+- **By item** lists each item your characters bought or sold: the units
+  bought and their average cost, the units sold and their average sale after
+  the cut, the profit realized on the units both bought and sold, and when it
+  last moved, newest first. Its cards total what was bought and sold, the
+  realized profit and the best item. A search, the profession, item and
+  quality filters and a character filter narrow it.
+
+The tables of Prices, Deals and Movers open an item's price history in
+Prices. The server works out Deals and Movers from the lowest price of each
+day in the last 60, as the prices it sends the addon.
+
 ### Filter item lists
 
-Use **Profession**, **Item type**, and **Quality** above the price list on the
-website or desktop app. Selecting a profession shows only its materials. Choose **Crafted items** to see its products instead. Filters combine
+Use **Profession**, **Item type**, and **Quality** above Prices, Deals and
+Movers on the website or desktop app. Selecting a profession shows only its materials. Choose **Crafted items** to see its products instead. Filters combine
 with item search and sorting; **Clear filters** restores the full list.
 
 The in-game Goldbook window has the same dropdown lists on Prices, Deals,
@@ -913,8 +1083,8 @@ and the regeneration command.
 
 ### Compare item prices
 
-In **Prices**, use **Compare** beside an item, then add another item such as
-Copper Ore and Copper Bar. Up to six items share one graph of minimum buyout
+In **Prices**, select an item and use **Compare** in its history, then do
+the same for another item such as Copper Ore and Copper Bar. Up to six items share one graph of minimum buyout
 per unit for the selected realm and faction. The table below shows each item's
 latest price, market value, listed quantity and scan age.
 
@@ -1019,17 +1189,24 @@ files, so update those before deploying the Rust image through Actions.
   starts each item's history from its newest day.
 - Web search ignores case for ASCII letters only and takes at most 100
   characters.
-- Trades come from the auction house invoices in the mailbox, so a sale is
-  booked only once its mail arrives and the mailbox is opened. A mail that
-  expires or is deleted unopened is never booked. A trade is dated by the days
-  its mail has left, which is when the auction house sent it. Two identical
-  sales sent within two minutes of each other, where the first mail was taken
-  before the second arrived, count as one. A vendor sale is noticed through
-  the buyback list, which holds 12 items: with it full, selling the same stack
-  as its oldest entry is booked only when the gold gained equals that price. Mail between characters and deposits are not trades.
-  Profit or loss is per item name
-  and per character on character pages, so an item bought on one character
-  and sold on another has a cost only on the account page.
+- Auction sales and purchases come from the auction house invoices in the
+  mailbox, so a sale is booked only once its mail arrives and the mailbox is
+  opened. A mail that expires or is deleted unopened is never booked. A sale
+  is dated by the days its mail has left, which is when the auction house
+  sent it. Two identical sales sent within two minutes of each other, where
+  the first mail was taken before the second arrived, count as one. A vendor
+  sale is noticed through the buyback list, which holds 12 items: with it
+  full, selling the same stack as its oldest entry is booked only when the
+  gold gained equals that price.
+- The game says only that your gold changed, not why. Goldbook books a change
+  by what you did within 10 seconds of it, so two things done at once can be
+  booked under the wrong source, and a change it cannot explain is other
+  income or expense. A sold auction's mail returns its deposit with the sale,
+  and that deposit is booked as other income. Gold sent between your own
+  characters is mail gold out on one and mail gold in on the other.
+  Profit or loss is per item name, and per character when one is chosen, so
+  an item bought on one character and sold on another has a cost only with
+  all characters shown.
 
 ## Source, license, and contributions
 

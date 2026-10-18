@@ -79,9 +79,16 @@ impl Drop for Handoff {
     }
 }
 
-pub async fn handoff(api: &str, login: GameLogin, lifetime: Duration) -> Result<Handoff> {
-    let target =
+// The server signs in and sends the browser on to the website's `view`.
+pub async fn handoff(
+    api: &str,
+    login: GameLogin,
+    view: &str,
+    lifetime: Duration,
+) -> Result<Handoff> {
+    let mut target =
         goldbook_sync::api_url(&super::settings::normalize_api(api)?, "/api/desktop-login")?;
+    target.query_pairs_mut().append_pair("view", view);
     let path = format!("/{}", hex::encode(rand::random::<[u8; 32]>()));
     let nonce = STANDARD.encode(rand::random::<[u8; 24]>());
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -159,6 +166,7 @@ mod tests {
         let page = handoff(
             "https://example.com/goldbook",
             login,
+            "bags",
             Duration::from_secs(10),
         )
         .await
@@ -175,7 +183,9 @@ mod tests {
         let result = client.get(&page.url).send().await.unwrap();
         assert_eq!(result.headers()["cache-control"], "no-store");
         let text = result.text().await.unwrap();
-        assert!(text.contains("https://example.com/goldbook/api/desktop-login"));
+        assert!(
+            text.contains(r#"action="https://example.com/goldbook/api/desktop-login?view=bags""#)
+        );
         assert!(text.contains("7KQ2M9PXABCDEFGHJKMN"));
         assert!(client.get(&page.url).send().await.is_err());
     }
@@ -188,6 +198,7 @@ mod tests {
                 key: "key".into(),
                 label: "Account".into(),
             },
+            "gold",
             Duration::from_millis(10),
         )
         .await

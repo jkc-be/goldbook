@@ -38,10 +38,11 @@ const layoutObserver = new ResizeObserver(() => {
 layoutObserver.observe(document.documentElement);
 layoutObserver.observe(document.querySelector(".rail"));
 
+// The rail's button names the theme it switches to, as the addon's tooltip does.
 function drawTheme() {
-  for (const button of document.querySelectorAll("[data-theme-choice]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.themeChoice === document.documentElement.dataset.theme));
-  }
+  const other = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  field("theme").title = other === "light" ? "Light window" : "Dark window";
+  field("theme").setAttribute("aria-label", `Switch to the ${other} window`);
 }
 
 function shareTheme() {
@@ -49,18 +50,17 @@ function shareTheme() {
     .catch(() => notify("Goldbook could not change the theme of the website view."));
 }
 
-for (const button of document.querySelectorAll("[data-theme-choice]")) {
-  button.addEventListener("click", () => {
-    document.documentElement.dataset.theme = button.dataset.themeChoice;
-    try {
-      localStorage.setItem("goldbook-theme", button.dataset.themeChoice);
-    } catch {
-      // Without storage the choice lasts until the app restarts.
-    }
-    drawTheme();
-    shareTheme();
-  });
-}
+field("theme").addEventListener("click", () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem("goldbook-theme", theme);
+  } catch {
+    // Without storage the choice lasts until the app restarts.
+  }
+  drawTheme();
+  shareTheme();
+});
 drawTheme();
 shareTheme();
 
@@ -96,7 +96,7 @@ for (const tab of document.querySelectorAll(".views button")) {
   tab.addEventListener("click", async () => {
     let result;
     try {
-      const accountId = tab.dataset.view === "characters" ? await pickAccount() : null;
+      const accountId = "signIn" in tab.dataset ? await pickAccount() : null;
       if (accountId === undefined) {
         return;
       }
@@ -232,7 +232,7 @@ fill().catch(() => {
 
 function showUpdates(status) {
   field("client-version").textContent = `Goldbook ${status.version}`;
-  field("topbar-version").textContent = status.version;
+  field("rail-version").textContent = status.version;
   field("addon-update").textContent = status.addon;
   const update = status.client;
   const text = {

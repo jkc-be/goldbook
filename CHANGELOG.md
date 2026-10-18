@@ -7,6 +7,131 @@ were released with.
 
 ## Unreleased
 
+## 0.2.4 - 2026-10-17
+
+### Addon
+
+- The window's rail has three hubs instead of seven views, each with tabs
+  across the top of the page: **Market** (Prices, Deals, Movers),
+  **Inventory** (Bags, Mail) and **Ledger** (Gold, Accounting, By item). A hub opens
+  the tab it showed last. Every command still opens its own tab, the mailbox
+  still opens Mail, and the mail count sits by Inventory. An item's history
+  keeps the hub it was opened from. Lists show 17 rows instead of 19.
+- Sell becomes Bags (`/gb bags`; `/gb sell` still opens it).
+- Add a By item tab under Ledger (`/gb items`): the accounting per item, with
+  units bought and sold, the average cost and sale, the realized profit or
+  loss and when the item last moved, a search box, and profession, item,
+  quality and character filters.
+- Shift+click an item at the auction house to open its price history in
+  Goldbook, as Midas does: in the auction house's lists, your bags and addons
+  such as Auctionator, but not while writing in chat. An Options tick turns it
+  off.
+- The Options panel scrolls, so the web login at its bottom is always within
+  reach. It now says what the desktop app and the website add: the app syncs
+  both ways, uploading your scans and bringing back the prices others scanned
+  on your realm.
+- The minimap button and the window's title bar show Goldbook's crest, the
+  gold coin of the website, drawn by the addon itself.
+- Vendor prices come from the sell price the game's tooltip shows, for every
+  item, so they are right before you sell one. They no longer come from the
+  game's item data or the merchant's buyback list, and `/gb deals` no longer
+  marks vendor deals as `Vendor?`. Vendor prices saved before are read again
+  the next time an item is scanned or in your bags.
+- Add a Mail view, beside Bags under Inventory, that opens with the mailbox. It
+  lists every mail with its items, a Sold, Bought, Cancelled, Expired or Other
+  tag, the sender, the days left and its gold or COD, with segments, search
+  and sorting. **Collect N mails** takes the mails shown one at a time, skips
+  COD mail, and stops when the bags fill, the mailbox closes or you click
+  **Stop**. `/gb mail` opens it; an Options tick keeps it from opening by
+  itself.
+- Trades becomes Accounting (`/gb accounting`; `/gb trades` still opens it):
+  every gold movement as revenue or expense, by source. Besides auction and
+  vendor sales and auction purchases it books merchant purchases, trades
+  with players (each item given or got, the gold shared by market value, and
+  the player's name), mail gold in and out, cash on delivery, quest rewards,
+  looted gold, repairs, postage, auction deposits, flights, training and
+  talent resets. Gold nothing explains is other income or expense. Looted
+  and other gold are added up per hour.
+- The Accounting view has All, Revenue and Expenses, a source chip beside the
+  character chip, and Revenue, Expenses, Net and Realized profit cards. The
+  realized profit counts goods bought and sold by any means. The Gold view's
+  side panel shows the same totals for the month.
+- Keep 3,000 entries per character instead of 1,000, and never drop one the
+  mailbox may still show.
+
+### Desktop app
+
+- The app icon is Goldbook's crest, the gold coin of the website.
+- The rail has the addon's hubs: **Market**, **Inventory** and **Ledger**
+  open the website's Prices, Bags and Gold inside the app, whose tabs reach
+  the rest, then **Sync**. Inventory and Ledger sign in with the login the
+  game saved and open on their own tab. Characters is gone.
+- The app opens in the dark theme unless you chose the light one.
+- A development build (`make run`) always installs the addon of its checkout,
+  and no longer installs a published addon update over it.
+- `make build` also installs this checkout's addon into the World of Warcraft
+  folder; `make install-addon` does only that.
+- `make run` starts the local server stack first, rebuilt from this checkout
+  when it changed, so the development app uploads to a matching server.
+
+### Server
+
+- Accept and keep every kind of accounting entry the addon books: merchant
+  purchases, player trades, cash on delivery, gold mailed, quest rewards,
+  looted gold, repairs, postage, auction deposits, flights, training, talent
+  resets and other income and expenses. An item in a player trade may book
+  for 0. Migration `0012_accounting.sql` rebuilds the trades table with the
+  same rows.
+- Keep the other player of a trade or mail as `party`, and return it from
+  `/api/trades`. Deploy the server before the app: an older server refuses an
+  account upload with the new entries.
+- Add `/api/deals` and `/api/movers`. They apply the addon's deal and mover
+  rules to the realm's newest scan and the lowest price of each day in the
+  last 60, with the same search and filters as `/api/prices`.
+- `/api/desktop-login` opens the website's view named by `?view=`, such as
+  `bags`. Without one it opens `#characters` as before, which the website
+  now sends on to Gold.
+
+### Website
+
+- Rename the Trades section Accounting. It totals revenue, expenses, the net
+  and the profit realized on goods, and filters the history to all, revenue
+  or expenses. Each entry names its source, such as "Trade sale to Mirelle"
+  or "Mail gold in from Mirelle".
+- The website has the addon's navigation: **Market**, **Inventory** and
+  **Ledger** in the rail, with **Download** under Account. Each hub has tabs
+  at the top of the page: Market has Prices, Deals and Movers, Inventory has
+  Bags, and Ledger has Gold, Accounting and By item. Every tab has its own
+  address, such as `#deals`, so links, back and forward work. Mail stays in
+  game.
+- Add **Deals**: what the newest scan lists at 70% or less of its resale
+  price, found as the addon finds resale deals, with the profit per unit
+  after the cut. Vendor deals stay in game, because the server has no vendor
+  prices.
+- Add **Movers**: the prices that rose or fell since the day before, as the
+  addon's Movers view has them.
+- Add **Bags**: the bags and banks of all the account's characters in one
+  list, with a character filter.
+- Add **Gold**: the account's gold over time, all characters summed or one
+  of them, and a row per character. A character's name picks it in the
+  character chip, here and in Accounting. The account's ID and **Link another
+  computer** are under the characters.
+- Remove **Characters**: Gold, Bags and Accounting show everything it did.
+  `#characters` opens Gold, and an old `#character/<name>-<realm>` or
+  `#characters/<name>-<realm>` link opens Gold with that character chosen.
+- The account's Accounting moves to Ledger.
+- Add **By item** (`#items`): each item bought or sold with the units, the
+  average cost and sale, the profit realized on the units both bought and
+  sold, and when it last moved, with Bought, Sold, Realized profit and Best
+  item cards, a search and the profession, item, quality and character
+  chips. It replaces the By item panel under Accounting.
+- The website opens in the dark theme unless you chose the light one.
+- The website and the desktop app's own pages look like the addon's window, in
+  its palettes as the game shows them, with its fonts, title bar, theme
+  button, tables, filters and status lines; Bags, Gold and Accounting now
+  have the addon's columns, cards and panels.
+- A tab no longer opens scrolled down to a table that shared its name.
+
 ## 0.2.3 - 2026-10-17
 
 ### Addon

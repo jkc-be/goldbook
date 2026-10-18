@@ -30,54 +30,24 @@
   src: url("fonts/roboto-condensed-latin-700-normal.woff2") format("woff2");
 }
 
-/* Parchment is the default whatever the system prefers; the ledger is chosen in the rail. */
+/* Friz Quadrata has lining figures and Marcellus has not, so a computer with
+   Optima draws the digits in words with it, as the addon's previews do. */
+@font-face {
+  font-family: "Friz digits";
+  src: local("Optima Regular"), local("Optima");
+  unicode-range: U+0030-0039;
+}
+
+/* The game's two faces: Friz Quadrata for words, Marcellus standing in for
+   it, and Arial Narrow for figures, Roboto Condensed where it is missing.
+   Sizes are the addon window's. The dark theme is the default whatever the
+   system prefers; the title bar's button switches it. */
 :root {
   color-scheme: light;
-  --serif: "Marcellus", Georgia, serif;
-  --sans: "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
-  --top: 56px;
-  --page: #f4ecdb;
-  --rail: #ebe0c8;
-  --panel: #fbf6ea;
-  --field: #fffaf0;
-  --line: #e0d3b6;
-  --edge: #cbb88f;
-  --ink: #2b2216;
-  --ink-soft: #5a4a30;
-  --muted: #6e5f45;
-  --gold: #a8761a;
-  --gold-ink: #7f5507;
-  --gold-edge: #b8913a;
-  --tint: rgb(168 118 26 / 8%);
-  --tint-strong: rgb(168 118 26 / 15%);
-  --press: #ecd9a8;
-  --top-1: #efe3c8;
-  --top-2: #e6d8b8;
-  --brand-1: #b8860b;
-  --brand-2: #946a0d;
-  --brand-3: #7a5208;
-  --button-1: #f3dc9a;
-  --button-2: #e2c06a;
-  --button-ink: #3a2a08;
-  --series-1: #a8761a;
-  --series-2: #6e6e78;
-  --compare-1: #a8761a;
-  --compare-2: #0062c4;
-  --compare-3: #276b2b;
-  --compare-4: #8a2ccf;
-  --compare-5: #c0392b;
-  --compare-6: #6e6e78;
-  --up: #276b2b;
-  --down: #b83224;
-  --coin-g: #7a5800;
-  --coin-s: #62626d;
-  --coin-c: #a0501c;
-  --q-poor: #6b6457;
-  --q-common: #2b2216;
-  --q-uncommon: #176a0a;
-  --q-rare: #0062c4;
-  --q-epic: #8a2ccf;
-  --q-legendary: #974300;
+  --serif: "Friz digits", "Marcellus", Georgia, serif;
+  --sans: "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --top: 46px;
+  --rail-width: 160px;
   --class-warrior: #8a5f33;
   --class-paladin: #c4135f;
   --class-hunter: #4f6f22;
@@ -95,48 +65,6 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #120f0b;
-  --rail: #17130e;
-  --panel: #1c1813;
-  --field: #0d0b08;
-  --line: #2c251b;
-  --edge: #3d3324;
-  --ink: #ece4d4;
-  --ink-soft: #cfc4ae;
-  --muted: #a89c86;
-  --gold: #e9b949;
-  --gold-ink: #ffe08a;
-  --gold-edge: #7a5a1c;
-  --tint: rgb(233 185 73 / 8%);
-  --tint-strong: rgb(233 185 73 / 14%);
-  --press: #3a2d14;
-  --top-1: #1f1a12;
-  --top-2: #15110c;
-  --brand-1: #ffe9a8;
-  --brand-2: #d9a22c;
-  --brand-3: #a8761a;
-  --button-1: #3a2d14;
-  --button-2: #261d0d;
-  --button-ink: #ffe08a;
-  --series-1: #e9b949;
-  --series-2: #c7c7cf;
-  --compare-1: #e9b949;
-  --compare-2: #3d9bff;
-  --compare-3: #5fd35a;
-  --compare-4: #c27df8;
-  --compare-5: #ff6d63;
-  --compare-6: #c7c7cf;
-  --up: #5fd35a;
-  --down: #ff6d63;
-  --coin-g: #ffd34d;
-  --coin-s: #c7c7cf;
-  --coin-c: #eda55f;
-  --q-poor: #9d9d9d;
-  --q-common: #f3eee4;
-  --q-uncommon: #1eff00;
-  --q-rare: #3d9bff;
-  --q-epic: #c27df8;
-  --q-legendary: #ff8000;
   --class-warrior: #c69b6d;
   --class-paladin: #f48cba;
   --class-hunter: #aad372;
@@ -152,6 +80,104 @@
   --class-evoker: #33937f;
 }
 
+/* The addon's palettes, written by scripts/web-palette.py. Edit UI.lua and run it again. */
+
+:root {
+  --page: #ffffff;
+  --rail: #ffffce;
+  --panel: #ffffff;
+  --field: #ffffff;
+  --line: #efd6a1;
+  --edge: #dac089;
+  --ink: #41392d;
+  --ink-soft: #60513b;
+  --muted: #786850;
+  --gold: #c08621;
+  --gold-ink: #97691c;
+  --gold-edge: #c09945;
+  --brand: #b47c26;
+  --tint: rgb(192 134 33 / 14%);
+  --tint-strong: rgb(192 134 33 / 16%);
+  --press: #ffffca;
+  --top-1: #ffffd1;
+  --top-2: #fff4a5;
+  --button-1: #ffffd3;
+  --button-2: #fff292;
+  --button-ink: #4c3e1f;
+  --series-1: #c08621;
+  --series-2: #6e6e7a;
+  --compare-1: #c08621;
+  --compare-2: #1a64dc;
+  --compare-3: #2c7c32;
+  --compare-4: #963ddc;
+  --compare-5: #c5392d;
+  --compare-6: #6e6e7a;
+  --up: #2c7c32;
+  --down: #c5392d;
+  --warn: #b4551a;
+  --info: #1a64dc;
+  --coin-g: #96701a;
+  --coin-s: #6e6e7a;
+  --coin-c: #b95532;
+  --q-poor: #767676;
+  --q-common: #41392d;
+  --q-uncommon: #2b7c23;
+  --q-rare: #1a64dc;
+  --q-epic: #963ddc;
+  --q-legendary: #b4551a;
+  --q-artifact: #836928;
+  --q-heirloom: #1a7391;
+}
+
+:root[data-theme="dark"] {
+  --page: #2f2c27;
+  --rail: #38332d;
+  --panel: #3d3832;
+  --field: #292723;
+  --line: #605544;
+  --edge: #7f6f52;
+  --ink: #ffffff;
+  --ink-soft: #fffff5;
+  --muted: #e8d9bf;
+  --gold: #fff872;
+  --gold-ink: #ffffc0;
+  --gold-edge: #c09945;
+  --brand: #fff873;
+  --tint: rgb(255 248 114 / 8%);
+  --tint-strong: rgb(255 248 114 / 16%);
+  --press: #605032;
+  --top-1: #4f4537;
+  --top-2: #433b31;
+  --button-1: #605032;
+  --button-2: #483d29;
+  --button-ink: #ffffc0;
+  --series-1: #fff872;
+  --series-2: #ffffff;
+  --compare-1: #fff872;
+  --compare-2: #63d4ff;
+  --compare-3: #8cff86;
+  --compare-4: #ffb0ff;
+  --compare-5: #ff9d86;
+  --compare-6: #ffffff;
+  --up: #8cff86;
+  --down: #ff9d86;
+  --warn: #ffb41a;
+  --info: #63d4ff;
+  --coin-g: #ffff76;
+  --coin-s: #ffffff;
+  --coin-c: #ffe08c;
+  --q-poor: #dedede;
+  --q-common: #ffffff;
+  --q-uncommon: #3eff1a;
+  --q-rare: #63d4ff;
+  --q-epic: #ffb0ff;
+  --q-legendary: #ffb41a;
+  --q-artifact: #ffffb4;
+  --q-heirloom: #1affff;
+}
+
+/* End of the addon's palettes. */
+
 * {
   box-sizing: border-box;
 }
@@ -161,7 +187,7 @@
   display: none !important;
 }
 
-/* Keeps what scrollIntoView brings up clear of the sticky top bar. */
+/* Keeps what scrollIntoView brings up clear of the sticky title bar. */
 @media (min-width: 761px) {
   html {
     scroll-padding-top: calc(var(--top) + 8px);
@@ -172,7 +198,7 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  font: 14px/1.4 var(--sans);
+  font: 14px/1.35 var(--serif);
 }
 
 p {
@@ -202,10 +228,6 @@ a {
   color: var(--muted);
 }
 
-.sub {
-  font-size: 13px;
-}
-
 h1,
 h2,
 h3,
@@ -216,7 +238,7 @@ h4 {
 }
 
 h1 {
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.2;
 }
 
@@ -230,9 +252,10 @@ button {
 input,
 select {
   min-width: 0;
-  padding: 5px 9px;
+  height: 28px;
+  padding: 0 9px;
   border: 1px solid var(--edge);
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--field);
 }
 
@@ -241,16 +264,18 @@ input::placeholder {
   opacity: 1;
 }
 
-.topbar {
+/* The band across the top of the addon's window: gilded along its top edge,
+   its crest, name and version, and the account's gold and the theme at the right. */
+.titlebar {
   position: sticky;
   top: 0;
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 18px;
+  gap: 6px 12px;
   min-height: var(--top);
-  padding: 0 20px;
+  padding: 0 14px;
   border-top: 2px solid var(--gold);
   border-bottom: 1px solid var(--edge);
   background: linear-gradient(var(--top-1), var(--top-2));
@@ -259,81 +284,146 @@ input::placeholder {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font: 26px/1.1 var(--serif);
-  letter-spacing: 0.5px;
+  gap: 12px;
+  color: var(--brand);
+  font: 24px/1 var(--serif);
   text-decoration: none;
-  background: linear-gradient(var(--brand-1), var(--brand-2) 70%, var(--brand-3));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  white-space: nowrap;
 }
 
 .crest {
   flex: none;
-  width: 24px;
-  height: 24px;
-  border: 2px solid #a8761a;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #fff1b3, #e9b949 45%, #8a5f10);
-  box-shadow: 0 0 6px rgb(233 185 73 / 40%);
+  background: radial-gradient(circle at 42% 36%, #fff3c4 0, #e9b949 34%, #a8761a 72%, #8a5f10 100%);
+  box-shadow: 0 0 0 2px #a8761a, 0 0 6px rgb(233 185 73 / 40%);
 }
 
-.realm-picker,
+.version {
+  align-self: flex-end;
+  margin: 0 6px 12px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.purse {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 27px;
+  margin-left: auto;
+  padding: 0 11px;
+  border: 1px solid var(--edge);
+  background: var(--field);
+  white-space: nowrap;
+}
+
+.purse-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+#purse-gold {
+  font: 15px var(--sans);
+}
+
+/* The addon's square buttons in the title bar. */
+.icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  background: var(--page);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: linear-gradient(var(--tint), var(--tint)), var(--page);
+}
+
+#theme {
+  margin-left: 9px;
+}
+
+.purse[hidden] + #theme {
+  margin-left: auto;
+}
+
+#theme svg {
+  width: 14px;
+  height: 14px;
+}
+
+#theme circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+#theme path {
+  fill: currentColor;
+}
+
+/* A choice framed like the addon's chips, its caret after it. */
 .chip {
   position: relative;
   display: inline-block;
 }
 
-.realm-picker::after,
 .chip::after {
-  content: "▾";
+  content: "▼";
   position: absolute;
   top: 50%;
-  right: 10px;
+  right: 9px;
   color: var(--gold);
-  font-size: 12px;
+  font: 8px var(--sans);
   transform: translateY(-50%);
   pointer-events: none;
 }
 
-.realm-picker select,
+/* Sized to the choice on show, as the addon sizes a chip, where the browser can. */
 .chip select {
+  field-sizing: content;
+  height: 24px;
+  padding: 0 24px 0 9px;
+  background: var(--page);
+  color: var(--ink-soft);
+  font-size: 13px;
   appearance: none;
-  padding-right: 28px;
+  cursor: pointer;
+}
+
+.chip select:hover,
+.chip-button:hover {
+  background: linear-gradient(var(--tint), var(--tint)), var(--page);
+}
+
+.chip-button {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--edge);
+  background: var(--page);
+  color: var(--ink-soft);
+  font-size: 13px;
   cursor: pointer;
 }
 
 .realm-picker select {
-  max-width: 260px;
-  padding-block: 5px;
-  font-weight: 500;
+  max-width: 240px;
 }
 
-.purse {
-  margin-left: auto;
-  padding: 4px 12px;
-  border: 1px solid var(--edge);
-  border-radius: 2px;
-  background: var(--field);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.purse-label {
-  margin-right: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-/* The rail's colour runs the full height of a long page behind the sticky rail. */
+/* The window right of the rail, as the addon lays it out. */
 .shell {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
   min-height: calc(100vh - var(--top));
-  background: linear-gradient(90deg, var(--rail) 189px, var(--edge) 189px 190px, transparent 190px);
+  background: linear-gradient(90deg, var(--rail) calc(var(--rail-width) - 1px), var(--edge) calc(var(--rail-width) - 1px) var(--rail-width), transparent var(--rail-width));
 }
 
 .rail {
@@ -344,8 +434,8 @@ input::placeholder {
   height: calc(100vh - var(--top));
   padding-top: 10px;
   overflow-y: auto;
-  border-right: 1px solid var(--edge);
   background: var(--rail);
+  box-shadow: inset -1px 0 0 var(--edge);
 }
 
 .views {
@@ -357,14 +447,14 @@ input::placeholder {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 20px;
+  min-height: 36px;
+  padding: 0 14px;
   color: var(--ink-soft);
-  font: 17px var(--serif);
+  font: 16px var(--serif);
   text-decoration: none;
 }
 
 .views a:hover {
-  color: var(--ink);
   background: var(--tint);
 }
 
@@ -380,48 +470,61 @@ input::placeholder {
   height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.5;
   stroke-linejoin: round;
-  opacity: 0.85;
+  stroke-linecap: round;
 }
 
 .views a:focus-visible {
   outline-offset: -2px;
 }
 
+.views .group {
+  margin: 10px 0 0;
+  padding: 10px 14px 4px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+/* The rail's foot: the last scan, the account, and a button the width of the
+   addon's Reload. */
 .rail-foot {
   display: grid;
   gap: 10px;
   margin-top: auto;
-  padding: 12px 14px 14px;
+  padding: 12px 14px 13px;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
 }
 
-.session strong {
+.rail-foot strong {
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .rail-foot .button {
   text-align: center;
 }
 
+/* The addon's gold button: shaded from its top colour down, in a darker edge. */
 .button {
   display: inline-block;
-  padding: 4px 14px;
+  min-height: 26px;
+  padding: 3px 14px;
   border: 1px solid var(--gold-edge);
-  border-radius: 2px;
   background: linear-gradient(var(--button-1), var(--button-2));
   color: var(--button-ink);
-  font: 15px/1.3 var(--serif);
+  font: 14px/18px var(--serif);
   text-decoration: none;
   cursor: pointer;
 }
 
 .button:hover {
-  border-color: var(--gold);
+  background: linear-gradient(rgb(255 255 255 / 0%), rgb(255 255 255 / 0%)), linear-gradient(var(--tint-strong), var(--tint-strong)), linear-gradient(var(--button-1), var(--button-2));
 }
 
 .button:disabled {
@@ -446,17 +549,18 @@ input::placeholder {
   text-decoration: underline;
 }
 
+/* The addon's segmented control: a line around buttons that frame their text. */
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;
   border: 1px solid var(--edge);
-  border-radius: 2px;
-  background: var(--field);
+  background: var(--page);
 }
 
 .segmented button {
   flex: 1 1 auto;
-  padding: 3px 10px;
+  min-height: 20px;
+  padding: 1px 11px;
   border: 0;
   background: none;
   color: var(--muted);
@@ -475,7 +579,6 @@ input::placeholder {
 .segmented button[aria-pressed="true"] {
   background: var(--press);
   color: var(--gold-ink);
-  font-weight: 500;
 }
 
 .segmented button:focus-visible {
@@ -485,94 +588,161 @@ input::placeholder {
 .content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   max-width: 1680px;
-  padding: 18px 22px 28px;
+  padding: 6px 16px 16px;
 }
 
+/* The tabs of the hub on show, over a rule, as the addon's window has them. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 1px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs a {
+  margin-bottom: -1px;
+  padding: 4px 14px 3px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-soft);
+  font: 16px/20px var(--serif);
+  text-decoration: none;
+}
+
+.tabs a:hover {
+  background: var(--tint);
+}
+
+.tabs a[aria-current="page"] {
+  border-bottom-color: var(--gold);
+  color: var(--gold-ink);
+}
+
+.tabs a:focus-visible {
+  outline-offset: -2px;
+}
+
+.tools {
+  display: grid;
+  gap: 10px;
+}
+
+/* The title line: the view's name, a muted line after it, and at its right
+   a choice or an aside. */
 .pagehead {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 14px;
+  gap: 4px 12px;
+  min-height: 28px;
+}
+
+.pagehead .sub {
+  font-size: 12px;
+}
+
+.pagehead > :is(.badge, .segmented, .chip, .aside) {
+  align-self: center;
+  margin-left: auto;
+}
+
+.pagehead > :is(.badge, .segmented, .chip, .aside):not([hidden]) ~ :is(.badge, .segmented, .chip, .aside) {
+  margin-left: 0;
+}
+
+.aside {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.aside .money {
+  color: var(--ink);
+}
+
+/* The addon's badge: a label and a value side by side in one frame. */
+.badge {
+  display: inline-flex;
+  border: 1px solid var(--edge);
+  background: var(--page);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badge > * {
+  padding: 1px 11px;
+}
+
+.badge > span:first-child {
+  color: var(--muted);
+}
+
+.badge .money {
+  border-left: 1px solid var(--edge);
+  background: var(--press);
+  font-size: 14px;
 }
 
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 8px 17px;
 }
 
 .search input {
-  width: 300px;
-}
-
-.chip select {
-  padding-block: 5px;
-  background: var(--field);
-  color: var(--ink-soft);
-  font-size: 13px;
+  width: 240px;
 }
 
 .message {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--edge);
   border-left: 3px solid var(--gold);
-  border-radius: 2px;
   background: var(--panel);
 }
 
 main {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   align-items: start;
 }
 
+/* A panel: the panel colour inside a line. */
 .panel {
   min-width: 0;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 2px;
   background: var(--panel);
 }
 
 .panel h3 {
   color: var(--gold-ink);
-  font-size: 18px;
+  font-size: 16px;
 }
 
-/* Panels whose tables run edge to edge under a ruled heading. */
-.prices-panel,
-.holdings .panel,
-.trades {
+/* A heading across the top of a panel, under a rule. */
+.panel .heading {
+  padding: 5px 9px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--gold-ink);
+  font-size: 16px;
+}
+
+/* Panels whose tables run edge to edge. */
+.list-panel {
   padding: 0;
 }
 
-.holdings .panel > h3,
-.trades > h3 {
-  padding: 9px 14px 7px;
-  border-bottom: 1px solid var(--line);
+.list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
-.holdings .panel > :not(h3, table),
-.trades > :not(h3, table) {
-  margin-inline: 14px;
-}
-
-.holdings .panel > p,
-.trades > p {
-  margin-block: 8px;
-}
-
-:is(.prices-panel, .holdings .panel, .trades) :is(th, td):first-child {
-  padding-left: 14px;
-}
-
-:is(.prices-panel, .holdings .panel, .trades) :is(th, td):last-child {
-  padding-right: 14px;
+.panel-note {
+  margin: 8px 10px;
+  font-size: 12px;
 }
 
 table {
@@ -580,40 +750,59 @@ table {
   border-collapse: collapse;
 }
 
+/* The addon's table: headers in narrow capitals over a rule, rows of a fixed
+   height between lines, words in Friz and figures narrow. */
 th,
 td {
-  padding: 3px 8px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
 }
 
 td {
-  height: 27px;
+  height: 25px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 th {
-  padding-block: 9px 6px;
+  height: 28px;
   border-bottom-color: var(--edge);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.9px;
+  font: 12px var(--sans);
   text-transform: uppercase;
   white-space: nowrap;
-  vertical-align: bottom;
-}
-
-th .age {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .number {
   text-align: right;
+  font-family: var(--sans);
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+th.number {
+  font-size: 12px;
+}
+
+td.item,
+td.source,
+.trade-list td.character {
+  max-width: 0;
+  width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td.source,
+.trade-list td.character {
+  width: auto;
+}
+
+.spark-column {
+  width: 1%;
+  text-align: center;
 }
 
 th button,
@@ -627,23 +816,29 @@ td button {
 
 th button {
   color: inherit;
-  font-weight: inherit;
-  letter-spacing: inherit;
+  font: inherit;
   text-transform: inherit;
 }
 
-th button:hover,
-th[aria-sort="ascending"] button,
-th[aria-sort="descending"] button {
+th button:hover {
+  color: var(--ink);
+}
+
+th[aria-sort="ascending"],
+th[aria-sort="descending"] {
   color: var(--gold-ink);
 }
 
-th[aria-sort="ascending"] button::after {
+th[aria-sort="ascending"]::after {
   content: " ↑";
 }
 
-th[aria-sort="descending"] button::after {
+th[aria-sort="descending"]::after {
   content: " ↓";
+}
+
+th[aria-sort] button:hover {
+  color: inherit;
 }
 
 td button:hover,
@@ -661,6 +856,10 @@ tbody tr[aria-selected="true"] td {
 
 tbody tr:is(:hover, [aria-selected="true"]) td:first-child {
   box-shadow: inset 3px 0 0 var(--gold);
+}
+
+.count {
+  color: var(--muted);
 }
 
 .quality-0 {
@@ -687,59 +886,20 @@ tbody tr:is(:hover, [aria-selected="true"]) td:first-child {
   color: var(--q-legendary);
 }
 
-td.item button {
-  font-weight: 500;
+.quality-6 {
+  color: var(--q-artifact);
 }
 
-.compare-column {
-  width: 1%;
-  padding-right: 2px;
+.quality-7 {
+  color: var(--q-heirloom);
 }
 
-.compare-item {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--edge);
-  border-radius: 2px;
-  background: var(--field);
-  color: var(--gold-ink);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.compare-item::before {
-  content: "+";
-}
-
-.compare-item[aria-pressed="true"] {
-  border-color: var(--gold);
-  background: var(--press);
-}
-
-.compare-item[aria-pressed="true"]::before {
-  content: "✓";
-}
-
-.compare-item:hover {
-  border-color: var(--gold);
-}
-
+/* Money as the addon writes it: figures in the text colour, each coin's
+   letter in its own. */
 .money {
+  font-family: var(--sans);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.money.aligned {
-  display: inline-grid;
-  grid-template-columns: auto 3.4ch 3.4ch;
-  column-gap: 0.3ch;
-  justify-items: end;
-  /* Else the grid takes its baseline from the gold slot, which is empty below 1g. */
-  align-items: baseline;
 }
 
 .coin.g .unit {
@@ -754,12 +914,8 @@ td.item button {
   color: var(--coin-c);
 }
 
-.unit {
-  margin-left: 1px;
-  font-weight: 700;
-}
-
 .trend {
+  font-family: var(--sans);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -777,79 +933,52 @@ td.item button {
   color: var(--muted);
 }
 
-.week {
-  white-space: nowrap;
-}
-
-.week .trend {
-  display: inline-block;
-  min-width: 52px;
-}
-
+/* The addon's sparkline: green for a week that ended at least where it
+   started, else red. */
 .spark {
   display: inline-block;
-  width: 56px;
-  height: 20px;
-  margin-right: 8px;
+  width: 64px;
+  height: 16px;
   overflow: visible;
   vertical-align: middle;
 }
 
-.spark-base {
-  fill: none;
-  stroke: var(--edge);
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-}
-
 .spark-line {
   fill: none;
-  stroke: var(--muted);
-  stroke-width: 1.4;
+  stroke-width: 1.5;
   stroke-linejoin: round;
   stroke-linecap: round;
-}
-
-.spark-point,
-.spark-end {
-  fill: var(--muted);
 }
 
 .spark.up .spark-line {
   stroke: var(--up);
 }
 
-.spark.up :is(.spark-point, .spark-end) {
-  fill: var(--up);
-}
-
 .spark.down .spark-line {
   stroke: var(--down);
 }
 
-.spark.down :is(.spark-point, .spark-end) {
-  fill: var(--down);
-}
-
+/* The addon's status line under a table, with the page buttons at its right. */
 .pager {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
-  padding: 8px 14px;
+  gap: 4px 14px;
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
-.pager #range {
-  order: -1;
+.pager .range {
   margin-right: auto;
-  font-size: 13px;
 }
 
 .pager button {
-  padding: 4px 2px;
+  padding: 0 2px;
   border: 0;
   background: none;
   color: var(--gold-ink);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -860,6 +989,102 @@ td.item button {
 .pager button:disabled {
   color: var(--muted);
   cursor: default;
+}
+
+/* The addon's cards: four across, a label, a figure and a line under it. */
+.cards,
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.cards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stat {
+  min-width: 0;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.stat dt {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.stat dd {
+  margin: 0;
+}
+
+.stat .figure {
+  margin-top: 3px;
+  font: 19px/1.2 var(--sans);
+}
+
+/* A sum wider than its card breaks between its coins. */
+.stat .money {
+  white-space: normal;
+}
+
+.stat .note {
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat .note .money {
+  white-space: nowrap;
+}
+
+.panel .stat .figure {
+  font-size: 17px;
+}
+
+/* The addon's lines of a side panel: a label at the left, a figure at the right. */
+.lines {
+  margin: 0;
+}
+
+.lines div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lines dd {
+  margin: 0;
+  font: 15px var(--sans);
+  text-align: right;
+}
+
+.lines dd > [class^="quality-"] {
+  font: 14px var(--serif);
+}
+
+.side-by-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.77fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.chart-panel {
+  padding: 4px 6px 0;
+}
+
+.chart-panel .chart {
+  margin: 0;
 }
 
 @media (min-width: 1240px) {
@@ -873,14 +1098,14 @@ td.item button {
 
   #detail {
     position: sticky;
-    top: calc(var(--top) + 14px);
-    max-height: calc(100vh - var(--top) - 28px);
+    top: calc(var(--top) + 10px);
+    max-height: calc(100vh - var(--top) - 20px);
     overflow-y: auto;
   }
 }
 
 @media (min-width: 1240px) and (max-width: 1399px) {
-  #prices-view:has(> #detail:not([hidden])) #prices .spark {
+  #prices-view:has(> #detail:not([hidden])) #prices-table :is(.spark-column, .seen) {
     display: none;
   }
 }
@@ -888,18 +1113,18 @@ td.item button {
 .detail-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 12px;
+  align-items: center;
+  gap: 4px 12px;
 }
 
 #detail-title {
-  font-size: 25px;
+  margin-right: auto;
+  font-size: 22px;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
 .external {
-  margin-left: auto;
   font-size: 13px;
   text-decoration: none;
 }
@@ -914,64 +1139,19 @@ td.item button {
 
 #detail-subtitle {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 12px;
+}
+
+#detail .summary {
+  margin-top: 10px;
 }
 
 #history {
-  margin-top: 16px;
-}
-
-.summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 8px;
-  margin: 12px 0 0;
-}
-
-.stat {
-  min-width: 0;
-  padding: 7px 10px 8px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--panel);
-}
-
-.panel .stat {
-  border-color: var(--edge);
-}
-
-/* Small enough that a three-coin price fits a quarter of the item panel. */
-.panel .stat dd {
-  font-size: 15px;
-}
-
-.stat dt {
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-}
-
-/* A sum wider than its card breaks between its coins. */
-.stat .money {
-  white-space: normal;
-}
-
-.stat dd {
-  margin: 2px 0 0;
-  font-size: 17px;
-  font-weight: 500;
-}
-
-.stat .note {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
+  margin-top: 14px;
 }
 
 .disclosure {
-  margin: 8px 0 12px;
+  margin: 8px 0 4px;
   padding: 4px 2px;
   border: 0;
   background: none;
@@ -998,7 +1178,7 @@ td.item button {
   gap: 4px 16px;
   margin-top: 12px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .key {
@@ -1006,7 +1186,6 @@ td.item button {
   width: 14px;
   height: 2px;
   margin-right: 6px;
-  border-radius: 1px;
   vertical-align: middle;
 }
 
@@ -1024,13 +1203,12 @@ td.item button {
 
 .chart text {
   fill: var(--muted);
-  font-size: 11px;
+  font: 12px var(--sans);
   font-variant-numeric: tabular-nums;
 }
 
 .chart text.value {
   fill: var(--ink);
-  font-weight: 700;
 }
 
 .grid {
@@ -1046,12 +1224,11 @@ td.item button {
 .crosshair {
   stroke: var(--muted);
   stroke-width: 1;
-  stroke-dasharray: 3 3;
 }
 
 .line {
   fill: none;
-  stroke-width: 1.8;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1066,11 +1243,11 @@ td.item button {
 }
 
 .bar {
-  fill: color-mix(in srgb, var(--gold) 30%, transparent);
+  fill: color-mix(in srgb, var(--gold) 45%, transparent);
 }
 
 .bar.active {
-  fill: color-mix(in srgb, var(--gold) 70%, transparent);
+  fill: var(--gold);
 }
 
 .key.bar-key {
@@ -1079,22 +1256,23 @@ td.item button {
   background: color-mix(in srgb, var(--gold) 55%, transparent);
 }
 
+/* The addon's chart tooltip: a dark box in a gold line. */
 .tooltip {
   position: absolute;
   top: 0;
-  min-width: 150px;
-  padding: 8px 10px;
-  border: 1px solid var(--edge);
-  border-radius: 2px;
+  min-width: 140px;
+  padding: 6px 9px;
+  border: 1px solid var(--gold);
   background: var(--panel);
-  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 25%);
   font-size: 12px;
   pointer-events: none;
 }
 
 .tooltip .when {
-  margin-bottom: 4px;
-  color: var(--muted);
+  margin-bottom: 3px;
+  color: var(--gold-ink);
+  font-size: 14px;
 }
 
 .tooltip .row {
@@ -1109,7 +1287,7 @@ td.item button {
 }
 
 .tooltip strong {
-  font-variant-numeric: tabular-nums;
+  font: 400 14px var(--sans);
 }
 
 .tooltip .name {
@@ -1117,18 +1295,18 @@ td.item button {
 }
 
 .sellers {
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
 .sellers h3 {
-  font-size: 19px;
+  font-size: 17px;
 }
 
 .sellers p {
   margin-block: 6px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 #summary,
@@ -1175,7 +1353,6 @@ td.item button {
 .key.earlier-key {
   height: 0;
   border-top: 2px dashed var(--muted);
-  border-radius: 0;
 }
 
 .order-book tbody tr.active td {
@@ -1193,7 +1370,7 @@ td.item button {
 .order-book caption {
   margin-bottom: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   text-align: left;
 }
 
@@ -1223,12 +1400,12 @@ td.item button {
 #comparison-title {
   margin-right: auto;
   color: var(--gold-ink);
-  font-size: 20px;
+  font-size: 18px;
 }
 
 #comparison > .muted {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 #comparison-legend {
@@ -1243,9 +1420,9 @@ td.item button {
   align-items: center;
   gap: 6px;
   border-color: var(--edge);
-  background: var(--field);
+  background: var(--page);
   color: var(--ink);
-  font: 13px var(--sans);
+  font-size: 13px;
 }
 
 #comparison-status:empty {
@@ -1265,16 +1442,16 @@ td.item button {
   min-width: 600px;
 }
 
-.roster {
-  display: grid;
-  gap: 14px;
+/* Under Gold's characters: the account's ID, and the form to link another. */
+.account-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
 }
 
-.roster-head .link {
-  margin-left: auto;
-}
-
-.roster-head .link[open] {
+.account-link .link[open] {
   flex-basis: 100%;
 }
 
@@ -1295,219 +1472,18 @@ td.item button {
 }
 
 .link .login {
-  margin: 10px 0 0 auto;
+  margin: 10px 0 2px auto;
+  font-size: 14px;
 }
 
-.character-list {
+.trades {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.character-list a {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 2px 12px;
-  height: 100%;
-  padding: 9px 12px 10px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--panel);
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.character-list a:hover {
-  border-color: var(--edge);
-  background: linear-gradient(var(--tint), var(--tint)), var(--panel);
-}
-
-.character-list a[aria-current] {
-  border-color: var(--gold-edge);
-  box-shadow: inset 0 2px 0 var(--gold);
-}
-
-.character-list .name {
-  font: 19px/1.2 var(--serif);
-  overflow-wrap: anywhere;
-}
-
-.character-list .money {
-  font-weight: 500;
-}
-
-.character-list .about {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-#character {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  grid-template-areas:
-    "head head"
-    "gold holdings"
-    "trades trades";
-  gap: 14px;
-  align-items: start;
-}
-
-.character-head {
-  grid-area: head;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 14px;
-  margin-top: 6px;
-}
-
-#character-title {
-  font-size: 26px;
-  line-height: 1.2;
-}
-
-.character-gold {
-  grid-area: gold;
-  display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-}
-
-.character-gold .summary {
-  margin: 0;
-}
-
-.character-gold .summary,
-.trades .summary {
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-}
-
-.panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.panel-head .segmented {
-  margin-left: auto;
-}
-
-#character .holdings {
-  grid-area: holdings;
-}
-
-#character-trades {
-  grid-area: trades;
-}
-
-.holdings {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-.holding .action {
-  white-space: nowrap;
-}
-
-/* Bags and bank are two tables. Equal widths for all but the item column line
-   their columns up, unless a value is wider than its column. */
-@media (min-width: 601px) {
-  .holding .count {
-    width: 52px;
-  }
-
-  .holding .action {
-    width: 72px;
-  }
-
-  .holding .amount {
-    width: 124px;
-  }
 }
 
 .trades:empty {
   display: none;
-}
-
-/* One ruled strip rather than a grid of boxes; each note shows in full on hover. */
-.trades .summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin-top: 12px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--panel);
-}
-
-.trades .summary .stat {
-  flex: 1 1 120px;
-  padding: 6px 12px 7px;
-  border: 0;
-  border-left: 1px solid var(--line);
-  border-radius: 0;
-  background: none;
-}
-
-.trades .summary .stat:first-child {
-  border-left: 0;
-}
-
-.trades .summary .stat dd {
-  font-size: 15px;
-}
-
-.trades .summary .stat .note {
-  overflow: hidden;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.trades h4 {
-  margin-top: 18px;
-  margin-bottom: 4px;
-  color: var(--ink-soft);
-  font-size: 16px;
-}
-
-.trades .item-name {
-  overflow-wrap: break-word;
-}
-
-.trades .disclosure {
-  margin-inline: 12px;
-}
-
-.trade-list .when,
-.trade-list .side {
-  white-space: nowrap;
-}
-
-.trade-list td.side {
-  color: var(--muted);
-}
-
-.trade-list .character a {
-  color: var(--ink);
-}
-
-.back {
-  display: inline-block;
-  margin-block: -6px 6px;
-  padding-block: 6px;
-  font-size: 13px;
-}
-
-.back::before {
-  content: "← " / "";
 }
 
 .login {
@@ -1522,7 +1498,7 @@ td.item button {
 }
 
 #login-title {
-  font-size: 26px;
+  font-size: 24px;
 }
 
 form label {
@@ -1531,19 +1507,17 @@ form label {
   gap: 4px;
   color: var(--muted);
   font-size: 11px;
-  letter-spacing: 0.9px;
   text-transform: uppercase;
 }
 
 .login .muted {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .code {
   width: 100%;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 14px;
-  letter-spacing: 0;
   text-transform: none;
 }
 
@@ -1554,13 +1528,9 @@ form label {
   gap: 8px;
 }
 
-.secret .button {
-  padding-block: 5px;
-}
-
 .button.primary {
-  padding-block: 6px;
-  font-size: 16px;
+  min-height: 28px;
+  font-size: 15px;
 }
 
 .alert {
@@ -1573,14 +1543,14 @@ form label {
 
 .download {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   max-width: 720px;
 }
 
 .download .panel {
   display: grid;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 16px 18px;
 }
 
 .download .lead {
@@ -1590,7 +1560,7 @@ form label {
 
 .download h2 {
   color: var(--gold-ink);
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .download .muted {
@@ -1602,49 +1572,53 @@ form label {
 }
 
 #platforms button {
-  padding: 6px 14px;
-  font-size: 14px;
+  padding: 4px 14px;
+  font-size: 13px;
 }
 
 .download-link {
   justify-self: start;
-  padding: 8px 20px;
-  font-size: 17px;
+  padding: 6px 20px;
+  font-size: 16px;
 }
 
 code {
   padding: 1px 4px;
   border: 1px solid var(--line);
-  border-radius: 2px;
   background: var(--field);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12.5px;
 }
 
-@media (max-width: 1299px) {
-  #character {
+@media (max-width: 1099px) {
+  .side-by-side {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "head"
-      "gold"
-      "holdings"
-      "trades";
   }
 }
 
 @media (max-width: 760px) {
-  .topbar {
+  .titlebar {
     position: static;
-    padding: 8px 12px;
-    gap: 8px 12px;
+    padding: 6px 12px;
+    gap: 6px 10px;
   }
 
   .brand {
     font-size: 22px;
   }
 
+  .version {
+    margin-bottom: 4px;
+  }
+
+  .realm-picker {
+    order: 1;
+    flex: 1 1 100%;
+  }
+
   .realm-picker select {
-    max-width: 170px;
+    width: 100%;
+    max-width: none;
   }
 
   .shell {
@@ -1657,20 +1631,22 @@ code {
     height: auto;
     padding: 0;
     overflow: visible;
-    border-right: 0;
-    border-bottom: 1px solid var(--edge);
+    box-shadow: inset 0 -1px 0 var(--edge);
   }
 
   .views {
     flex-direction: row;
   }
 
+  /* The hubs share a phone's width, each its icon over its name. */
   .views a {
     flex: 1 1 0;
+    flex-direction: column;
     justify-content: center;
-    gap: 7px;
-    padding: 10px 4px;
-    font-size: 15px;
+    gap: 3px;
+    min-width: 0;
+    padding: 8px 2px 7px;
+    font-size: 13px;
   }
 
   .views a[aria-current="page"] {
@@ -1678,29 +1654,34 @@ code {
     box-shadow: inset 0 -3px 0 var(--gold);
   }
 
+  .views .group {
+    display: none;
+  }
+
   .rail-foot {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
-    padding: 8px 12px;
+    gap: 6px 12px;
+    padding: 6px 12px;
   }
 
   .rail-foot .button {
+    min-height: 24px;
+    margin-left: auto;
     padding: 2px 12px;
-    font-size: 14px;
   }
 
-  .theme-switch {
-    margin-left: auto;
+  .tabs a {
+    padding-inline: 10px;
   }
 
   .content {
-    padding: 14px 12px 24px;
+    padding: 6px 10px 20px;
   }
 
   h1 {
-    font-size: 25px;
+    font-size: 22px;
   }
 
   .search,
@@ -1708,37 +1689,41 @@ code {
     width: 100%;
   }
 
-  .chip {
+  .toolbar {
+    gap: 8px;
+  }
+
+  .toolbar .chip {
     flex: 1 1 140px;
   }
 
-  .chip select {
+  .toolbar .chip select {
     width: 100%;
   }
 
-  .panel:not(.prices-panel, .holdings .panel, .trades) {
-    padding: 12px;
+  .panel:not(.list-panel) {
+    padding: 10px;
   }
 
   .download .panel {
-    padding: 14px;
+    padding: 12px;
   }
 
+  .cards,
   .summary,
   #summary,
   .book-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  #prices .market,
-  #prices .listed,
-  #prices .spark,
+  #prices-table :is(.market, .spark-column, .seen),
+  #deals-table :is(.sells, .spark-column, .sell-to),
+  #movers-table :is(.before, .spark-column),
+  #bags-table :is(.vendor, .spark-column, .sell-to),
+  #gold-characters .played,
   #history .mode,
-  .holding .post,
-  .holding .vendor,
   .traded-items .average,
-  .trade-list .each,
-  .trade-list .character {
+  .trade-list :is(.source, .character) {
     display: none;
   }
 
@@ -1746,21 +1731,28 @@ code {
     white-space: nowrap;
   }
 
-  .trade-list .when {
+  th,
+  td {
+    padding-inline: 5px;
+  }
+
+  :is(th, td):first-child {
+    padding-left: 8px;
+  }
+
+  :is(th, td):last-child {
+    padding-right: 8px;
+  }
+
+  /* Names wrap rather than give up their ends to the figures. */
+  td:is(.item, .source) {
+    max-width: none;
+    width: auto;
     white-space: normal;
   }
 
-  th,
-  td {
-    padding-inline: 4px;
-  }
-
-  :is(.prices-panel, .holdings .panel, .trades) :is(th, td):first-child {
-    padding-left: 10px;
-  }
-
-  :is(.prices-panel, .holdings .panel, .trades) :is(th, td):last-child {
-    padding-right: 10px;
+  .purse-label {
+    display: none;
   }
 
   #comparison-chart .tooltip {
@@ -1772,9 +1764,12 @@ code {
   }
 }
 
-/* The desktop app marks the page it embeds and draws its own rail and brand beside it. */
+/* The desktop app marks the page it embeds and draws its own rail, brand and
+   theme switch beside it. */
 :root[data-embed="desktop"] .rail,
-:root[data-embed="desktop"] .brand {
+:root[data-embed="desktop"] .brand,
+:root[data-embed="desktop"] .version,
+:root[data-embed="desktop"] #theme {
   display: none;
 }
 

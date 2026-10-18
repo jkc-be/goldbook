@@ -4,7 +4,8 @@
     python3 scripts/set-version.py 0.1.5
 
 The desktop updater compares tauri.conf.json, the addon feed reads the TOC,
-and npm and Cargo refuse a lock file that disagrees with its manifest. Each
+the website's title bar shows it as the addon's does, and npm and Cargo
+refuse a lock file that disagrees with its manifest. Each
 file is edited in place, so its formatting stays as it is.
 """
 from pathlib import Path
@@ -42,6 +43,7 @@ def main():
     replace("package-lock.json", rf'(^    "": \{{\n      "name": "goldbook",\n      "version": "){VERSION}(")', version, 1)
     replace("desktop/src-tauri/tauri.conf.json", rf'(^  "version": "){VERSION}(")', version, 1)
     replace("addon/Goldbook/Goldbook.toc", rf"(^## Version: ){VERSION}()$", version, 1)
+    replace("web/index.html", rf'(<span class="version">){VERSION}(</span>)', version, 1)
     for name, manifest in CRATES.items():
         replace(manifest, rf'(\A\[package\]\n(?:\w[\w-]* = .*\n)*?name = "{name}"\nversion = "){VERSION}(")', version, 1)
         replace("Cargo.lock", rf'(^name = "{name}"\nversion = "){VERSION}(")', version, 1)

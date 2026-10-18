@@ -39,7 +39,7 @@ def main():
             ], trades
             assert trades[2] == {"name": "Sultan", "realm": "Faramon", "at": 1760000000, "side": "buy",
                                  "item": "Bandit Cinch of the Monkey", "itemKey": "9775:584", "quality": None,
-                                 "count": 1, "price": 9000, "fee": 0}, trades[2]
+                                 "count": 1, "price": 9000, "fee": 0, "party": None}, trades[2]
             assert trades[5]["itemKey"] is None and trades[5]["fee"] == 35
             mirelle = api.request("GET", "/api/trades?name=Mirelle&realm=Faramon", cookie=cookie)[0]["body"]["trades"]
             assert [(t["side"], t["price"], t["count"]) for t in mirelle if t["item"] == "Linen Cloth"] == [("buy", 1500, 20)], mirelle

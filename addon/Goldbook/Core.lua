@@ -26,14 +26,32 @@ function ns.RealmKey()
   return Database.RealmKey(identity.realm, identity.faction)
 end
 
--- "Name-Realm", as gold, the bank and the logout snapshot are filed.
+-- "Name-Realm", as gold, the bank, the logout snapshot and accounting are filed.
 local function characterKey()
   local identity = loginIdentity or Scanner.Identity()
   return identity.by .. "-" .. identity.realm
 end
+ns.CharacterKey = characterKey
 
 function ns.MinProfit()
   return ns.db.settings.minProfit or DEFAULT_MIN_PROFIT
+end
+
+-- What a vendor pays for one, as the game's tooltip says, 0 when a vendor buys
+-- none; nil while the tooltip is not loaded. The item's data from
+-- C_Item.GetItemInfo is wrong for some items: it says 9s 62c for Rough Bronze
+-- Leggings, a vendor pays 5s 77c.
+function ns.SellPrice(link)
+  local data = C_TooltipInfo.GetHyperlink(link)
+  if not data then
+    return nil
+  end
+  for _, line in ipairs(data.lines) do
+    if line.type == Enum.TooltipDataLineType.SellPrice then
+      return line.price
+    end
+  end
+  return 0
 end
 
 -- Name, quality and vendor price load asynchronously; keys still waiting,
@@ -54,7 +72,7 @@ end
 
 local function resolveItem(key)
   local itemID = Codec.BaseID(key)
-  local name, _, quality, _, _, _, _, _, _, _, vendor = C_Item.GetItemInfo(itemID)
+  local name, _, quality = C_Item.GetItemInfo(itemID)
   if not name then
     awaiting[itemID] = awaiting[itemID] or {}
     awaiting[itemID][key] = true
@@ -64,7 +82,7 @@ local function resolveItem(key)
   if not ns.db.items[key] then
     Database.SetItem(ns.db, key, name, quality or 1)
   end
-  ns.db.vendor[itemID] = vendor or 0
+  ns.db.vendor[itemID] = ns.SellPrice("item:" .. itemID)
 end
 
 local function unresolved(key)
@@ -193,17 +211,23 @@ local COMMANDS = {
   deals = function(argument)
     ns.UI.Show("deals", argument)
   end,
-  sell = function(argument)
-    ns.UI.Show("sell", argument)
+  bags = function(argument)
+    ns.UI.Show("bags", argument)
   end,
   gold = function(argument)
     ns.UI.Show("gold", argument)
   end,
-  trades = function(argument)
-    ns.UI.Show("trades", argument)
+  accounting = function(argument)
+    ns.UI.Show("accounting", argument)
+  end,
+  items = function(argument)
+    ns.UI.Show("items", argument)
   end,
   movers = function(argument)
     ns.UI.Show("movers", argument)
+  end,
+  mail = function(argument)
+    ns.UI.Show("mail", argument)
   end,
   -- A link, an exact name, or else the first name containing the text.
   item = function(argument)
@@ -272,6 +296,10 @@ local COMMANDS = {
   end,
 }
 
+-- The names the Accounting and Bags views had before.
+COMMANDS.trades = COMMANDS.accounting
+COMMANDS.sell = COMMANDS.bags
+
 SLASH_GOLDBOOK1, SLASH_GOLDBOOK2 = "/goldbook", "/gb"
 SlashCmdList.GOLDBOOK = function(input)
   local command, argument = input:match("^(%S*)%s*(.-)%s*$")
@@ -279,7 +307,7 @@ SlashCmdList.GOLDBOOK = function(input)
   if run then
     run(argument)
   else
-    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb sell  |  /gb movers  |  /gb gold  |  /gb trades  |  /gb show [text]")
+    ns.Print("/gb scan  |  /gb scan full  |  /gb deals  |  /gb bags  |  /gb movers  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb items  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
     ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end
@@ -304,7 +332,7 @@ local function bookTrades()
     if bought > 0 then
       parts[#parts + 1] = plural(bought, "purchase")
     end
-    ns.Print("Booked " .. table.concat(parts, " and ") .. " from the mailbox. Type /gb trades.")
+    ns.Print("Booked " .. table.concat(parts, " and ") .. " from the mailbox. Type /gb accounting.")
     ns.UI.RefreshSoon()
   end
 end
@@ -440,7 +468,7 @@ frame:SetScript("OnEvent", function(_, event, first, second)
   elseif event == "MERCHANT_CLOSED" then
     bookVendorSales(false)
     if vendorSales > 0 then
-      ns.Print("Booked " .. plural(vendorSales, "vendor sale") .. ". Type /gb trades.")
+      ns.Print("Booked " .. plural(vendorSales, "vendor sale") .. ". Type /gb accounting.")
     end
     vendorSales = 0
   elseif event == "AUCTION_HOUSE_SHOW" then

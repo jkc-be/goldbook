@@ -1,20 +1,27 @@
 local _, ns = ...
 local Codec, Database, Scanner, Advisor, Ledger, Trades = ns.Codec, ns.Database, ns.Scanner, ns.Advisor, ns.Ledger, ns.Trades
+local Mail = ns.Mail
 
 local UI = {}
 ns.UI = UI
 
 local WINDOW_WIDTH, WINDOW_HEIGHT = 860, 640
 local TITLE_HEIGHT, RAIL_WIDTH, RAIL_STEP = 46, 148, 36
--- The page right of the rail, inside its padding and the window's border.
-local PAGE_LEFT, PAGE_TOP, PAGE_WIDTH, PAGE_BOTTOM = RAIL_WIDTH + 16, TITLE_HEIGHT + 13, 681, 11
+-- The tabs of the rail's hub across the top of the page; each tab is its
+-- text with TAB_PAD either side.
+local TABS_TOP, TAB_HEIGHT, TAB_PAD = TITLE_HEIGHT + 6, 28, 14
+-- The page right of the rail and under its tabs, inside its padding and the window's border.
+local PAGE_LEFT, PAGE_TOP, PAGE_WIDTH, PAGE_BOTTOM = RAIL_WIDTH + 16, TABS_TOP + TAB_HEIGHT + 11, 681, 11
 local GAP = 10
 local HEAD_HEIGHT, TOOLBAR_HEIGHT, STATUS_HEIGHT, HEADING_HEIGHT = 28, 28, 16, 30
 local CARD_GAP, CARD_HEIGHT, CARD_DETAIL_HEIGHT = 8, 54, 72
-local HEADER_HEIGHT, ROW_HEIGHT, MAX_ROWS, MAX_COLUMNS = 27, 23, 20, 6
+local HEADER_HEIGHT, ROW_HEIGHT, MAX_ROWS, MAX_COLUMNS = 27, 23, 20, 7
 local CELL_PAD, ICON_SIZE = 10, 18
 local SPARK_WIDTH, SPARK_HEIGHT, SPARK_DAYS = 64, 16, 7
+local TAG_HEIGHT, ACTION_WIDTH, ACTION_HEIGHT = 18, 150, 24
 local SEARCH_WIDTH, CHIP_HEIGHT, MENU_WIDTH, MENU_ROW = 240, 24, 200, 22
+-- A longer menu runs in columns, so that it ends within the window.
+local MENU_ROWS = 12
 local SIDE_ROW = 26
 -- The plot sits right of its axis labels and left of the latest values'
 -- labels, under its legend, over the band of amounts and the dates.
@@ -33,6 +40,7 @@ local MIN_SCALE, MAX_SCALE = 0.7, 1.4
 local DAY = 24 * 3600
 local MONTH = 30
 local QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
+local COIN = "Interface\\Icons\\INV_Misc_Coin_01"
 local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local BACKDROP = { bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 }
@@ -50,7 +58,7 @@ local PALETTES = {
   light = {
     bg = "f0e4c4", rail = "e2cc96", panel = "fcf7e8", line = "b19c70", edge = "a08a5c", field = "fffbf0",
     text = "211a10", muted = "4e412d", railText = "3a2e1c", gold = "8a5a06", goldhi = "684202", brand = "80520a",
-    on = "e2cd92", gain = "0f5214", loss = "8e1a10",
+    on = "e2cd92", gain = "0f5214", loss = "8e1a10", warn = "803100", info = "003ea1",
     titleTop = "e4cf98", titleBottom = "d2b574",
     buttonTop = "eed59a", buttonBottom = "d8b464", buttonEdge = "8a6a24", buttonText = "2a1e04",
     hover = 0.14, area = 0.65, bar = 1, second = "464650",
@@ -60,7 +68,7 @@ local PALETTES = {
   dark = {
     bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
     text = "f2ebdd", muted = "ab9f89", railText = "d8cdb6", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
-    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a",
+    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a", warn = "ff8000", info = "3d9bff",
     titleTop = "2c2418", titleBottom = "221c13",
     buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "8a6a24", buttonText = "ffe08a",
     hover = 0.08, area = 0.42, bar = 0.6, second = "c7c7cf",
@@ -82,6 +90,7 @@ local FRIZ, NARROW = STANDARD_TEXT_FONT, NumberFontNormal:GetFont()
 local TYPE = {
   brand = { FRIZ, 22 },
   rail = { FRIZ, 16 },
+  tab = { FRIZ, 15 },
   title = { FRIZ, 22 },
   dialog = { FRIZ, 18 },
   heading = { FRIZ, 15 },
@@ -186,6 +195,29 @@ local function disc(texture, size)
   texture:SetSize(size, size)
 end
 
+-- Goldbook's crest, as the website draws it: a gold coin lit from the top left
+-- in a darker rim, with a faint glow. The same in both themes. Returns its rim,
+-- to anchor it by; `layer` is the draw layer of the coin.
+function UI.Crest(parent, size, layer)
+  layer = layer or "ARTWORK"
+  local glow = parent:CreateTexture(nil, layer, nil, -1)
+  local rim = parent:CreateTexture(nil, layer, nil, 0)
+  local coin = parent:CreateTexture(nil, layer, nil, 1)
+  local light = parent:CreateTexture(nil, layer, nil, 2)
+  disc(glow, size * 1.16)
+  glow:SetPoint("CENTER", rim)
+  glow:SetVertexColor(0.91, 0.73, 0.29, 0.18)
+  disc(rim, size)
+  rim:SetVertexColor(0.66, 0.46, 0.1, 1)
+  disc(coin, size * 0.84)
+  coin:SetPoint("CENTER", rim)
+  setGradient(coin, "VERTICAL", 0.54, 0.37, 0.06, 1, 0.91, 0.73, 0.29, 1)
+  disc(light, size * 0.62)
+  light:SetPoint("CENTER", rim, "CENTER", -size * 0.07, size * 0.09)
+  setGradient(light, "VERTICAL", 1, 0.95, 0.7, 0, 1, 0.95, 0.7, 0.6)
+  return rim
+end
+
 local function fillDisc(texture, key)
   paint(function()
     texture:SetVertexColor(rgb(key))
@@ -218,17 +250,9 @@ end
 -- client leaves out lines much shorter than 4, so curves are a few long
 -- strokes rather than many short ones.
 local GLYPHS = {
-  prices = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
-  deals = { { 8, 1, 10, 5.5, 15, 6, 11.2, 9.3, 12.3, 14.2, 8, 11.7, 3.7, 14.2, 4.8, 9.3, 1, 6, 6, 5.5, 8, 1 } },
-  sell = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
-  movers = { { 1, 12, 5, 8, 8, 11, 14, 4 }, { 10, 4, 14, 4, 14, 8 } },
-  -- Two coins stacked, their rims as flat hexagons.
-  gold = {
-    { 1.5, 5, 5, 2, 11, 2, 14.5, 5, 11, 8, 5, 8, 1.5, 5 },
-    { 1.5, 5, 1.5, 10, 5, 13, 11, 13, 14.5, 10, 14.5, 5 },
-    { 1.5, 7.5, 5, 10.5, 11, 10.5, 14.5, 7.5 },
-  },
-  trades = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
+  tag = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
+  bag = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
+  scales = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
 
 local window, scanButton
@@ -273,6 +297,11 @@ end
 local function itemIcon(key)
   local lookup = C_Item.GetItemIconByID or GetItemIcon
   return key and lookup and lookup(Codec.BaseID(key)) or QUESTION_MARK
+end
+
+-- A row's icon: its own, as gold has, or its item's.
+local function rowIcon(row)
+  return row.icon or itemIcon(row.key)
 end
 
 local function matching(rows, text)
@@ -363,13 +392,13 @@ local function keepItem(row)
     and (filters.quality == nil or row.quality == filters.quality)
 end
 
--- Trades within the last month, and the sale that brought in the most.
-local function monthOfTrades(now)
+-- Entries within the last month, and the sale of goods that brought in the most.
+local function monthOfEntries(now)
   local rows, best = {}, nil
   for _, row in ipairs(Trades.Rows(ns.db)) do
     if row.at >= now - MONTH * DAY then
       rows[#rows + 1] = row
-      if row.side ~= "buy" and (not best or row.net > best.net) then
+      if row.revenue and row.goods and (not best or row.net > best.net) then
         best = row
       end
     end
@@ -377,14 +406,25 @@ local function monthOfTrades(now)
   return rows, best
 end
 
-local function tradeCards(rows)
+local function accountingCards(rows)
   local totals = Trades.Totals(rows)
   return {
-    { "Sold", money(totals.sold) },
-    { "Bought", money(totals.bought) },
+    { "Revenue", money(totals.revenue) },
+    { "Expenses", money(totals.expenses) },
     { "Net", change(totals.net) },
     { "Realized profit", totals.profit and change(totals.profit) or tint("muted", "–") },
   }
+end
+
+-- An entry as the Accounting view names it: the goods and how many, or what
+-- the gold was for, and who it went to or came from.
+local function entryText(row)
+  local text = itemText(row) .. (row.goods and tint("muted", " x" .. row.count) or "")
+  local party = Trades.SIDE[row.side].party
+  if party and row.party then
+    text = text .. tint("muted", " · " .. party .. " " .. row.party)
+  end
+  return text
 end
 
 -- The account as a broker would state it.
@@ -412,11 +452,11 @@ local function goldChart(span)
 end
 
 local function monthLines()
-  local rows, best = monthOfTrades(time())
+  local rows, best = monthOfEntries(time())
   local totals = Trades.Totals(rows)
   return {
-    { "Sold, after the cut", money(totals.sold) },
-    { "Bought", money(totals.bought) },
+    { "Revenue", money(totals.revenue) },
+    { "Expenses", money(totals.expenses) },
     { "Net", change(totals.net) },
     { "Realized profit", totals.profit and change(totals.profit) or tint("muted", "–") },
     { "Best sale", best and itemText(best) or tint("muted", "–") },
@@ -498,16 +538,66 @@ end
 -- The column of 7 day sparklines, which has no field to sort by.
 local SPARK = { "7 days", nil, 87, spark = true }
 
+-- The mailbox as the Mail view last read it: its mails and how many more the
+-- server holds back.
+local mailbox = { mails = {}, held = 0 }
+-- Each mail category's tag colour.
+local MAIL_INKS = { sold = "gain", bought = "info", cancelled = "warn", expired = "loss", other = "muted" }
+local MAIL_LABELS, MAIL_SEGMENTS = {}, { { "all", "All" } }
+for _, category in ipairs(Mail.CATEGORIES) do
+  MAIL_LABELS[category.key] = category.label
+  MAIL_SEGMENTS[#MAIL_SEGMENTS + 1] = { category.key, category.label }
+end
+
+-- Its first item, how many, and how many other items; or its subject.
+local function mailText(mail)
+  return itemText(mail) .. ((mail.count or 1) > 1 and tint("muted", " x" .. mail.count) or "")
+    .. (#mail.items > 1 and tint("muted", " +" .. (#mail.items - 1) .. " more") or "")
+end
+
+-- Whole days left, or hours on the last day, in the warning colour from 3 days.
+local function daysLeftText(daysLeft)
+  local text = daysLeft >= 1 and (math.floor(daysLeft) .. "d") or (math.floor(daysLeft * 24) .. "h")
+  return daysLeft < 4 and tint("warn", text) or text
+end
+
+local function mailGold(mail)
+  if mail.money > 0 then
+    return stretches(palette.gain, money(mail.money))
+  elseif mail.cod > 0 then
+    return stretches(palette.loss, "COD " .. money(mail.cod))
+  end
+  return ""
+end
+
+local function collectable(rows)
+  local count = 0
+  for _, row in ipairs(rows) do
+    if Mail.Collectable(row) then
+      count = count + 1
+    end
+  end
+  return count
+end
+
 -- What the window can show, one entry per view.
 --   blocks    what stacks under the title, top to bottom; the table takes the height left over
---   columns   { label, field, width }; a header click sorts by the field
---   cells     the text of a row's columns, the sparkline column left out
+--   columns   { label, field, width }; a header click sorts by the field; `words` sets a
+--             column after the first in words, to the left; `tag` draws (row) -> text,
+--             colour from the view's `tag` as a framed tag
+--   cells     the text of a row's columns, the sparkline and tag columns left out
 --   rows      (search text, segment) -> the rows; `keep` then filters them by the toolbar's chips
---   items     rows are items to hover and click; `icons` puts the item's icon before its name
+--   items     rows are items to hover and click; `icons` puts the item's icon, or the row's
+--             own `icon`, before its name
 --   sort      { column, descending }, the order rows come in; a segment may set its own
 --   segments  { key, label } choices at the right of the title, `segment` the first one picked;
+--             `counts` (search text) -> { [key] = count } puts a count after each;
 --             `badge` instead shows a label and a value there, `aside` a line of text;
---             `rangesOnChart` puts the segments at the right of the chart's legend instead
+--             `rangesOnChart` puts the segments at the right of the chart's legend instead,
+--             `segmentsOnToolbar` at the right of the search box
+--   hub       the entry of HUBS that has the view as a tab, set from HUBS
+--   railCount () -> a count shown by the view's hub in the rail, or nil
+--   action    (rows) -> { label, enabled, run } for a button right of the status line
 --   head      (rows) -> { title, sub, figure, icon, quality, tags } for the title line;
 --             `back` puts a button before it that returns to the view the item came from
 --   cards     (rows) -> up to four { key, value, detail }
@@ -553,9 +643,8 @@ local VIEWS = {
       return matching(Advisor.Deals(ns.db, ns.RealmKey(), ns.MinProfit()), text)
     end,
     cells = function(row)
-      local sellTo = row.kind == "vendor" and (row.confirmed and "Vendor" or tint("muted", "Vendor?")) or "Auction"
       return itemText(row) .. (row.units and tint("muted", " x" .. row.units) or ""), money(row.min), money(row.sell),
-        stretches(palette.gain, money(row.total)), sellTo
+        stretches(palette.gain, money(row.total)), row.kind == "vendor" and "Vendor" or "Auction"
     end,
     head = function(rows)
       local scanned = ns.db.scanned[ns.RealmKey()]
@@ -565,18 +654,11 @@ local VIEWS = {
       return { "Min profit", money(ns.MinProfit()) }
     end,
     status = function(rows, visible)
-      local unconfirmed
-      for _, row in ipairs(rows) do
-        if row.kind == "vendor" and not row.confirmed then
-          unconfirmed = "Vendor? prices are unconfirmed"
-          break
-        end
-      end
-      return joinedStatus(scrollRange(rows, visible), "Click a deal to search for it", unconfirmed)
+      return joinedStatus(scrollRange(rows, visible), "Click a deal to search for it")
     end,
   },
-  sell = {
-    tab = "Sell",
+  bags = {
+    tab = "Bags",
     items = true,
     icons = true,
     blocks = { "toolbar", "table" },
@@ -656,43 +738,182 @@ local VIEWS = {
     end,
     cards = goldCards,
     chart = { height = 186, spec = goldChart },
-    side = { title = "Trades this month", lines = monthLines },
+    side = { title = "Accounting this month", lines = monthLines },
   },
-  trades = {
-    tab = "Trades",
+  accounting = {
+    tab = "Accounting",
     icons = true,
     blocks = { "cards", "toolbar", "table" },
     search = "Search items or characters",
-    chips = { "character" },
+    chips = { "source", "character" },
     keep = function(row)
-      return filters.character == nil or row.character == filters.character
+      return (filters.character == nil or row.character == filters.character)
+        and (filters.source == nil or row.side == filters.source)
     end,
-    columns = { { "Item", "name", 272 }, { "Each", "each", 104 }, { "Net", "net", 113 }, { "Character", "character", 108 }, { "When", "at", 82 } },
+    columns = { { "Entry", "name", 268 }, { "Source", "source", 150, words = true }, { "Net", "net", 108 }, { "Character", "character", 88 }, { "When", "at", 65 } },
     sort = { 5, true },
-    segments = { { "all", "All" }, { "sell", "Sales" }, { "buy", "Purchases" }, { "vendor", "Vendor" } },
+    segments = { { "all", "All" }, { "revenue", "Revenue" }, { "expenses", "Expenses" } },
     rows = function(text, segment)
       local needle, rows = text:lower(), {}
       for _, row in ipairs(Trades.Rows(ns.db)) do
-        if (segment == "all" or row.side == segment)
-          and (row.name:lower():find(needle, 1, true) or row.character:lower():find(needle, 1, true)) then
+        local found = needle == ""
+        for _, field in ipairs({ row.name, row.character, row.source, row.party or "" }) do
+          found = found or field:lower():find(needle, 1, true) ~= nil
+        end
+        if found and (segment == "all" or row.revenue == (segment == "revenue")) then
+          row.icon = not row.goods and COIN or nil
           rows[#rows + 1] = row
         end
       end
       return rows
     end,
     cells = function(row)
-      return itemText(row) .. tint("muted", " x" .. row.count .. (row.side == "vendor" and " · vendor" or "")),
-        money(row.each), change(row.net), row.character:match("^[^-]+"), tint("muted", Codec.Age(time() - row.at))
+      return entryText(row), tint("muted", row.source), change(row.net), row.character:match("^[^-]+"),
+        tint("muted", Codec.Age(time() - row.at))
     end,
     head = function(rows)
-      return { sub = #rows .. " booked" }
+      return { sub = #rows .. (#rows == 1 and " entry" or " entries") }
     end,
-    cards = tradeCards,
+    cards = accountingCards,
     status = function(rows, visible)
       if #Trades.Rows(ns.db) == 0 then
-        return "No trades booked. Open a mailbox or sell to a vendor to book them."
+        return "Nothing booked yet. Gold is booked as it moves. Open a mailbox to book auction sales and purchases."
       end
-      return joinedStatus(scrollRange(rows, visible), "Open a mailbox or sell to a vendor to book more trades")
+      return joinedStatus(scrollRange(rows, visible), "Open a mailbox to book auction sales and purchases")
+    end,
+  },
+  items = {
+    tab = "By item",
+    icons = true,
+    blocks = { "cards", "toolbar", "table" },
+    search = "Search items",
+    chips = { "profession", "kind", "quality", "character" },
+    -- An entry booked without its item's key matches no profession.
+    keep = function(row)
+      return (row.key ~= nil or (filters.profession == "" and filters.kind == "all")) and keepItem(row)
+    end,
+    columns = { { "Item", "name", 188 }, { "Bought", "bought", 74 }, { "Avg cost", "averageCost", 92 }, { "Sold", "sold", 52 },
+      { "Avg sale", "averageSale", 92 }, { "Profit", "profit", 94 }, { "Last", "last", 85 } },
+    sort = { 7, true },
+    -- The character chip picks the entries, before they are added up per item.
+    rows = function(text)
+      local needle, entries = text:lower(), {}
+      for _, row in ipairs(Trades.Rows(ns.db)) do
+        if (filters.character == nil or row.character == filters.character) and row.name:lower():find(needle, 1, true) then
+          entries[#entries + 1] = row
+        end
+      end
+      return Trades.Items(entries)
+    end,
+    cells = function(row)
+      local function average(copper)
+        return copper and money(math.floor(copper + 0.5)) or tint("muted", "–")
+      end
+      return itemText(row), tostring(row.bought), average(row.averageCost), tostring(row.sold), average(row.averageSale),
+        row.profit and change(row.profit) or tint("muted", "–"), tint("muted", Codec.Age(time() - row.last))
+    end,
+    head = function(rows)
+      return { sub = plural(#rows, "item") }
+    end,
+    cards = function(rows)
+      local cost, proceeds, profit, best = 0, 0, nil, nil
+      for _, row in ipairs(rows) do
+        cost, proceeds = cost + row.cost, proceeds + row.proceeds
+        if row.profit then
+          profit = (profit or 0) + row.profit
+          best = (not best or row.profit > best.profit) and row or best
+        end
+      end
+      return {
+        { "Bought", money(cost) },
+        { "Sold", money(proceeds) },
+        { "Realized profit", profit and change(profit) or tint("muted", "–") },
+        { "Best item", best and change(best.profit) or tint("muted", "–"), best and itemText(best) },
+      }
+    end,
+    status = function(rows, visible)
+      return joinedStatus(scrollRange(rows, visible), "Profit counts the units both bought and sold, at the average sale less the average cost")
+    end,
+  },
+  mail = {
+    tab = "Mail",
+    icons = true,
+    blocks = { "toolbar", "table" },
+    search = "Search the mailbox",
+    columns = { { "Mail", "name", 270 }, { "Type", "category", 92, tag = true }, { "From", "sender", 130, words = true },
+      { "Left", "daysLeft", 62 }, { "Gold", "gold", 125 } },
+    segments = MAIL_SEGMENTS,
+    segmentsOnToolbar = true,
+    counts = function(text)
+      return Mail.Counts(mailbox.mails, text)
+    end,
+    -- Only while the mailbox is open: the client keeps the inbox it last
+    -- showed after the mailbox closes, but nothing can be taken from it.
+    rows = function(text, segment)
+      local mails, held = {}, 0
+      if Mail.open then
+        mails, held = Mail.Read()
+      end
+      mailbox = { mails = mails, held = held }
+      local rows = {}
+      for _, mail in ipairs(mails) do
+        if Mail.Matches(mail, text, segment) then
+          rows[#rows + 1] = mail
+        end
+      end
+      return rows
+    end,
+    cells = function(row)
+      return mailText(row), row.sender, daysLeftText(row.daysLeft), mailGold(row)
+    end,
+    tag = function(row)
+      return MAIL_LABELS[row.category], MAIL_INKS[row.category]
+    end,
+    head = function()
+      local items = 0
+      for _, mail in ipairs(mailbox.mails) do
+        items = items + mail.attachments
+      end
+      return { sub = Mail.open and (plural(#mailbox.mails, "mail") .. " · " .. plural(items, "item")) or "The mailbox is closed" }
+    end,
+    aside = function()
+      local total = 0
+      for _, mail in ipairs(mailbox.mails) do
+        total = total + mail.money
+      end
+      return total > 0 and (money(total) .. " to collect") or ""
+    end,
+    railCount = function()
+      return Mail.open and GetInboxNumItems and (GetInboxNumItems()) or nil
+    end,
+    action = function(rows)
+      if Mail.Collector().state ~= "idle" then
+        return { label = "Stop", enabled = true, run = Mail.Stop }
+      end
+      local count = collectable(rows)
+      return {
+        label = "Collect " .. plural(count, "mail"),
+        enabled = Mail.open and count > 0 and Mail.CanCollect(),
+        run = function()
+          Mail.Collect(window.search:GetText(), chosen.mail)
+        end,
+      }
+    end,
+    status = function(rows)
+      if not Mail.open then
+        return "Open a mailbox to list your mail"
+      end
+      local all, collector, cod = #mailbox.mails, Mail.Collector(), false
+      for _, row in ipairs(rows) do
+        cod = cod or row.cod > 0
+      end
+      local free = Mail.FreeSlots()
+      return joinedStatus(
+        collector.state ~= "idle" and "Collecting" or collector.ending and Mail.ENDINGS[collector.ending] or nil,
+        #rows == all and ("Showing all " .. plural(all, "mail")) or ("Showing " .. #rows .. " of " .. plural(all, "mail")),
+        free and ("bags have " .. plural(free, "free slot")) or nil,
+        mailbox.held > 0 and ("+" .. mailbox.held .. " more after collecting") or nil,
+        cod and "COD mails are skipped" or nil)
     end,
   },
   item = {
@@ -723,7 +944,29 @@ local VIEWS = {
     end,
   },
 }
-local VIEW_ORDER = { "prices", "deals", "sell", "movers", "gold", "trades" }
+
+-- The rail's hubs, top to bottom, each with the views its tabs open, in
+-- order. Each view listed gets its `hub`; the item view has none.
+local HUBS = {
+  { key = "market", label = "Market", icon = "tag", views = { "prices", "deals", "movers" } },
+  { key = "inventory", label = "Inventory", icon = "bag", views = { "bags", "mail" } },
+  { key = "ledger", label = "Ledger", icon = "scales", views = { "gold", "accounting", "items" } },
+}
+for _, hub in ipairs(HUBS) do
+  for _, name in ipairs(hub.views) do
+    VIEWS[name].hub = hub
+  end
+end
+
+-- Every change of view comes through here, so that each hub keeps its last.
+local function setView(name)
+  view = name
+  local hub = VIEWS[name].hub
+  if hub then
+    ns.db.settings.hubViews = ns.db.settings.hubViews or {}
+    ns.db.settings.hubViews[hub.key] = name
+  end
+end
 
 -- The chips a toolbar can show: what each offers, as { value, label }.
 local FILTERS = {
@@ -744,6 +987,19 @@ local FILTERS = {
     local options = { { nil, "All qualities" } }
     for id, name in ipairs({ "Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Artifact", "Heirloom" }) do
       options[#options + 1] = { id - 1, name }
+    end
+    return options
+  end,
+  source = function()
+    local present = {}
+    for _, row in ipairs(Trades.Rows(ns.db)) do
+      present[row.side] = true
+    end
+    local options = { { nil, "All sources" } }
+    for _, side in ipairs(Trades.SIDES) do
+      if present[side[1]] then
+        options[#options + 1] = { side[1], side[2] }
+      end
     end
     return options
   end,
@@ -832,7 +1088,7 @@ local function render()
     row.icon:SetShown(item ~= nil and definition.icons == true)
     row.frame:SetShown(item ~= nil and definition.icons == true)
     if item and definition.icons then
-      row.icon:SetTexture(itemIcon(item.key))
+      row.icon:SetTexture(rowIcon(item))
       -- Common and poor items get a plain frame, better ones their quality's colour.
       row.frame:SetColorTexture(hexRGB((item.quality or 1) >= 2 and qualityHex(item.quality) or palette.edge))
     end
@@ -841,10 +1097,29 @@ local function render()
     if spark then
       drawSpark(row, item.key)
     end
+    local text, ink
+    if item and window.table.tag then
+      text, ink = definition.tag(item)
+    end
+    row.tag:SetShown(text ~= nil)
+    if text then
+      row.tag.label:SetText(text)
+      row.tag.label:SetTextColor(rgb(ink))
+      row.tag:SetBackdropBorderColor(rgb(ink))
+    end
     row.hit.item = item
     row.hit:SetShown(item ~= nil and definition.items == true)
   end
   placeScrollMarker(visible)
+  local action = definition.action and definition.action(results)
+  window.action:SetShown(action ~= nil)
+  if action then
+    window.action.label:SetText(action.label)
+    window.action.label:SetTextColor(rgb(action.enabled and "buttonText" or "muted"))
+    window.action:SetEnabled(action.enabled)
+    window.action.run = action.run
+  end
+  window.status:SetWidth(PAGE_WIDTH - (action and ACTION_WIDTH + GAP or 0))
   window.status:SetText(definition.status and definition.status(results, visible) or "")
 end
 
@@ -859,7 +1134,12 @@ local function sortBy(rows, field, descending)
       right = type(left) == "string" and "" or 0
     end
     if left == right then
-      return (a.key or a.name or a.day) < (b.key or b.name or b.day)
+      local first, second = a.key or a.name or a.day, b.key or b.name or b.day
+      -- Two mails alike keep the inbox's order.
+      if first == second and a.index then
+        return a.index < b.index
+      end
+      return first < second
     elseif descending then
       return left > right
     end
@@ -914,7 +1194,8 @@ local function placeChips(definition)
     previous = chip
   end
   local clear = toolbar.clear
-  clear:SetShown(filtered())
+  -- Segments on the toolbar take its room.
+  clear:SetShown(filtered() and not definition.segmentsOnToolbar)
   clear.label:SetPoint("LEFT", previous, "RIGHT", 17, 0)
 end
 
@@ -973,7 +1254,7 @@ local function layout(definition)
   end
 
   local left, cellIndex, sort = 0, 0, sorting[view]
-  tableFrame.spark = false
+  tableFrame.spark, tableFrame.tag = false, false
   for column = 1, MAX_COLUMNS do
     local spec = definition.columns[column]
     local header, button = window.headers[column], window.headerButtons[column]
@@ -981,9 +1262,10 @@ local function layout(definition)
     button:SetShown(spec ~= nil and spec[2] ~= nil)
     if spec then
       local sorted = sort and sort[1] == column
+      local words = column == 1 or spec.words or spec.tag
       header:SetText(spec[1]:upper() .. (sorted and (sort[2] and " ↓" or " ↑") or ""))
       header:SetTextColor(rgb(sorted and "goldhi" or "muted"))
-      header:SetJustifyH(column == 1 and "LEFT" or spec.spark and "CENTER" or "RIGHT")
+      header:SetJustifyH(words and "LEFT" or spec.spark and "CENTER" or "RIGHT")
       header:SetPoint("LEFT", tableFrame.columns, "TOPLEFT", left + CELL_PAD, -HEADER_HEIGHT / 2)
       header:SetWidth(spec[3] - 2 * CELL_PAD)
       button:SetPoint("TOPLEFT", tableFrame.columns, "TOPLEFT", left, 0)
@@ -991,17 +1273,21 @@ local function layout(definition)
       for _, row in ipairs(window.rows) do
         if spec.spark then
           row.spark:SetPoint("LEFT", row.hit, "LEFT", left + (spec[3] - SPARK_WIDTH) / 2, 0)
+        elseif spec.tag then
+          row.tag.label:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + 6, 0)
         else
           local cell = row.cells[cellIndex + 1]
           local inset = column == 1 and definition.icons and ICON_SIZE + 7 or 0
           cell:SetPoint("LEFT", row.hit, "LEFT", left + CELL_PAD + inset, 0)
           cell:SetWidth(spec[3] - 2 * CELL_PAD - inset)
-          cell:SetJustifyH(column == 1 and "LEFT" or "RIGHT")
-          cell:SetFontObject(FONT[column == 1 and "body" or "number"])
+          cell:SetJustifyH(words and "LEFT" or "RIGHT")
+          cell:SetFontObject(FONT[words and "body" or "number"])
         end
       end
       if spec.spark then
         tableFrame.spark = true
+      elseif spec.tag then
+        tableFrame.tag = true
       else
         cellIndex = cellIndex + 1
       end
@@ -1060,8 +1346,9 @@ local function drawHead(definition)
 
   if definition.segments then
     local labels, on = {}, 1
+    local counts = definition.counts and definition.counts(window.search:GetText() or "")
     for index, segment in ipairs(definition.segments) do
-      labels[index] = segment[2]
+      labels[index] = counts and (segment[2] .. " " .. tint("muted", counts[segment[1]] or 0)) or segment[2]
       if segment[1] == chosen[view] then
         on = index
       end
@@ -1081,6 +1368,9 @@ local function drawHead(definition)
   if definition.rangesOnChart then
     control:SetParent(window.chart)
     control:SetPoint("RIGHT", window.chart, "TOPRIGHT", -1 - CHART_PAD, -1 - LEGEND_TOP / 2)
+  elseif definition.segmentsOnToolbar then
+    control:SetParent(window.filters)
+    control:SetPoint("RIGHT", window.filters, "RIGHT", 0, 0)
   else
     control:SetParent(head)
     control:SetPoint("RIGHT", head, "RIGHT", 0, 0)
@@ -1432,14 +1722,28 @@ function refresh()
   if definition.chart then
     drawChart(definition.chart.spec(chosen[view]))
   end
-  for name, tab in pairs(window.tabs) do
-    local active = name == view
-    tab.selected:SetShown(active)
-    tab.bar:SetShown(active)
-    tab.label:SetTextColor(rgb(active and "goldhi" or "railText"))
-    for _, line in ipairs(tab.glyph) do
+  -- The rail with the view's hub picked, and that hub's tabs with the view
+  -- picked. The item view shows the hub of the view it goes back to.
+  local shown = definition.hub or VIEWS[origin and origin.view or "prices"].hub
+  for _, hub in ipairs(HUBS) do
+    local entry, active, count = window.hubs[hub.key], hub == shown, nil
+    entry.selected:SetShown(active)
+    entry.bar:SetShown(active)
+    entry.label:SetTextColor(rgb(active and "goldhi" or "railText"))
+    for _, line in ipairs(entry.glyph) do
       line:SetColorTexture(rgb(active and "goldhi" or "railText", 0.85))
     end
+    for _, name in ipairs(hub.views) do
+      local tab, picked = window.tabs[name], name == view
+      tab:SetShown(active)
+      tab.selected:SetShown(picked)
+      tab.label:SetTextColor(rgb(picked and "goldhi" or "railText"))
+      local viewCount = VIEWS[name].railCount and VIEWS[name].railCount()
+      count = viewCount and (count or 0) + viewCount or count
+    end
+    entry.count:SetText(count and tostring(count) or "")
+    entry.count:SetShown(count ~= nil)
+    entry.pill:SetShown(count ~= nil)
   end
   local scanned = ns.db.scanned[ns.RealmKey()]
   window.lastScan:SetText(scanned and ("Last scan " .. tint("text", Codec.Age(time() - scanned))) or "No scan yet")
@@ -1579,7 +1883,6 @@ end
 local function addMenu()
   local menu = panel(window, "panel", "edge")
   menu:SetFrameStrata("TOOLTIP")
-  menu:SetWidth(MENU_WIDTH)
   menu:EnableMouse(true)
   menu.options = {}
   menu:Hide()
@@ -1599,12 +1902,13 @@ local function openMenu(chip, name)
   menu:ClearAllPoints()
   menu:SetPoint("TOPLEFT", chip, "BOTTOMLEFT", 0, -2)
   local options = FILTERS[name]()
-  menu:SetHeight(#options * MENU_ROW + 8)
+  local columns = math.ceil(#options / MENU_ROWS)
+  local rows = math.ceil(#options / columns)
+  menu:SetSize(columns * MENU_WIDTH, rows * MENU_ROW + 8)
   for row = 1, math.max(#options, #menu.options) do
     local choice = menu.options[row]
     if not choice then
       choice = CreateFrame("Button", nil, menu)
-      choice:SetPoint("TOPLEFT", 1, -4 - (row - 1) * MENU_ROW)
       choice:SetSize(MENU_WIDTH - 2, MENU_ROW)
       choice.label = label(choice, "body", "text")
       choice.label:SetPoint("LEFT", 9, 0)
@@ -1616,6 +1920,7 @@ local function openMenu(chip, name)
       menu.options[row] = choice
     end
     local option = options[row]
+    choice:SetPoint("TOPLEFT", 1 + math.floor((row - 1) / rows) * MENU_WIDTH, -4 - (row - 1) % rows * MENU_ROW)
     choice:SetShown(option ~= nil)
     if option then
       choice.label:SetText(option[2])
@@ -1653,7 +1958,7 @@ local function addToolbar()
   search:SetScript("OnTextChanged", function(self, userInput)
     self.hint:SetShown(self:GetText() == "" and not self:HasFocus())
     if userInput and view == "item" then
-      view = "prices"
+      setView("prices")
     end
     refresh()
   end)
@@ -1761,7 +2066,7 @@ local function addHead()
   fill:SetPoint("BOTTOMRIGHT", control.edge, "BOTTOMRIGHT", -1, 1)
   UI.Fill(fill, "bg")
   control.buttons = {}
-  for index = 1, 4 do
+  for index = 1, 6 do
     local button = CreateFrame("Button", nil, control)
     button.label = label(button, "status", "muted")
     button:SetPoint("LEFT", button.label, "LEFT", -11, 0)
@@ -1831,6 +2136,13 @@ local function addRow(columns, index)
       searchAuctionHouse(self.item.name)
     end
   end)
+  -- Its text sizes the frame around it; the table places the text.
+  local tag = addChip(columns, "")
+  tag.label:SetFontObject(FONT.status)
+  tag:SetPoint("LEFT", tag.label, "LEFT", -6, 0)
+  tag:SetPoint("RIGHT", tag.label, "RIGHT", 6, 0)
+  tag:SetHeight(TAG_HEIGHT)
+  tag:EnableMouse(false)
 
   local rule = columns:CreateTexture(nil, "BORDER")
   rule:SetPoint("TOPLEFT", hit, "BOTTOMLEFT")
@@ -1854,7 +2166,7 @@ local function addRow(columns, index)
       spark.lines[segment] = line
     end
   end
-  return { cells = cells, rule = rule, icon = icon, frame = frame, spark = spark, hit = hit }
+  return { cells = cells, rule = rule, icon = icon, frame = frame, spark = spark, tag = tag, hit = hit }
 end
 
 local function addTable()
@@ -2009,42 +2321,50 @@ local function addRail()
   edge:SetWidth(1)
   UI.Fill(edge, "edge")
 
-  window.tabs = {}
-  for index, name in ipairs(VIEW_ORDER) do
-    local tab = CreateFrame("Button", nil, rail)
-    tab:SetPoint("TOPLEFT", 0, -10 - (index - 1) * RAIL_STEP)
-    tab:SetSize(RAIL_WIDTH, RAIL_STEP)
-    tab.selected = tab:CreateTexture(nil, "BACKGROUND")
-    tab.selected:SetAllPoints()
-    shade(tab.selected, "HORIZONTAL", "gold", 0.16, "gold", 0)
-    tab.bar = tab:CreateTexture(nil, "ARTWORK")
-    tab.bar:SetPoint("TOPLEFT")
-    tab.bar:SetPoint("BOTTOMLEFT")
-    tab.bar:SetWidth(3)
-    UI.Fill(tab.bar, "gold")
-    tab.label = label(tab, "rail", "railText")
-    tab.label:SetPoint("LEFT", 40, 0)
-    tab.label:SetText(VIEWS[name].tab)
-    local box = CreateFrame("Frame", nil, tab)
+  window.hubs = {}
+  for index, hub in ipairs(HUBS) do
+    local entry = CreateFrame("Button", nil, rail)
+    entry:SetPoint("TOPLEFT", 0, -10 - (index - 1) * RAIL_STEP)
+    entry:SetSize(RAIL_WIDTH, RAIL_STEP)
+    entry.selected = entry:CreateTexture(nil, "BACKGROUND")
+    entry.selected:SetAllPoints()
+    shade(entry.selected, "HORIZONTAL", "gold", 0.16, "gold", 0)
+    entry.bar = entry:CreateTexture(nil, "ARTWORK")
+    entry.bar:SetPoint("TOPLEFT")
+    entry.bar:SetPoint("BOTTOMLEFT")
+    entry.bar:SetWidth(3)
+    UI.Fill(entry.bar, "gold")
+    entry.label = label(entry, "rail", "railText")
+    entry.label:SetPoint("LEFT", 40, 0)
+    entry.label:SetText(hub.label)
+    local box = CreateFrame("Frame", nil, entry)
     box:SetPoint("LEFT", 14, 0)
     box:SetSize(16, 16)
-    tab.glyph = {}
+    entry.glyph = {}
     -- A client without lines shows the labels alone.
-    if tab.CreateLine then
-      for _, stroke in ipairs(GLYPHS[name]) do
+    if entry.CreateLine then
+      for _, stroke in ipairs(GLYPHS[hub.icon]) do
         for point = 3, #stroke, 2 do
-          local line = tab:CreateLine(nil, "ARTWORK")
+          local line = entry:CreateLine(nil, "ARTWORK")
           line:SetThickness(1.5)
           line:SetStartPoint("TOPLEFT", box, stroke[point - 2], -stroke[point - 1])
           line:SetEndPoint("TOPLEFT", box, stroke[point], -stroke[point + 1])
-          tab.glyph[#tab.glyph + 1] = line
+          entry.glyph[#entry.glyph + 1] = line
         end
       end
     end
-    tab:SetScript("OnClick", function()
-      UI.Show(name)
+    entry.count = label(entry, "header", "bg")
+    entry.count:SetPoint("RIGHT", -16, 0)
+    entry.pill = entry:CreateTexture(nil, "ARTWORK")
+    entry.pill:SetPoint("TOPLEFT", entry.count, "TOPLEFT", -6, 3)
+    entry.pill:SetPoint("BOTTOMRIGHT", entry.count, "BOTTOMRIGHT", 6, -3)
+    UI.Fill(entry.pill, "goldhi")
+    -- Opens the view the hub showed last, or its first.
+    entry:SetScript("OnClick", function()
+      local last = ns.db.settings.hubViews and ns.db.settings.hubViews[hub.key]
+      UI.Show(VIEWS[last] and VIEWS[last].hub == hub and last or hub.views[1])
     end)
-    window.tabs[name] = tab
+    window.hubs[hub.key] = entry
   end
 
   local rule = rail:CreateTexture(nil, "BORDER")
@@ -2067,6 +2387,48 @@ local function addRail()
     GameTooltip:Show()
   end)
   window.reload:SetScript("OnLeave", GameTooltip_Hide)
+end
+
+-- Every hub's tabs along the top of the page, over a rule; refresh shows
+-- those of one hub. A tab is sized from its text, so the text is what gets
+-- placed, after the tab before it.
+local function addTabs()
+  local strip = CreateFrame("Frame", nil, window)
+  strip:SetPoint("TOPLEFT", window, "TOPLEFT", PAGE_LEFT, -TABS_TOP)
+  strip:SetSize(PAGE_WIDTH, TAB_HEIGHT)
+  local rule = strip:CreateTexture(nil, "BORDER")
+  rule:SetPoint("BOTTOMLEFT")
+  rule:SetPoint("BOTTOMRIGHT")
+  rule:SetHeight(1)
+  UI.Fill(rule, "line")
+
+  window.tabs = {}
+  for _, hub in ipairs(HUBS) do
+    local previous
+    for _, name in ipairs(hub.views) do
+      local tab = CreateFrame("Button", nil, strip)
+      tab.label = label(tab, "tab", "railText")
+      tab.label:SetText(VIEWS[name].tab)
+      if previous then
+        tab.label:SetPoint("LEFT", previous, "RIGHT", TAB_PAD, 0)
+      else
+        tab.label:SetPoint("LEFT", strip, "LEFT", TAB_PAD, 0)
+      end
+      tab:SetPoint("LEFT", tab.label, "LEFT", -TAB_PAD, 0)
+      tab:SetPoint("RIGHT", tab.label, "RIGHT", TAB_PAD, 0)
+      tab:SetHeight(TAB_HEIGHT)
+      tab.selected = tab:CreateTexture(nil, "ARTWORK")
+      tab.selected:SetPoint("BOTTOMLEFT")
+      tab.selected:SetPoint("BOTTOMRIGHT")
+      tab.selected:SetHeight(2)
+      UI.Fill(tab.selected, "gold")
+      tab:SetScript("OnClick", function()
+        UI.Show(name)
+      end)
+      window.tabs[name] = tab
+      previous = tab
+    end
+  end
 end
 
 -- The band across the top of a Goldbook frame, gilded along its top edge,
@@ -2159,14 +2521,8 @@ end
 
 local function addTitleBar()
   local bar = UI.TitleBar(window, TITLE_HEIGHT)
-  local rim = bar:CreateTexture(nil, "ARTWORK")
-  disc(rim, 22)
+  local rim = UI.Crest(bar, 22)
   rim:SetPoint("LEFT", 14, 0)
-  rim:SetVertexColor(0.66, 0.46, 0.1, 1)
-  local coin = bar:CreateTexture(nil, "ARTWORK", nil, 1)
-  disc(coin, 18)
-  coin:SetPoint("CENTER", rim)
-  setGradient(coin, "VERTICAL", 0.6, 0.4, 0.07, 1, 1, 0.94, 0.7, 1)
 
   local brand = label(bar, "brand", "brand")
   brand:SetPoint("LEFT", rim, "RIGHT", 12, 0)
@@ -2226,6 +2582,7 @@ local function createWindow()
 
   addTitleBar()
   addRail()
+  addTabs()
   addHead()
   addToolbar()
   addCards()
@@ -2236,6 +2593,12 @@ local function createWindow()
   window.status:SetPoint("BOTTOMLEFT", PAGE_LEFT, PAGE_BOTTOM + 2)
   window.status:SetWidth(PAGE_WIDTH)
   window.status:SetJustifyH("LEFT")
+
+  window.action = UI.Button(window, "", ACTION_WIDTH, ACTION_HEIGHT)
+  window.action:SetPoint("BOTTOMRIGHT", -(WINDOW_WIDTH - PAGE_LEFT - PAGE_WIDTH), PAGE_BOTTOM - 3)
+  window.action:SetScript("OnClick", function(self)
+    self.run()
+  end)
 end
 
 -- Opens the window on a view. Without `text` the search box keeps its text.
@@ -2243,7 +2606,7 @@ function UI.Show(name, text)
   if not window then
     createWindow()
   end
-  view = name
+  setView(name)
   window:Show()
   window:Raise()
   if text and text ~= window.search:GetText() then
@@ -2278,7 +2641,7 @@ end
 function UI.Back()
   local back = origin or { view = "prices" }
   origin = nil
-  view = back.view
+  setView(back.view)
   if back.filters then
     filters = back.filters
     chipLabels()
@@ -2292,6 +2655,13 @@ function UI.Back()
   end
   offset = math.max(0, math.min(back.offset or 0, #results - visibleRows()))
   render()
+end
+
+-- Hides the window if it shows the view `name`.
+function UI.Close(name)
+  if window and window:IsShown() and view == name then
+    window:Hide()
+  end
 end
 
 function UI.Toggle()

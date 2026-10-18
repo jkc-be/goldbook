@@ -367,6 +367,211 @@ async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
         assert_eq!((status, body), expected, "{target}");
     }
 }
+// Faramon-Horde's scans on the three days before day 20371 and on that day,
+// one the day before the export's window, and one of the Alliance.
+async fn market() -> Fixture {
+    let f = Fixture::new();
+    let names = json!({
+        "2589": ["Linen Cloth", 1], "2592": ["Wool Cloth", 1], "2318": ["Light Leather", 1],
+        "2319": ["Medium Leather", 1], "4306": ["Silk Cloth", 1], "2320": ["Coarse Thread", 1],
+        "2835": ["Rough Stone", 1], "7070": ["Elemental Water", 1], "2449": ["Earthroot", 1],
+        "765": ["Silverleaf", 1]
+    });
+    let scans = [
+        (
+            "Horde",
+            1754870399,
+            "replicate",
+            json!([["2319", 10000, 10000, 3, 1]]),
+        ),
+        (
+            "Horde",
+            1759798800,
+            "replicate",
+            json!([
+                ["2589", 10000, 10500, 5, 2],
+                ["2318", 10000, 10000, 3, 1],
+                ["4306", 10000, 10000, 3, 1],
+                ["2320", 10000, 10000, 3, 1],
+                ["2770", 1000, 1000, 3, 1]
+            ]),
+        ),
+        (
+            "Horde",
+            1759885200,
+            "replicate",
+            json!([
+                ["2589", 11000, 11000, 5, 2],
+                ["2318", 10000, 10000, 3, 1],
+                ["2319", 10000, 10000, 3, 1],
+                ["4306", 10000, 10000, 3, 1],
+                ["2320", 10000, 10000, 3, 1],
+                ["2770", 1000, 1000, 3, 1]
+            ]),
+        ),
+        (
+            "Horde",
+            1759971600,
+            "browse",
+            json!([
+                ["2589", 9000, 0, 5, 0],
+                ["2318", 10000, 0, 3, 0],
+                ["2319", 10000, 0, 3, 0],
+                ["4306", 1000, 0, 3, 0],
+                ["2320", 10000, 0, 3, 0],
+                ["2770", 1000, 0, 3, 0],
+                ["2835", 50, 0, 3, 0],
+                ["7070", 300, 0, 3, 0],
+                ["2449", 1000, 0, 3, 0],
+                ["765", 200, 0, 3, 0]
+            ]),
+        ),
+        (
+            "Horde",
+            1759975200,
+            "browse",
+            json!([["2589", 9500, 0, 5, 0]]),
+        ),
+        (
+            "Horde",
+            1760058000,
+            "replicate",
+            json!([
+                ["2589", 6000, 30000, 4, 2],
+                ["2592", 5000, 10000, 12, 3],
+                ["2318", 7500, 12000, 3, 1],
+                ["2319", 5000, 0, 2, 1],
+                ["2320", 1000, 0, 20, 2],
+                ["2770", 500, 0, 7, 2],
+                ["2835", 90, 95, 40, 4],
+                ["7070", 450, 0, 5, 1],
+                ["2449", 1100, 1200, 9, 2],
+                ["765", 200, 210, 6, 1]
+            ]),
+        ),
+        (
+            "Alliance",
+            1759971660,
+            "browse",
+            json!([["2589", 1, 0, 1, 0]]),
+        ),
+    ];
+    for (faction, at, mode, rows) in scans {
+        let scan = json!({"realm":"Faramon","faction":faction,"region":"EU","scannedAt":at,"mode":mode,"scanner":"Sultan","build":"1.60.1.70338","rows":rows,"items":names});
+        assert_eq!(call(&f.app, "POST", "/api/scans", scan, &AUTH).await.0, 200);
+    }
+    f
+}
+fn newest() -> Value {
+    json!({"id":6,"scannedAt":1760058000,"mode":"replicate","itemCount":10,"scanner":"Sultan"})
+}
+#[tokio::test]
+async fn deals_are_the_flips_the_addon_finds_in_the_newest_scan() {
+    let f = market().await;
+    let wool = json!({"itemKey":"2592","name":"Wool Cloth","quality":1,"minBuyout":5000,"sell":10000,"profit":4500,"quantity":12});
+    let linen = json!({"itemKey":"2589","name":"Linen Cloth","quality":1,"minBuyout":6000,"sell":10000,"profit":3500,"quantity":4});
+    let unnamed = json!({"itemKey":"2770","name":null,"quality":null,"minBuyout":500,"sell":1000,"profit":450,"quantity":7});
+    for (query, expected) in [
+        (
+            "",
+            json!({"scan":newest(),"minProfit":1000,"total":2,"items":[wool, linen]}),
+        ),
+        (
+            "&minProfit=400",
+            json!({"scan":newest(),"minProfit":400,"total":3,"items":[wool, linen, unnamed]}),
+        ),
+        (
+            "&minProfit=400&limit=1&offset=1",
+            json!({"scan":newest(),"minProfit":400,"total":3,"items":[linen]}),
+        ),
+        (
+            "&q=linen",
+            json!({"scan":newest(),"minProfit":1000,"total":1,"items":[linen]}),
+        ),
+    ] {
+        let target = format!("/api/deals?realm=Faramon&faction=Horde{query}");
+        let (status, _, body) = call(&f.app, "GET", &target, Value::Null, &[]).await;
+        assert_eq!((status, body), (200, expected), "{query}");
+    }
+    for (target, expected) in [
+        (
+            "/api/deals?realm=Faramon&faction=Horde&minProfit=-1",
+            (
+                400,
+                json!({"error":"minProfit must be an integer from 0 to 9007199254740991"}),
+            ),
+        ),
+        (
+            "/api/deals?realm=Faramon&faction=Horde&quality=9",
+            (
+                400,
+                json!({"error":"quality must be an integer from 0 to 7"}),
+            ),
+        ),
+        (
+            "/api/deals?realm=Faramon",
+            (400, json!({"error":"faction is required"})),
+        ),
+        (
+            "/api/deals?realm=Nowhere&faction=Horde",
+            (404, json!({"error":"no scans for this realm and faction"})),
+        ),
+    ] {
+        let (status, _, body) = call(&f.app, "GET", target, Value::Null, &[]).await;
+        assert_eq!((status, body), expected, "{target}");
+    }
+}
+#[tokio::test]
+async fn movers_compare_the_newest_scan_with_the_day_before() {
+    let f = market().await;
+    let item = |key: &str, name: &str, min: u64, before: u64, change: f64, quantity: u64| json!({"itemKey":key,"name":name,"quality":1,"minBuyout":min,"before":before,"change":change,"quantity":quantity});
+    let unnamed = json!({"itemKey":"2770","name":null,"quality":null,"minBuyout":500,"before":1000,"change":-50.0,"quantity":7});
+    for (query, expected) in [
+        (
+            "",
+            json!({"scan":newest(),"total":2,"items":[
+                item("7070", "Elemental Water", 450, 300, 50.0, 5),
+                item("2449", "Earthroot", 1100, 1000, 10.0, 9),
+            ]}),
+        ),
+        (
+            "&direction=fallers",
+            json!({"scan":newest(),"total":5,"items":[
+                item("2320", "Coarse Thread", 1000, 10000, -90.0, 20),
+                item("2319", "Medium Leather", 5000, 10000, -50.0, 2),
+                unnamed,
+                item("2589", "Linen Cloth", 6000, 9000, -33.3, 4),
+                item("2318", "Light Leather", 7500, 10000, -25.0, 3),
+            ]}),
+        ),
+        (
+            "&direction=fallers&q=leather&limit=1",
+            json!({"scan":newest(),"total":2,"items":[
+                item("2319", "Medium Leather", 5000, 10000, -50.0, 2),
+            ]}),
+        ),
+    ] {
+        let target = format!("/api/movers?realm=Faramon&faction=Horde{query}");
+        let (status, _, body) = call(&f.app, "GET", &target, Value::Null, &[]).await;
+        assert_eq!((status, body), (200, expected), "{query}");
+    }
+    for (target, expected) in [
+        (
+            "/api/movers?realm=Faramon&faction=Horde&direction=up",
+            (
+                400,
+                json!({"error":"direction must be one of risers, fallers"}),
+            ),
+        ),
+        (
+            "/api/movers?realm=Nowhere&faction=Horde",
+            (404, json!({"error":"no scans for this realm and faction"})),
+        ),
+    ] {
+        let (status, _, body) = call(&f.app, "GET", target, Value::Null, &[]).await;
+        assert_eq!((status, body), expected, "{target}");
+    }
+}
 #[tokio::test]
 async fn account_ownership_rotation_and_sessions_remain_atomic() {
     let f = Fixture::new();
@@ -538,7 +743,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
     );
     assert_eq!(
         first[0],
-        json!({"name":"Mirelle","realm":"Faramon","at":1760000200,"side":"buy","item":"Linen Cloth","itemKey":"2589","quality":1,"count":20,"price":1500,"fee":0}),
+        json!({"name":"Mirelle","realm":"Faramon","at":1760000200,"side":"buy","item":"Linen Cloth","itemKey":"2589","quality":1,"count":20,"price":1500,"fee":0,"party":null}),
         "newest first, with the quality of a known item"
     );
     assert_eq!(first[3]["quality"], Value::Null);
@@ -691,6 +896,118 @@ async fn vendor_sales_are_trades_without_a_cut() {
             400,
             json!("trades[0].fee must not exceed the price, and only an auction sale has one")
         )
+    );
+}
+fn entry(at: u64, side: &str, item: &str, count: u64, price: u64, party: Option<&str>) -> Value {
+    json!({"name":"Sultan","realm":"Faramon","at":at,"side":side,"item":item,"itemKey":null,"count":count,"price":price,"fee":0,"party":party})
+}
+#[tokio::test]
+async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
+    let f = Fixture::new();
+    let mut upload = account();
+    let mut sale = entry(
+        1760000900,
+        "tradeSell",
+        "Linen Cloth",
+        20,
+        0,
+        Some("Mirelle"),
+    );
+    sale["itemKey"] = json!("2589");
+    let entries = [
+        sale,
+        entry(1760000850, "tradeIn", "Gold", 1, 50000, Some("Mirelle")),
+        entry(
+            1760000800,
+            "cod",
+            "Gnomish Widget",
+            1,
+            7000,
+            Some("Mirelle"),
+        ),
+        entry(1760000700, "merchant", "Simple Flour", 5, 125, None),
+        entry(
+            1760000600,
+            "mailIn",
+            "Thanks for the help",
+            1,
+            12000,
+            Some("Mirelle"),
+        ),
+        entry(1760000500, "quest", "The Defias Brotherhood", 1, 3500, None),
+        entry(1760000400, "repair", "Repairs", 1, 3456, None),
+        entry(1759996800, "loot", "Looted gold", 37, 8120, None),
+    ];
+    upload["trades"] = json!(entries);
+    assert_eq!(
+        call(&f.app, "POST", "/api/account", upload.clone(), &AUTH)
+            .await
+            .0,
+        200
+    );
+    let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    let expected = json!([
+        {"name":"Sultan","realm":"Faramon","at":1760000900,"side":"tradeSell","item":"Linen Cloth","itemKey":"2589","quality":null,"count":20,"price":0,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000850,"side":"tradeIn","item":"Gold","itemKey":null,"quality":null,"count":1,"price":50000,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000800,"side":"cod","item":"Gnomish Widget","itemKey":null,"quality":null,"count":1,"price":7000,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000700,"side":"merchant","item":"Simple Flour","itemKey":null,"quality":null,"count":5,"price":125,"fee":0,"party":null},
+        {"name":"Sultan","realm":"Faramon","at":1760000600,"side":"mailIn","item":"Thanks for the help","itemKey":null,"quality":null,"count":1,"price":12000,"fee":0,"party":"Mirelle"},
+        {"name":"Sultan","realm":"Faramon","at":1760000500,"side":"quest","item":"The Defias Brotherhood","itemKey":null,"quality":null,"count":1,"price":3500,"fee":0,"party":null},
+        {"name":"Sultan","realm":"Faramon","at":1760000400,"side":"repair","item":"Repairs","itemKey":null,"quality":null,"count":1,"price":3456,"fee":0,"party":null},
+        {"name":"Sultan","realm":"Faramon","at":1759996800,"side":"loot","item":"Looted gold","itemKey":null,"quality":null,"count":37,"price":8120,"fee":0,"party":null}
+    ]);
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"],
+        expected
+    );
+    for t in upload["trades"].as_array_mut().unwrap() {
+        t.as_object_mut().unwrap().remove("party");
+    }
+    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"],
+        expected,
+        "an upload without the party adds nothing and keeps the party booked before"
+    );
+    for (bad, message) in [
+        (
+            entry(1760001000, "gift", "Gold", 1, 100, Some("Mirelle")),
+            "trades[0].side must be one of sell, buy, vendor, merchant, tradeSell, tradeBuy, tradeIn, tradeOut, mailIn, mailOut, cod, quest, loot, repair, postage, deposit, travel, training, respec, otherIn, otherOut",
+        ),
+        (
+            entry(1760001000, "mailOut", "Gold", 1, 0, Some("Mirelle")),
+            "trades[0].price must be a positive integer",
+        ),
+        (
+            entry(1760001000, "mailOut", "Gold", 1, 100, Some("")),
+            "trades[0].party must be a string of 1 to 64 characters",
+        ),
+    ] {
+        upload["trades"] = json!([bad]);
+        let (status, _, error) = call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+        assert_eq!((status, error["error"].clone()), (400, json!(message)));
+    }
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"],
+        expected
+    );
+    let sides = "sell buy vendor merchant tradeSell tradeBuy tradeIn tradeOut mailIn mailOut cod \
+        quest loot repair postage deposit travel training respec otherIn otherOut";
+    upload["trades"] = sides
+        .split_whitespace()
+        .map(|side| entry(1760002000, side, "Gold", 1, 100, None))
+        .collect();
+    assert_eq!(
+        call(&f.app, "POST", "/api/account", upload, &AUTH).await.0,
+        200
+    );
+    assert_eq!(
+        get(&f.app, "/api/trades", &cookie).await["trades"]
+            .as_array()
+            .unwrap()
+            .len(),
+        8 + 21,
+        "the table takes every side the upload does"
     );
 }
 async fn get(app: &Router, target: &str, cookie: &str) -> Value {
@@ -906,6 +1223,28 @@ async fn desktop_handoff_csrf_body_limits_and_login_limits_are_enforced() {
         serde_json::from_slice::<Value>(&body).unwrap(),
         json!({"id":"K7Q2M9PX"})
     );
+    for (query, location) in [
+        ("?view=bags", "../#bags"),
+        ("?view=items", "../#items"),
+        ("?view=Bags", "../#characters"),
+        ("?view=%2F%2Fevil.example", "../#characters"),
+        ("?view=bags%0D%0Aset-cookie:x", "../#characters"),
+        ("?view=", "../#characters"),
+    ] {
+        let (status, headers, _) = raw(
+            &f.app,
+            "POST",
+            &format!("/api/desktop-login{query}"),
+            form.clone(),
+            &headers,
+        )
+        .await;
+        assert_eq!(
+            (status, &headers["location"]),
+            (303, &location.parse().unwrap()),
+            "{query}"
+        );
+    }
     assert_eq!(
         raw(&f.app, "POST", "/api/login", form.clone(), &headers)
             .await
@@ -1029,6 +1368,64 @@ async fn upgrading_a_python_database_preserves_ids_prices_and_retry_identity() {
     );
 }
 
+#[tokio::test]
+async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
+    let f = Fixture::new();
+    let mut upload = account();
+    upload["trades"] = json!([trade(
+        "Sultan",
+        1760000600,
+        "vendor",
+        "Broken Fang",
+        json!(null),
+        85,
+        0
+    )]);
+    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    // Rebuilding with the vendor migration again leaves the table as it was before accounting.
+    let mut db = db::connect(&f.database()).unwrap();
+    db.execute_batch(include_str!(
+        "../../../server/migrations/0008_vendor_trades.sql"
+    ))
+    .unwrap();
+    db.execute_batch("DELETE FROM migrations WHERE name='0012_accounting.sql'")
+        .unwrap();
+    assert!(
+        db.execute("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy) VALUES ('K7Q2M9PX','Sultan','Faramon',1760000700,'quest','Q',1,1,0,0)", [])
+            .is_err()
+    );
+    db::migrate(&mut db).unwrap();
+    let app = router(Config::new(f.database(), "dev-token")).unwrap();
+    upload["trades"] = json!([entry(
+        1760000700,
+        "quest",
+        "The Defias Brotherhood",
+        1,
+        3500,
+        None
+    )]);
+    assert_eq!(
+        call(&app, "POST", "/api/account", upload, &AUTH).await.0,
+        200
+    );
+    let cookie = log_in(&app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    assert_eq!(
+        get(&app, "/api/trades", &cookie).await["trades"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| (
+                t["side"].as_str().unwrap(),
+                t["item"].as_str().unwrap(),
+                t["party"].clone()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("quest", "The Defias Brotherhood", Value::Null),
+            ("vendor", "Broken Fang", Value::Null)
+        ]
+    );
+}
 #[tokio::test]
 async fn json_surrogates_validate_at_original_length_then_match_python_storage() {
     let f = Fixture::new();

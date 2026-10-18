@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9,9 +9,10 @@
     <script src="theme.js"></script>
   </head>
   <body>
-    <header class="topbar">
+    <header class="titlebar">
       <a class="brand" href="#prices"><span class="crest" aria-hidden="true"></span>Goldbook</a>
-      <label id="realm-picker" class="realm-picker">
+      <span class="version">0.2.4</span>
+      <label id="realm-picker" class="chip realm-picker">
         <span class="visually-hidden">Realm</span>
         <select id="realm"></select>
       </label>
@@ -19,38 +20,41 @@
         <span class="purse-label">Account</span>
         <span id="purse-gold"></span>
       </p>
+      <button id="theme" class="icon-button" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
+      </button>
     </header>
 
     <div class="shell">
       <aside class="rail">
-        <nav class="views" aria-label="Views">
-          <a href="#prices"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8l6-6h6v6l-6 6z" /><circle cx="11" cy="5" r="1.2" /></svg>Prices</a>
-          <a href="#characters"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="3" /><path d="M2 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /></svg>Characters</a>
-          <a href="#download"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M2 14h12" /></svg>Download</a>
-        </nav>
+        <nav id="views" class="views" aria-label="Views"></nav>
         <div class="rail-foot">
+          <p id="last-scan" class="last-scan" hidden></p>
           <p id="session" class="session" hidden></p>
-          <a id="log-in-link" class="button primary" href="#characters" hidden>Log in</a>
+          <a id="log-in-link" class="button" href="#gold" hidden>Log in</a>
           <button id="log-out" class="button" type="button" hidden>Log out</button>
-          <div class="segmented theme-switch" role="group" aria-label="Theme">
-            <button type="button" data-theme-choice="light" aria-pressed="true">Light</button>
-            <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
-          </div>
         </div>
       </aside>
 
       <div class="content">
-        <div id="price-tools">
+        <nav id="tabs" class="tabs" aria-label="Tabs" hidden></nav>
+
+        <div id="market-tools" class="tools">
           <div class="pagehead">
-            <h1>Prices</h1>
+            <h1 id="market-title">Prices</h1>
             <p id="scan" class="sub"></p>
+            <p id="min-profit" class="badge" title="The least profit a deal must make, as the addon has it by default" hidden></p>
+            <div id="mover-direction" class="segmented" role="group" aria-label="Direction" hidden>
+              <button type="button" data-direction="risers" aria-pressed="true">Risers</button>
+              <button type="button" data-direction="fallers" aria-pressed="false">Fallers</button>
+            </div>
           </div>
           <div class="toolbar">
             <label class="search">
               <span class="visually-hidden">Item</span>
-              <input id="search" type="search" placeholder="Name or item id" autocomplete="off" />
+              <input id="search" type="search" placeholder="Search items" autocomplete="off" />
             </label>
-            <label class="chip"><span class="visually-hidden">Profession</span><select id="profession"><option value="">All professions</option></select></label>
+            <label class="chip"><span class="visually-hidden">Profession</span><select id="profession" data-profession-filter><option value="">All professions</option></select></label>
             <label class="chip"><span class="visually-hidden">Item type</span><select id="item-kind">
               <option value="all">All items</option>
               <option value="materials-recipes">Materials and recipes</option>
@@ -58,8 +62,8 @@
               <option value="recipes">Recipes</option>
               <option value="crafted">Crafted items</option>
             </select></label>
-            <label class="chip"><span class="visually-hidden">Quality</span><select id="item-quality"><option value="">All qualities</option></select></label>
-            <button id="clear-filters" class="text-button" type="button">Clear filters</button>
+            <label class="chip"><span class="visually-hidden">Quality</span><select id="item-quality" data-quality-filter><option value="">All qualities</option></select></label>
+            <button id="clear-filters" class="chip-button" type="button" hidden>Clear filters</button>
           </div>
         </div>
 
@@ -75,34 +79,30 @@
             <div id="comparison-items" class="comparison-grid"></div>
           </section>
 
-          <section class="panel prices-panel" aria-labelledby="prices-title">
-            <h2 id="prices-title" class="visually-hidden">Latest prices</h2>
-            <table id="prices">
-              <thead>
-                <tr>
-                  <th scope="col" class="compare-column"><span class="visually-hidden">Compare</span></th>
-                  <th scope="col"><button data-sort="name">Item</button></th>
-                  <th scope="col" class="number"><button data-sort="min">Min buyout</button></th>
-                  <th scope="col" class="number market">
-                    <button data-sort="market">Market value</button>
-                    <span id="market-age" class="age"></span>
-                  </th>
-                  <th scope="col" class="number listed"><button data-sort="quantity">Listed</button></th>
-                  <th scope="col" class="number week">7 days</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <nav class="pager" aria-label="Pages">
-              <button id="previous">Previous</button>
-              <span id="range" class="muted"></span>
-              <button id="next">Next</button>
-            </nav>
-          </section>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="prices-title">
+              <h2 id="prices-title" class="visually-hidden">Latest prices</h2>
+              <table id="prices-table">
+                <thead>
+                  <tr>
+                    <th scope="col"><button data-sort="name">Item</button></th>
+                    <th scope="col" class="number"><button data-sort="min">Min buyout</button></th>
+                    <th scope="col" class="number market"><button data-sort="market">Market value</button></th>
+                    <th scope="col" class="spark-column">7 days</th>
+                    <th scope="col" class="number listed"><button data-sort="quantity">Listed</button></th>
+                    <th scope="col" class="number seen">Seen</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </section>
+            <nav class="pager" aria-label="Pages"></nav>
+          </div>
 
           <section id="detail" class="panel" aria-labelledby="detail-title" hidden>
             <div class="detail-head">
               <h2 id="detail-title"></h2>
+              <button id="detail-compare" class="button" type="button" aria-pressed="false">Compare</button>
               <a id="detail-wowhead" class="external" target="_blank" rel="noopener noreferrer">Wowhead</a>
             </div>
             <p id="detail-subtitle" class="muted"></p>
@@ -126,8 +126,143 @@
           </section>
         </main>
 
-        <main id="account-view" hidden>
-          <section id="login" class="panel login" aria-labelledby="login-title" hidden>
+        <main id="deals-view" hidden>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="deals-title">
+              <h2 id="deals-title" class="visually-hidden">Deals</h2>
+              <table id="deals-table"></table>
+            </section>
+            <nav class="pager" aria-label="Pages"></nav>
+          </div>
+        </main>
+
+        <main id="movers-view" hidden>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="movers-title">
+              <h2 id="movers-title" class="visually-hidden">Movers</h2>
+              <table id="movers-table"></table>
+            </section>
+            <nav class="pager" aria-label="Pages"></nav>
+          </div>
+        </main>
+
+        <main id="bags-view" hidden>
+          <div class="tools">
+            <div class="pagehead">
+              <h1>Bags</h1>
+              <p id="bags-sub" class="sub"></p>
+              <p id="bags-worth" class="aside"></p>
+            </div>
+            <div class="toolbar">
+              <label class="search">
+                <span class="visually-hidden">Item</span>
+                <input id="bags-search" type="search" placeholder="Search your bags" autocomplete="off" />
+              </label>
+              <label class="chip"><span class="visually-hidden">Profession</span><select id="bags-profession" data-profession-filter><option value="">All professions</option></select></label>
+              <label class="chip"><span class="visually-hidden">Item type</span><select id="bags-kind">
+                <option value="all">All items</option>
+                <option value="materials-recipes">Materials and recipes</option>
+                <option value="materials">Materials</option>
+                <option value="recipes">Recipes</option>
+                <option value="crafted">Crafted items</option>
+              </select></label>
+              <label class="chip"><span class="visually-hidden">Quality</span><select id="bags-quality" data-quality-filter><option value="">All qualities</option></select></label>
+              <label class="chip"><span class="visually-hidden">Character</span><select id="bags-character" data-character-filter></select></label>
+            </div>
+          </div>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="bags-title">
+              <h2 id="bags-title" class="visually-hidden">Items in bags and banks</h2>
+              <table id="bags-table" class="holding"></table>
+            </section>
+            <p id="bags-status" class="pager"></p>
+          </div>
+        </main>
+
+        <main id="gold-view" hidden>
+          <div class="pagehead">
+            <h1>Gold</h1>
+            <p id="gold-sub" class="sub"></p>
+            <label class="chip"><span class="visually-hidden">Character</span><select id="gold-character" data-character-filter></select></label>
+            <div id="account-gold-range" class="segmented" role="group" aria-label="Chart span">
+              <button type="button" data-days="7" aria-pressed="false">1W</button>
+              <button type="button" data-days="30" aria-pressed="true">1M</button>
+              <button type="button" data-days="60" aria-pressed="false">2M</button>
+            </div>
+          </div>
+          <dl id="account-gold-summary" class="cards"></dl>
+          <div id="account-gold" class="panel chart-panel">
+            <h3 id="account-gold-title" class="visually-hidden">All characters</h3>
+            <div id="account-gold-chart" class="chart" tabindex="0" role="img"></div>
+          </div>
+          <div class="side-by-side">
+            <section class="panel list-panel" aria-labelledby="gold-characters-title">
+              <h3 id="gold-characters-title" class="heading">Characters</h3>
+              <table id="gold-characters"></table>
+              <div class="panel-note account-link">
+                <span id="account-id" class="muted"></span>
+                <details class="link">
+                  <summary>Link another computer</summary>
+                  <form id="link-form" class="login">
+                    <p class="muted">Each computer makes its own ID. Type /gb web in game on the other computer and enter its ID and key, and either login shows the characters of both.</p>
+                    <label>
+                      ID
+                      <input id="link-id" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
+                    </label>
+                    <label>
+                      Key
+                      <input id="link-key" class="code" type="password" autocomplete="off" spellcheck="false" required />
+                    </label>
+                    <button id="link-in" class="button primary" type="submit">Link</button>
+                    <p id="link-error" class="alert" role="alert"></p>
+                  </form>
+                </details>
+              </div>
+            </section>
+            <section class="panel list-panel" aria-labelledby="gold-month-title">
+              <h3 id="gold-month-title" class="heading">Accounting this month</h3>
+              <dl id="gold-month" class="lines"></dl>
+            </section>
+          </div>
+        </main>
+
+        <main id="accounting-view" hidden>
+          <div id="account-trades" class="trades"></div>
+        </main>
+
+        <main id="items-view" hidden>
+          <div class="pagehead">
+            <h1>By item</h1>
+            <p id="items-sub" class="sub"></p>
+          </div>
+          <dl id="items-cards" class="cards"></dl>
+          <div class="toolbar">
+            <label class="search">
+              <span class="visually-hidden">Item</span>
+              <input id="items-search" type="search" placeholder="Search items" autocomplete="off" />
+            </label>
+            <label class="chip"><span class="visually-hidden">Profession</span><select id="items-profession" data-profession-filter><option value="">All professions</option></select></label>
+            <label class="chip"><span class="visually-hidden">Item type</span><select id="items-kind">
+              <option value="all">All items</option>
+              <option value="materials-recipes">Materials and recipes</option>
+              <option value="materials">Materials</option>
+              <option value="recipes">Recipes</option>
+              <option value="crafted">Crafted items</option>
+            </select></label>
+            <label class="chip"><span class="visually-hidden">Quality</span><select id="items-quality" data-quality-filter><option value="">All qualities</option></select></label>
+            <label class="chip"><span class="visually-hidden">Character</span><select id="items-character"></select></label>
+          </div>
+          <div class="list">
+            <section class="panel list-panel" aria-labelledby="items-title">
+              <h2 id="items-title" class="visually-hidden">Items bought and sold</h2>
+              <table id="items-table" class="traded-items"></table>
+            </section>
+            <p id="items-status" class="pager"></p>
+          </div>
+        </main>
+
+        <main id="login-view" hidden>
+          <section id="login" class="panel login" aria-labelledby="login-title">
             <h1 id="login-title">Log in</h1>
             <form id="login-form">
               <label>
@@ -145,59 +280,6 @@
               <p id="login-error" class="alert" role="alert"></p>
               <p class="muted">Type /gb web in game to see your ID and key.</p>
             </form>
-          </section>
-
-          <section id="characters" class="roster" aria-labelledby="characters-title" hidden>
-            <div class="pagehead roster-head">
-              <h1 id="characters-title">Characters</h1>
-              <span id="account-id" class="sub"></span>
-              <details class="link">
-                <summary>Link another computer</summary>
-                <form id="link-form" class="panel login">
-                  <p class="muted">Each computer makes its own ID. Type /gb web in game on the other computer and enter its ID and key, and either login shows the characters of both.</p>
-                  <label>
-                    ID
-                    <input id="link-id" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
-                  </label>
-                  <label>
-                    Key
-                    <input id="link-key" class="code" type="password" autocomplete="off" spellcheck="false" required />
-                  </label>
-                  <button id="link-in" class="button primary" type="submit">Link</button>
-                  <p id="link-error" class="alert" role="alert"></p>
-                </form>
-              </details>
-            </div>
-            <ul id="character-list" class="character-list"></ul>
-            <div id="account-trades" class="panel trades"></div>
-          </section>
-
-          <section id="character" aria-labelledby="character-title" hidden>
-            <div class="character-head">
-              <h2 id="character-title"></h2>
-              <p id="character-about" class="sub"></p>
-            </div>
-            <div class="character-gold">
-              <dl id="gold-summary" class="summary"></dl>
-              <div id="gold-history" class="panel">
-                <div class="panel-head">
-                  <h3>Gold</h3>
-                  <div id="gold-range" class="segmented" role="group" aria-label="Chart span">
-                    <button type="button" data-days="1" aria-pressed="false">1 day</button>
-                    <button type="button" data-days="7" aria-pressed="true">7 days</button>
-                    <button type="button" data-days="30" aria-pressed="false">30 days</button>
-                  </div>
-                </div>
-                <div id="gold-chart" class="chart" tabindex="0" role="img"></div>
-              </div>
-            </div>
-            <div id="holdings" class="holdings"></div>
-            <div id="character-trades" class="panel trades"></div>
-          </section>
-
-          <section id="no-character" class="panel" hidden>
-            <a class="back" href="#characters">All characters</a>
-            <p id="no-character-text"></p>
           </section>
         </main>
 
