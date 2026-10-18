@@ -63,6 +63,7 @@ jobs:
         run: bash scripts/build-signed-macos.sh
       - name: Build signed update installers
         if: inputs.release && runner.os != 'macOS'
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
@@ -84,6 +85,7 @@ jobs:
           retention-days: 30
       - name: Build installers
         if: ${{ !inputs.release && !inputs.sign-macos }}
+        shell: bash
         env:
           BUNDLES: ${{ inputs.bundles }}
         run: npm run desktop:pack -- --ci --bundles "$BUNDLES"
