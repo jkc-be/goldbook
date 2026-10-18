@@ -889,8 +889,24 @@ async fn account_uploads_record_the_bound_player_and_answer_exactly_as_before() 
         vec![
             ("ABCDEFGH".to_owned(), mine.clone()),
             ("ABCDEFGH".to_owned(), player("456")),
-            ("K7Q2M9PX".to_owned(), mine)
+            ("K7Q2M9PX".to_owned(), mine.clone())
         ],
         "an ID keeps every player whose installs uploaded it"
+    );
+    let mut rotated = account("ABCDEFGH", KEY);
+    rotated["previousKeyHash"] = json!(goldbook_core::key_hash(OTHER_KEY));
+    let rotation = call(
+        &bound.app,
+        "POST",
+        "/api/account",
+        rotated,
+        &[("authorization", &upload)],
+    )
+    .await;
+    assert_eq!(rotation.0, 200);
+    assert_eq!(
+        recorded(&bound),
+        both,
+        "a new key keeps only the player whose install sent it"
     );
 }

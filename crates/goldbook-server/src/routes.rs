@@ -851,6 +851,11 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
         }
         if stored != account.key_hash {
             tx.execute("DELETE FROM sessions WHERE account_id=?1", [&account.id])?;
+            // A new key also shuts out the other players who uploaded the ID.
+            tx.execute(
+                "DELETE FROM account_identities WHERE account_id=?1",
+                [&account.id],
+            )?;
         }
     }
     tx.execute("INSERT INTO accounts (id,key_hash,updated_at) VALUES (?1,?2,?3) ON CONFLICT(id) DO UPDATE SET key_hash=excluded.key_hash,updated_at=excluded.updated_at",params![account.id,account.key_hash,now()])?;
