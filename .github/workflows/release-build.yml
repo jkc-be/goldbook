@@ -1,11 +1,16 @@
 name: Release build
-run-name: Release build of ${{ github.sha }}
+run-name: Release build of ${{ inputs.revision || github.sha }}
 # Tests one commit of main, builds and signs everything a release ships, and
 # checks OVH access without changing anything on OVH or in either repository.
 # Release promote ships this run's artifacts. See docs/releasing.md.
 
 on:
   workflow_dispatch:
+    inputs:
+      revision:
+        description: Commit of main to build; empty builds the commit the run starts on
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -23,6 +28,7 @@ jobs:
       # Names the build run to promote when this version is already partly released.
       actions: read
     outputs:
+      revision: ${{ steps.revision.outputs.revision }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Refuse a rerun
@@ -36,31 +42,59 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          # The history of main, which must contain the revision.
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.13'
+      # The scripts come from the commit the run started on. The checks read the
+      # revision's files, checked out in source/.
+      - name: Resolve the revision
+        id: revision
+        env:
+          REQUESTED: ${{ inputs.revision }}
+        run: |
+          requested=${REQUESTED:-$GITHUB_SHA}
+          if [[ ! "$requested" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "::error::The revision input must be a commit SHA in lowercase hexadecimal"
+            exit 1
+          fi
+          revision=$(git rev-parse --verify --quiet "$requested^{commit}" || true)
+          # A tag or branch named like a SHA would resolve to another commit.
+          if [[ "$revision" != "$requested"* ]]; then
+            echo "::error::$requested does not name exactly one commit of this repository"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$revision" "$GITHUB_SHA"; then
+            echo "::error::$revision is not in the history of main at $GITHUB_SHA"
+            exit 1
+          fi
+          git worktree add --quiet --detach source "$revision"
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+          # shellcheck disable=SC2016 # the backticks are Markdown
+          printf 'Building revision `%s` of main at `%s`.\n' "$revision" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Read the version
         id: version
-        run: python3 scripts/release-state.py version
+        run: python3 scripts/release-state.py version --source source
       - name: Require a merged release PR
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if ! awk -v heading="## $VERSION - " 'index($0, heading) == 1 { found = 1 } END { exit !found }' CHANGELOG.md; then
-            echo "::error::CHANGELOG.md has no '## $VERSION - ' section. Merge the release PR from make prepare-release first."
+          if ! awk -v heading="## $VERSION - " 'index($0, heading) == 1 { found = 1 } END { exit !found }' source/CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $VERSION - ' section. Build a revision that contains the merged release PR from make prepare-release."
             exit 1
           fi
-          pending=$(find changes -type f ! -name README.md 2>/dev/null | sort)
+          pending=$(find source/changes -type f ! -name README.md 2>/dev/null | sort)
           if [ -n "$pending" ]; then
             printf '%s\n' "$pending"
-            echo "::error::changes/ still holds change files. Merge the release PR from make prepare-release first."
+            echo "::error::changes/ still holds change files. Build the revision of the release PR from make prepare-release, before later merges."
             exit 1
           fi
       - name: Require that nothing of this version is released
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          REVISION: ${{ github.sha }}
+          REVISION: ${{ steps.revision.outputs.revision }}
         run: python3 scripts/release-state.py state --version "$VERSION" --revision "$REVISION" --build
 
   check:
@@ -69,6 +103,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/check.yml
+    with:
+      ref: ${{ needs.guard.outputs.revision }}
 
   installers:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
@@ -91,6 +127,7 @@ jobs:
       runner: ${{ matrix.os }}
       bundles: ${{ matrix.bundles }}
       release: true
+      ref: ${{ needs.guard.outputs.revision }}
 
   addon:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
@@ -99,6 +136,8 @@ jobs:
       contents: read
     uses: ./.github/workflows/addon-package.yml
     secrets: inherit
+    with:
+      ref: ${{ needs.guard.outputs.revision }}
 
   image:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
@@ -114,6 +153,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ needs.guard.outputs.revision }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
@@ -127,16 +167,16 @@ jobs:
           file: server/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ needs.guard.outputs.revision }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.guard.outputs.revision }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       # The tag can be pushed again; the digest names exactly this build's image.
       - name: Record the image digest
         env:
-          REVISION: ${{ github.sha }}
+          REVISION: ${{ needs.guard.outputs.revision }}
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "Invalid image digest: $DIGEST" >&2; exit 1; }
@@ -162,6 +202,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ needs.guard.outputs.revision }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.13'
@@ -173,10 +214,12 @@ jobs:
         with:
           name: Goldbook-addon-feed
           path: addon-feed
+      # package-updates.py names the packages and addon.json after the checked-out
+      # commit; check-feed confirms both name the revision.
       - name: Assemble the update feed
         env:
           VERSION: ${{ needs.guard.outputs.version }}
-          REVISION: ${{ github.sha }}
+          REVISION: ${{ needs.guard.outputs.revision }}
         run: |
           python3 scripts/package-updates.py client update-feed --artifacts signed-installers
           cp addon-feed/addon.json update-feed/addon.json
@@ -209,6 +252,7 @@ jobs:
             echo "::error::Start a new Release build run; build runs are never rerun"
             exit 1
           fi
+      # The action comes from the commit the run started on, like this workflow.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -218,7 +262,7 @@ jobs:
         with:
           operation: verify
           run-id: ${{ github.run_id }}
-          revision: ${{ github.sha }}
+          revision: ${{ needs.guard.outputs.revision }}
           token: ${{ secrets.GITHUB_TOKEN }}
           ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
           known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -229,7 +273,7 @@ jobs:
         with:
           operation: check-publish
           run-id: ${{ github.run_id }}
-          revision: ${{ github.sha }}
+          revision: ${{ needs.guard.outputs.revision }}
           token: ${{ secrets.GITHUB_TOKEN }}
           ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
           known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -239,14 +283,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.guard.outputs.version }}
-          REVISION: ${{ github.sha }}
+          REVISION: ${{ needs.guard.outputs.revision }}
           RUN_ID: ${{ github.run_id }}
           IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
         run: |
           # shellcheck disable=SC2016 # the backticks are Markdown
           {
             printf '## Goldbook %s\n\n' "$VERSION"
-            printf 'Build run %s of revision `%s`. Promote it with **Release promote**.\n\n' "$RUN_ID" "$REVISION"
+            printf 'Build run %s of revision `%s`.\n\n' "$RUN_ID" "$REVISION"
+            printf 'To promote it, answer `y` when `make release` asks, or run:\n\n'
+            printf '```sh\ngh workflow run release-promote.yml --ref main -f build_run_id=%s\n```\n\n' "$RUN_ID"
             printf 'Server image `%s@%s`, recorded in `Goldbook-server-image`.\n\n' "$IMAGE" "$IMAGE_DIGEST"
             printf '| Artifact | ID | Digest |\n| --- | --- | --- |\n'
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \

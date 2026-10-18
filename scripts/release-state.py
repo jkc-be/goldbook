@@ -10,8 +10,12 @@
 `state` reports each release output as `absent`, `matches` or `conflict`.
 A new build (`--build`) may start only when every output is absent. A
 promotion (`--feed`, the build run's `Goldbook-update-feed`) may continue
-when no output conflicts. The server deploy is not an output here: deploying
-the same image again is harmless, so nothing reads it (docs/releasing.md).
+when no output conflicts. The server deploy is not an output here: the OVH
+helper skips a deploy when the server already runs the revision or a newer
+one, so nothing reads it (docs/releasing.md).
+
+A build run builds the revision its `Goldbook-server-image` records, which
+may be older than the commit the run started on.
 
 goldbook-addon and the public feed are read without credentials, because the
 workflow token only reaches its own repository. GH_TOKEN, when set, is used
@@ -38,6 +42,8 @@ API = "https://api.github.com"
 FEED = "https://app.jkc-be.com/goldbook/updates"
 MAINTAINER_ID = 156444954
 BUILD_WORKFLOW = ".github/workflows/release-build.yml"
+BUILD_RUNS = (f"{API}/repos/{REPOSITORY}/actions/workflows/release-build.yml/runs"
+              "?branch=main&event=workflow_dispatch&status=success&per_page=100")
 ADDON_WORKFLOW = "release.yml"
 # The artifacts a promotion depends on, as release-build.yml names them.
 BUILD_ARTIFACTS = ("Goldbook-update-feed", "Goldbook-addon-feed", "Goldbook-updater-macOS-ARM64",
@@ -298,32 +304,60 @@ def load_build_run(http, run_id):
     return run, listing["artifacts"]
 
 
-def download_feed(http, artifacts):
-    """The manifests of a build run's Goldbook-update-feed artifact."""
-    artifact, = [a for a in artifacts if a["name"] == "Goldbook-update-feed" and not a["expired"]]
+def artifact_files(http, artifacts, name, files):
+    """The named files of a build run's unexpired artifact that exist."""
+    artifact, = [a for a in artifacts if a["name"] == name and not a["expired"]]
     archive = http.get(f"{API}/repos/{REPOSITORY}/actions/artifacts/{artifact['id']}/zip", authenticated=True)
     with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
         names = set(bundle.namelist())
-        return {name: bundle.read(name) for name in ("latest.json", "addon.json") if name in names}
+        return {file: bundle.read(file) for file in files if file in names}
+
+
+def download_feed(http, artifacts):
+    """The manifests of a build run's Goldbook-update-feed artifact."""
+    return artifact_files(http, artifacts, "Goldbook-update-feed", ("latest.json", "addon.json"))
+
+
+def built_revision(http, run, artifacts):
+    """The revision a build run built, as (revision, problems). Its image.json
+    names it, its addon.json must name the same commit, and the commit the run
+    started on must contain it."""
+    image = artifact_files(http, artifacts, "Goldbook-server-image", ("image.json",)).get("image.json")
+    try:
+        revision = json.loads(image)["revision"]
+    except (TypeError, ValueError, KeyError):
+        revision = None
+    if not isinstance(revision, str) or not REVISION.fullmatch(revision):
+        return None, ["its Goldbook-server-image records no revision"]
+    problems = []
+    addon = artifact_files(http, artifacts, "Goldbook-addon-feed", ("addon.json",)).get("addon.json")
+    named = addon_payload(addon).get("revision") if addon else None
+    if named != revision:
+        problems.append(f"its image was built from {revision} but its addon.json names {named}")
+    head = run["head_sha"]
+    if head != revision:
+        comparison = get_json(http, f"{API}/repos/{REPOSITORY}/compare/{revision}...{head}", authenticated=True)
+        if comparison is None or comparison["status"] != "ahead":
+            problems.append(f"{revision} is not in the history of {head}, the commit the run started on")
+    return revision, problems
 
 
 def find_promotable_run(http, version, observed):
     """The build run whose promotion would finish the release already started
     for `version`, as (run, verdicts), or None."""
-    revisions = []
-    for found in observed.values():
-        if found and found.version == version and found.revision and found.revision not in revisions:
-            revisions.append(found.revision)
-    for revision in revisions:
-        listing = get_json(http, f"{API}/repos/{REPOSITORY}/actions/workflows/release-build.yml/runs"
-                                 f"?head_sha={revision}&status=success&per_page=100", authenticated=True)
-        for run in sorted((listing or {}).get("workflow_runs", []), key=lambda r: r["id"], reverse=True):
-            run, artifacts = load_build_run(http, run["id"])
-            if build_run_problems(run, artifacts):
-                continue
-            verdicts = evaluate(Build(version, revision, download_feed(http, artifacts)), observed)
-            if may_promote(verdicts):
-                return run, verdicts
+    revisions = {found.revision for found in observed.values()
+                 if found and found.version == version and found.revision}
+    listing = get_json(http, BUILD_RUNS, authenticated=True)
+    for run in sorted((listing or {}).get("workflow_runs", []), key=lambda r: r["id"], reverse=True):
+        run, artifacts = load_build_run(http, run["id"])
+        if build_run_problems(run, artifacts):
+            continue
+        revision, problems = built_revision(http, run, artifacts)
+        if problems or revision not in revisions:
+            continue
+        verdicts = evaluate(Build(version, revision, download_feed(http, artifacts)), observed)
+        if may_promote(verdicts):
+            return run, verdicts
     return None
 
 
@@ -439,13 +473,6 @@ def command_state(http, args):
         if not may_promote(verdicts):
             raise Failure("An output belongs to another build. Decide what to do before promoting.")
         summary("Every output is absent or belongs to this build; the promotion may continue.")
-        # The feed is published only after this build's server deploy succeeded,
-        # so a published feed means the server step is done. Deploying again could
-        # replace a later server-only deploy with this older image.
-        deployed = verdicts["client-feed"].state == "matches"
-        if deployed:
-            summary("This build's latest.json is published, so its server deploy already succeeded and is skipped.")
-        outputs(deploy_server=str(not deployed).lower())
         return
     if may_build(verdicts):
         summary(f"Nothing of {args.version} is released yet; the build may start.")
@@ -470,13 +497,16 @@ def command_state(http, args):
 def command_check_build_run(http, args):
     run, artifacts = load_build_run(http, args.run_id)
     problems = build_run_problems(run, artifacts)
+    if not problems:
+        revision, problems = built_revision(http, run, artifacts)
     if problems:
         raise Failure(f"Build run {args.run_id} cannot be promoted: " + "; ".join(problems) + ".")
-    summary(f"Promoting build run [{run['id']}]({run['html_url']}) of revision `{run['head_sha']}`.\n")
+    summary(f"Promoting build run [{run['id']}]({run['html_url']}) of revision `{revision}`, "
+            f"started on `{run['head_sha']}`.\n")
     summary("| Artifact | ID | Digest |\n| --- | --- | --- |")
     summary("\n".join(f"| {a['name']} | {a['id']} | `{a.get('digest')}` |"
                       for a in sorted(artifacts, key=lambda a: a["name"]) if not a["expired"]) + "\n")
-    outputs(revision=run["head_sha"])
+    outputs(revision=revision)
 
 
 def main(argv=None, http=None):

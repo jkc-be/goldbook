@@ -1,12 +1,13 @@
 # Releasing Goldbook
 
-A release is two manual runs on `main`. **Release build** tests one commit,
-builds and signs everything, and checks OVH access without changing anything.
-**Release promote** takes that build run's ID and ships exactly its artifacts:
-the server first, then the update feed, then the addon mirror. It then waits
-for goldbook-addon's own release and tags the commit.
+A release is two manual runs on `main`. **Release build** tests one commit of
+`main`, builds and signs everything, and checks OVH access without changing
+anything. **Release promote** takes that build run's ID and ships exactly its
+artifacts: the server first, then the update feed, then the addon mirror. It
+then waits for goldbook-addon's own release and tags the commit.
 
-Only `jkc-be` starts these workflows and approves their environments.
+Only `jkc-be` starts these workflows and approves their environments. The
+normal way to start them is `make release`, described below.
 
 ![How a Goldbook release works](release-flow/overview.png)
 
@@ -30,7 +31,7 @@ accepts each one only when it belongs to the build run being promoted.
 
 | Output | Read from | Belongs to the build run when |
 | --- | --- | --- |
-| Server deploy | Not read | It runs the image digest that the build run recorded in `Goldbook-server-image`. Deploying the same image again is harmless. |
+| Server deploy | Not read | It runs the image digest that the build run recorded in `Goldbook-server-image`. The OVH helper skips a deploy when the server already runs the revision or a later commit of `main`. |
 | Client feed | `https://app.jkc-be.com/goldbook/updates/latest.json` | It is byte for byte the build run's `latest.json`. |
 | Addon feed | `https://app.jkc-be.com/goldbook/updates/addon.json` | It is byte for byte the build run's `addon.json`. |
 | Addon mirror | `jkc-be/goldbook-addon` HEAD | Its `upstream.json` names the revision. |
@@ -49,19 +50,79 @@ because the workflow token reaches only its own repository. Unauthenticated
 requests share a limit of 60 per hour per runner address. If a busy runner
 address hits it, the job fails without changing anything and can be rerun.
 
+## Release with make release
+
+1. Merge the release PR that `make prepare-release VERSION=<version>`
+   produced. The release PR carries the label `release`, not `no-changes`.
+2. Note the release PR's merge commit, then run:
+
+   ```sh
+   make release REVISION=<merge commit>
+   ```
+
+   Without `REVISION`, the build takes the current `main`, which refuses to
+   build once another PR has added a change file after the release PR.
+3. The script dispatches **Release build** through `gh` as you, prints the run
+   link and follows the run. Approve `release-signing`, then `production`, in
+   the browser.
+4. When the build succeeds, the script prints the version, the revision and
+   the artifacts, and asks `Promote build run N (version V, revision R)? [y/N]`.
+5. Answer `y`. The script dispatches **Release promote** for that build run
+   and follows it. Approve its environments as listed under
+   [Promote](#promote).
+
+`make release` stops at the first failure and says what to do next. It needs
+`gh` signed in as `jkc-be`, and refuses any other account.
+
+The script only starts and watches the two runs. They stay separate on
+GitHub: the build never ships anything, and a promotion takes a build run ID.
+When you answer no, or the promotion fails, promote the build later with the
+command the script prints, which is also in the build run's summary:
+
+```sh
+gh workflow run release-promote.yml --ref main -f build_run_id=<build run ID>
+```
+
+The script finds each run it started by listing the workflow's
+`workflow_dispatch` runs on `main` before and after the dispatch. If more than
+one new run appears, it asks which one is yours instead of guessing.
+
 ## Build
 
-1. Merge the release PR that `make prepare-release VERSION=<version>` produced.
-2. Open **Actions > Release build > Run workflow** on `main`.
-3. Approve `release-signing` once for the three installer jobs and the addon
+Use `make release`, or open **Actions > Release build > Run workflow** on
+`main` and enter the revision.
+
+1. Approve `release-signing` once for the three installer jobs and the addon
    signing job, which wait together.
-4. Approve `production` for the `verify` job.
-5. Note the run ID. The `verify` summary lists the revision, the version, the
-   server image digest, and the ID and digest of every artifact.
+2. Approve `production` for the `verify` job.
+3. Note the run ID. The `verify` summary lists the revision, the version, the
+   server image digest, the ID and digest of every artifact, and the command
+   that promotes the build.
+
+### Build a revision
+
+The `revision` input names the commit to build, as a full or abbreviated SHA.
+Leave it empty to build the commit `main` points at when the run starts.
+Agents keep merging to `main` after the release PR. Building the release PR's
+merge commit keeps their changes out of the release, without blocking them.
+
+The `guard` job resolves the input to a full SHA and requires it to be the
+commit the run started on or an earlier commit in `main`'s history. Every
+later job builds that revision: the checks, the installers, the signed addon,
+the server image, tagged `server:<revision>` and labelled
+`org.opencontainers.image.revision=<revision>`, and the feed, whose package
+URLs and `addon.json` name it. `Goldbook-server-image` records it in
+`image.json`.
+
+Promote reads the revision from `image.json`, not from the commit the build
+run started on. It requires the build's `addon.json` to name the same
+revision, and the commit the build run started on to contain it.
 
 The `guard` job refuses to build when:
 
 - the run is a rerun. Start a new Release build run instead.
+- the revision is not a SHA, does not name exactly one commit, or is not in
+  the history of `main`.
 - `scripts/set-version.py --check` finds version fields that disagree.
 - `CHANGELOG.md` has no `## <version> - ` section, or `changes/` still holds
   change files.
@@ -71,7 +132,7 @@ The `guard` job refuses to build when:
 
 A build run proves:
 
-- the checks of `check.yml` pass for the commit
+- the checks of `check.yml` pass for the revision
 - the installers build and are signed
 - the addon update is signed
 - the feed has the layout the OVH helper accepts
@@ -102,10 +163,11 @@ days.
 
 ## Promote
 
-1. Open **Actions > Release promote > Run workflow** on `main` and enter the
-   build run ID.
+1. Answer `y` in `make release`, or open **Actions > Release promote > Run
+   workflow** on `main` and enter the build run ID.
 2. Approve `production` for `server`. Its result line names the database
-   backup. Check `https://app.jkc-be.com/goldbook`.
+   backup, or says the deploy was skipped because the server already runs the
+   revision or a later commit. Check `https://app.jkc-be.com/goldbook`.
 3. Approve `production` for `publish`.
 4. Approve `addon-mirror` for the mirror.
 5. Approve `curseforge` in the **Package addon release** run in
@@ -116,8 +178,8 @@ The jobs, in order:
 
 | Job | Does |
 | --- | --- |
-| `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed, three updater artifacts and server image artifact unexpired. Checks out the built revision, reads its version, downloads its `Goldbook-update-feed` and requires every output to be `absent` or `matches`. |
-| `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The deploy is skipped once the build's `latest.json` is published, because the feed is published only after that deploy succeeded. |
+| `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed, three updater artifacts and server image artifact unexpired. Takes the revision from `image.json` and requires the build's `addon.json` to name it and the commit the build run started on to contain it. Checks out the revision, reads its version, downloads its `Goldbook-update-feed` and requires every output to be `absent` or `matches`. |
+| `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The helper compares the revision with the one the server runs. It skips the deploy when the server already runs that commit or a later one, and refuses one whose history diverged. |
 | `publish` | Runs the helper's `publish` for the build run. |
 | `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. |
 | `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge job. It polls every 3 minutes for at most 120 minutes. |
@@ -140,13 +202,15 @@ Start a new **Release promote** run with the same `build_run_id`, or open the
 stopped promote run and choose **Re-run all jobs**. Both are safe:
 
 - promote builds nothing
+- the helper skips a deploy when the server already runs the revision or a
+  later commit
 - the helper accepts a second publish of the same files
 - the mirror makes no commit when nothing changed
 - the tag job accepts a tag already on the same commit
 
 | Stopped after | A second promotion |
 | --- | --- |
-| Server deployed | Deploys the same image again, then continues. If a **Deploy to OVH** went out in between, this puts the build's older image back; reject the `server` approval and prepare a new version instead. |
+| Server deployed | Skips the deploy, because the server runs the revision, or a later commit when a **Deploy to OVH** went out in between. Then publishes the feed. |
 | `latest.json` published | Skips the deploy and publishes the same feed again. |
 | Both manifests published | Skips the deploy, publishes again and mirrors. |
 | Mirror pushed | Finds HEAD already holding the revision and waits for its run. |
@@ -211,9 +275,10 @@ PR with a patch bump, a build and a promotion.
 
 A fix that touches only the server can go out through **Deploy to OVH**. It
 runs the full checks for its commit first and shares the promotion lock.
-A promotion of an earlier build that has not published its feed yet would
-deploy that build's image over the fix, so finish or abandon such a promotion
-before the hotfix.
+A promotion of an earlier build, started or resumed after the hotfix, leaves
+the fix in place: the helper skips its deploy because the server already runs
+a later commit of `main`, and the promotion goes on with the feed, the mirror
+and the tag.
 
 When `main` is not releasable, either switch off or revert the unfinished work
 and release as above, or add release branches. A release branch is
@@ -222,7 +287,8 @@ built and promoted from that branch. Release branches require changes to:
 
 - the environment branch policies in `scripts/configure-github.py`
 - the job conditions in every workflow
-- the `head_branch` check in `scripts/deploy-ovh.py`
+- the `head_branch` check in `scripts/deploy-ovh.py`, and its history check,
+  which refuses a revision that diverged from the one the server runs
 - `docs/repository-administration.md`
 
 Add them the first time you need one. After a branch release, the next release

@@ -1,4 +1,4 @@
-.PHONY: build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version hooks clean
+.PHONY: build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version release hooks clean
 
 OVH_HOST ?= fedora_ovh
 
@@ -80,6 +80,12 @@ endif
 version:
 	@test -n "$(VERSION)" || { echo "Usage: make version VERSION=0.1.5"; exit 1; }
 	python3 scripts/set-version.py $(VERSION)
+
+# Runs Release build on GitHub as you, through gh, for the current main or for
+# a commit of main, such as make release REVISION=1a2b3c4. Then asks whether to
+# run Release promote for that build. See docs/releasing.md.
+release:
+	python3 scripts/release.py $(if $(REVISION),--revision "$(REVISION)")
 
 # Run once per clone: makes git use .githooks, so every push runs make check.
 hooks:

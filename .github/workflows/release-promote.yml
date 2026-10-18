@@ -36,7 +36,6 @@ jobs:
     outputs:
       revision: ${{ steps.run.outputs.revision }}
       version: ${{ steps.version.outputs.version }}
-      deploy_server: ${{ steps.state.outputs.deploy_server }}
       attempt: ${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -67,7 +66,6 @@ jobs:
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
       - name: Compare every release output with the build run
-        id: state
         env:
           VERSION: ${{ steps.version.outputs.version }}
           REVISION: ${{ steps.run.outputs.revision }}
@@ -111,10 +109,9 @@ jobs:
           known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           host: ${{ secrets.DEPLOY_HOST }}
           user: ${{ secrets.DEPLOY_USER }}
-      # Skipped once this build's feed is published, which happens only after
-      # its deploy succeeded, so a rerun never replaces a later server deploy.
+      # The helper skips the deploy when the server already runs this revision
+      # or a later commit, so a rerun never replaces a later server deploy.
       - name: Deploy the server
-        if: needs.guard.outputs.deploy_server == 'true'
         uses: ./.github/actions/ovh
         with:
           operation: deploy

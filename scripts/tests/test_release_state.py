@@ -85,8 +85,11 @@ class World:
         self.urls[f"{ADDON}/actions/runs/7/jobs?filter=all"] = {"jobs": [
             {"name": "package", "conclusion": package}, {"name": "curseforge", "conclusion": curseforge}]}
 
-    def build_run(self, run_id, revision, files, **changes):
-        run = {"id": run_id, "head_sha": revision, "head_branch": "main", "event": "workflow_dispatch",
+    def build_run(self, run_id, revision, files, head=None, history="ahead", **changes):
+        """A Release build run that built `revision` after starting on `head`, whose
+        history holds the revision when `history` is "ahead"."""
+        head = head or revision
+        run = {"id": run_id, "head_sha": head, "head_branch": "main", "event": "workflow_dispatch",
                "path": ".github/workflows/release-build.yml", "status": "completed", "conclusion": "success",
                "run_attempt": 1, "repository": {"full_name": "jkc-be/goldbook"},
                "head_repository": {"full_name": "jkc-be/goldbook"}, "actor": {"id": 156444954},
@@ -96,12 +99,20 @@ class World:
         artifacts = [{"id": run_id * 10 + index, "name": name, "expired": False, "digest": f"sha256:{index}"}
                      for index, name in enumerate(STATE.BUILD_ARTIFACTS)]
         self.urls[f"{SOURCE}/actions/runs/{run_id}/artifacts?per_page=100"] = {"artifacts": artifacts}
-        archive = io.BytesIO()
-        with zipfile.ZipFile(archive, "w") as bundle:
-            for name, content in files.items():
-                bundle.writestr(name, content)
-        self.urls[f"{SOURCE}/actions/artifacts/{run_id * 10}/zip"] = archive.getvalue()
-        listing = f"{SOURCE}/actions/workflows/release-build.yml/runs?head_sha={revision}&status=success&per_page=100"
+        image = json.dumps({"revision": revision, "digest": "sha256:" + "d" * 64}).encode()
+        contents = {"Goldbook-update-feed": files, "Goldbook-addon-feed": {"addon.json": files["addon.json"]},
+                    "Goldbook-server-image": {"image.json": image}}
+        for artifact in artifacts:
+            if artifact["name"] in contents:
+                archive = io.BytesIO()
+                with zipfile.ZipFile(archive, "w") as bundle:
+                    for name, content in contents[artifact["name"]].items():
+                        bundle.writestr(name, content)
+                self.urls[f"{SOURCE}/actions/artifacts/{artifact['id']}/zip"] = archive.getvalue()
+        if head != revision:
+            self.urls[f"{SOURCE}/compare/{revision}...{head}"] = {"status": history}
+        listing = (f"{SOURCE}/actions/workflows/release-build.yml/runs"
+                   "?branch=main&event=workflow_dispatch&status=success&per_page=100")
         self.urls.setdefault(listing, {"workflow_runs": []})["workflow_runs"].append(run)
         return run
 
@@ -285,10 +296,10 @@ class CommandLine(unittest.TestCase):
                                    environment={"GITHUB_OUTPUT": str(output)})
             return result[0], result[2], output.read_text()
 
-    def test_promotion_skips_the_server_deploy_once_its_feed_is_published(self):
-        self.assertEqual(self.promote(world_at("server deployed"), B1_FEED), (0, "", "deploy_server=true\n"))
-        self.assertEqual(self.promote(world_at("latest.json published"), B1_FEED), (0, "", "deploy_server=false\n"))
-        self.assertEqual(self.promote(world_at("tagged"), B1_FEED), (0, "", "deploy_server=false\n"))
+    def test_promotion_of_the_matching_build_continues_at_every_stage_and_leaves_the_server_to_the_helper(self):
+        for stage in STAGES:
+            with self.subTest(stage=stage):
+                self.assertEqual(self.promote(world_at(stage), B1_FEED), (0, "", ""))
 
     def test_promotion_of_another_build_stops(self):
         self.assertEqual(self.promote(world_at("latest.json published"), B2_FEED),
@@ -304,6 +315,51 @@ class CommandLine(unittest.TestCase):
             self.assertEqual((code, output.read_text()), (0, f"revision={R1}\n"))
         self.assertIn("| Goldbook-update-feed | 1110 | `sha256:0` |", out)
         self.assertIn("| Goldbook-server-image | 1115 | `sha256:5` |", out)
+
+    def check_build_run(self, world):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            output.touch()
+            code, _, error = self.run_main(world, "check-build-run", "--run-id", "111",
+                                           environment={"GITHUB_OUTPUT": str(output)})
+            return code, error, output.read_text()
+
+    def test_check_build_run_outputs_the_built_revision_when_the_run_started_on_a_later_commit(self):
+        world = World()
+        world.build_run(111, R1, B1_FEED, head=R2)
+        self.assertEqual(self.check_build_run(world), (0, "", f"revision={R1}\n"))
+
+    def test_check_build_run_refuses_a_revision_outside_the_history_of_the_commit_the_run_started_on(self):
+        world = World()
+        world.build_run(111, R1, B1_FEED, head=R2, history="diverged")
+        self.assertEqual(self.check_build_run(world), (1, (
+            f"Build run 111 cannot be promoted: {R1} is not in the history of {R2}, "
+            "the commit the run started on."), ""))
+
+    def test_check_build_run_refuses_an_image_and_an_addon_feed_of_different_revisions(self):
+        world = World()
+        world.build_run(111, R2, B1_FEED)
+        self.assertEqual(self.check_build_run(world), (1, (
+            f"Build run 111 cannot be promoted: its image was built from {R2} but its addon.json names {R1}."), ""))
+
+    def test_check_build_run_refuses_an_image_record_without_a_revision(self):
+        world = World()
+        world.build_run(111, R1, B1_FEED)
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("image.json", json.dumps({"digest": "sha256:" + "d" * 64}))
+        world.urls[f"{SOURCE}/actions/artifacts/1115/zip"] = archive.getvalue()
+        self.assertEqual(self.check_build_run(world), (1, (
+            "Build run 111 cannot be promoted: its Goldbook-server-image records no revision."), ""))
+
+    def test_a_new_build_names_a_build_run_that_started_on_a_later_commit_by_the_revision_it_built(self):
+        world = world_at("latest.json published")
+        world.build_run(111, R1, B1_FEED, head=R2)
+        world.build_run(112, R2, B3_FEED)
+        code, _, error = self.run_main(world, "state", "--version", VERSION, "--revision", R1, "--build")
+        self.assertEqual((code, error), (1, "0.2.5 is already partly released. Run Release promote with build "
+                                            "run 111 (https://github.com/jkc-be/goldbook/actions/runs/111) to "
+                                            "finish it; build runs are never repeated."))
 
     def test_check_build_run_refuses_a_run_without_its_server_image(self):
         world = World()
