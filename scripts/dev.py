@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the OVH Compose stack locally, with isolated data and credentials."""
 import argparse
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -53,8 +54,8 @@ def import_database(source):
     if destination.exists():
         raise SystemExit(f'{destination} already exists; refusing to replace local data.')
     source = source.resolve(strict=True)
-    with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as original:
-        with sqlite3.connect(destination) as copied:
+    with closing(sqlite3.connect(source.as_uri() + '?mode=ro', uri=True)) as original, original:
+        with closing(sqlite3.connect(destination)) as copied, copied:
             original.backup(copied)
             assert copied.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
     print(f'Copied {source} into {destination}; the source was opened read-only.', flush=True)

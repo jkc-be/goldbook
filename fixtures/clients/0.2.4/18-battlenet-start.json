@@ -1,0 +1,33 @@
+{
+  "about": "Sign in with Battle.net starts a pairing. The app opens authorizationUrl, which must be this server's authorize page, and shows userCode.",
+  "source": "desktop/src-tauri/src/battlenet.rs:91",
+  "server": "battlenet",
+  "request": {
+    "method": "POST",
+    "path": "/api/auth/battlenet/start",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{}"
+  },
+  "expect": {
+    "status": 200,
+    "maxBytes": 8192,
+    "body": {
+      "authorizationUrl": {
+        "$match": "{{base}}/api/auth/battlenet/authorize\\?[^#]*"
+      },
+      "pollToken": {
+        "$match": "[^\\x00-\\x1f\\x7f]{1,512}"
+      },
+      "userCode": {
+        "$match": "[A-Z2-9]{8}"
+      },
+      "expiresIn": "positive",
+      "interval": "positive"
+    }
+  },
+  "capture": {
+    "poll_token": "pollToken"
+  }
+}

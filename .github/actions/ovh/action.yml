@@ -1,0 +1,77 @@
+name: OVH helper
+description: >
+  Runs one operation of the restricted OVH helper (scripts/deploy-ovh.py)
+  through its forced-command SSH key, then removes the key.
+inputs:
+  operation:
+    description: verify, deploy, check-publish or publish
+    required: true
+  run-id:
+    description: The workflow run that built the artifacts
+    required: true
+  revision:
+    description: The commit that run built
+    required: true
+  token:
+    description: GitHub token the helper uses to read the build run, its artifacts and the image
+    required: true
+  ssh-key:
+    description: DEPLOY_SSH_KEY
+    required: true
+  known-hosts:
+    description: DEPLOY_KNOWN_HOSTS
+    required: true
+  host:
+    description: DEPLOY_HOST
+    required: true
+  user:
+    description: DEPLOY_USER
+    required: true
+outputs:
+  result:
+    description: The helper's JSON result line
+    value: ${{ steps.run.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - name: Configure the deployment SSH identity
+      shell: bash
+      env:
+        SSH_KEY: ${{ inputs.ssh-key }}
+        KNOWN_HOSTS: ${{ inputs.known-hosts }}
+      run: |
+        test -n "$SSH_KEY"
+        test -n "$KNOWN_HOSTS"
+        install -d -m 700 "$RUNNER_TEMP/ovh"
+        printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/ovh/key"
+        printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ovh/known_hosts"
+        chmod 600 "$RUNNER_TEMP/ovh/key" "$RUNNER_TEMP/ovh/known_hosts"
+    - name: Run the helper
+      id: run
+      shell: bash
+      env:
+        OPERATION: ${{ inputs.operation }}
+        RUN_ID: ${{ inputs.run-id }}
+        REVISION: ${{ inputs.revision }}
+        TOKEN: ${{ inputs.token }}
+        DEPLOY_HOST: ${{ inputs.host }}
+        DEPLOY_USER: ${{ inputs.user }}
+      run: |
+        case "$OPERATION" in verify|deploy|check-publish|publish) ;; *) echo "Unknown OVH operation: $OPERATION" >&2; exit 1 ;; esac
+        [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid run ID: $RUN_ID" >&2; exit 1; }
+        [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid revision: $REVISION" >&2; exit 1; }
+        test -n "$DEPLOY_HOST"
+        test -n "$DEPLOY_USER"
+        printf '%s' "$TOKEN" | ssh -T \
+          -i "$RUNNER_TEMP/ovh/key" -o UserKnownHostsFile="$RUNNER_TEMP/ovh/known_hosts" \
+          -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+          -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=12 \
+          "$DEPLOY_USER@$DEPLOY_HOST" "$OPERATION $RUN_ID $REVISION" | tee "$RUNNER_TEMP/ovh/output"
+        result=$(tail -n 1 "$RUNNER_TEMP/ovh/output")
+        printf 'result=%s\n' "$result" >> "$GITHUB_OUTPUT"
+        # shellcheck disable=SC2016 # the backticks are Markdown
+        printf 'OVH `%s` passed for build run %s at `%s`: `%s`\n\n' "$OPERATION" "$RUN_ID" "$REVISION" "$result" >> "$GITHUB_STEP_SUMMARY"
+    - name: Remove the SSH credentials
+      if: always()
+      shell: bash
+      run: rm -rf "$RUNNER_TEMP/ovh"

@@ -1,0 +1,17 @@
+{
+  "about": "The app polls until the browser sign-in finishes. 202 means not yet; 200 carries sessionToken, 410 means expired.",
+  "source": "desktop/src-tauri/src/battlenet.rs:136",
+  "server": "battlenet",
+  "request": {
+    "method": "POST",
+    "path": "/api/auth/battlenet/poll",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"pollToken\":\"{{poll_token}}\"}"
+  },
+  "expect": {
+    "status": 202,
+    "maxBytes": 8192
+  }
+}

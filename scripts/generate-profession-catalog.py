@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Classic profession item-ID lists from an AtlasLoot Classic data snapshot."""
+"""Generate Classic profession item-ID lists from an AtlasLoot Classic data snapshot and catalog/skinning.json."""
 import argparse
 import hashlib
 import json
@@ -44,6 +44,8 @@ def generate(folder):
         if item not in crafted:
             professions[profession]["recipes"].add(item)
     rows = sorted((p for p in professions.values() if any(p[k] for k in ("materials", "recipes", "crafted"))), key=lambda p: p["name"])
+    if any(row["id"] == "skinning" for row in rows):
+        raise ValueError("AtlasLoot now lists Skinning, which catalog/skinning.json would overwrite")
     for row in rows:
         for kind in ("materials", "recipes", "crafted"):
             row[kind] = sorted(row[kind])
@@ -64,11 +66,16 @@ def write_lua(catalog):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--atlasloot-data", type=Path, help="AtlasLootClassic/Data directory; omit to regenerate Lua from the committed catalog")
+    parser.add_argument("--atlasloot-data", type=Path, help="AtlasLootClassic/Data directory; omit to regenerate from the committed catalog and skinning.json")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     path = ROOT / "catalog/professions.json"
     catalog = generate(args.atlasloot_data) if args.atlasloot_data else json.loads(path.read_text())
+    skinning = {"id": "skinning", "name": "Skinning",
+                "materials": sorted(set(json.loads((ROOT / "catalog/skinning.json").read_text())["materials"])),
+                "recipes": [], "crafted": []}
+    catalog["professions"] = sorted([p for p in catalog["professions"] if p["id"] != "skinning"] + [skinning],
+                                    key=lambda p: p["name"])
     rendered = json.dumps(catalog, indent=2)
     rendered = re.sub(r"\[\n([\d,\s]+)\n\s*\]", lambda m: "[" + ", ".join(re.findall(r"\d+", m[1])) + "]", rendered)
     outputs = {path: rendered + "\n", ROOT / "addon/Goldbook/ProfessionData.lua": write_lua(catalog)}

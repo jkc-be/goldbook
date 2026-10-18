@@ -1,0 +1,42 @@
+{
+  "about": "An account ID held under another key must answer 409, which the app reports as held by another key rather than as a failed upload.",
+  "source": "crates/goldbook-sync/src/sync.rs:169",
+  "request": {
+    "method": "POST",
+    "path": "/api/account",
+    "headers": {
+      "Authorization": "Bearer dev-token",
+      "Content-Type": "application/json"
+    },
+    "json": {
+      "id": "K7Q2M9PX",
+      "keyHash": "0c464bb8e3c9eb70cab2dd6a58e161db7e25d3ee5dce23482746d0853f45b2f8",
+      "characters": [
+        {
+          "name": "Mirelle",
+          "realm": "Faramon",
+          "faction": null,
+          "class": null,
+          "level": null,
+          "updatedAt": null,
+          "gold": [
+            [
+              1759996800,
+              1260000
+            ],
+            [
+              1760000400,
+              1260000
+            ]
+          ],
+          "bags": null,
+          "bank": null
+        }
+      ],
+      "trades": []
+    }
+  },
+  "expect": {
+    "status": 409
+  }
+}

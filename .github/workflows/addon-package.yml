@@ -1,0 +1,40 @@
+name: Package addon update
+# Signs the addon update for Release build. The build runs check.yml, which
+# tests the addon, and Release promote publishes it with the client feed.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to package; empty packages the commit the caller runs on
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  package:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    environment: release-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22.18'
+          cache: npm
+      - run: npm ci
+      - run: python3 scripts/package-updates.py addon addon-feed
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+      # Not named Goldbook-update-feed: the OVH helper publishes the run's only
+      # artifact with that name, which the feed job assembles.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Goldbook-addon-feed
+          path: addon-feed/addon.json
+          if-no-files-found: error
+          retention-days: 30

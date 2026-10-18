@@ -1,0 +1,238 @@
+name: Release promote
+run-name: Release promote of build run ${{ inputs.build_run_id }}${{ inputs.request && format(' [{0}]', inputs.request) || '' }}
+# Ships exactly the artifacts of one Release build run: the server, then the
+# update feed, then the addon mirror, then waits for goldbook-addon's release
+# and tags the commit. It builds and uploads nothing and accepts only outputs
+# that belong to its build run, so running it again finishes a release that
+# stopped partway. See docs/releasing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: ID of the successful Release build run to ship
+        required: true
+        type: string
+      request:
+        description: Identifier make release puts in the run name to find this run
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# Shared with Deploy to OVH. No called workflow uses this group, because a
+# called workflow would wait for its own caller. The group is held only while
+# a run attempt is in progress, so every job that changes something refuses an
+# attempt whose guard passed in an earlier one ("Re-run failed jobs").
+concurrency:
+  group: goldbook-production
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      revision: ${{ steps.run.outputs.revision }}
+      version: ${{ steps.version.outputs.version }}
+      attempt: ${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - name: Check the build run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: python3 scripts/release-state.py check-build-run --run-id "$BUILD_RUN_ID"
+      - name: Check out the built revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ steps.run.outputs.revision }}
+          path: source
+      - name: Read the built version
+        id: version
+        run: python3 scripts/release-state.py version --source source
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: Goldbook-update-feed
+          path: build-feed
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Compare every release output with the build run
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          REVISION: ${{ steps.run.outputs.revision }}
+        run: |
+          python3 scripts/release-state.py check-feed --feed build-feed --version "$VERSION" --revision "$REVISION"
+          python3 scripts/release-state.py state --version "$VERSION" --revision "$REVISION" --feed build-feed
+
+  server:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    needs: guard
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+    steps:
+      - name: Require the guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ needs.guard.outputs.attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+      # A broken feed stops the release before the server changes.
+      - name: Validate the update feed without publishing it
+        uses: ./.github/actions/ovh
+        with:
+          operation: check-publish
+          run-id: ${{ inputs.build_run_id }}
+          revision: ${{ needs.guard.outputs.revision }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+      # The helper skips the deploy when the server already runs this revision
+      # or a later commit, so a rerun never replaces a later server deploy.
+      - name: Deploy the server
+        uses: ./.github/actions/ovh
+        with:
+          operation: deploy
+          run-id: ${{ inputs.build_run_id }}
+          revision: ${{ needs.guard.outputs.revision }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+
+  publish:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    needs: [guard, server]
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require the guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ needs.guard.outputs.attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+      - name: Publish the update feed
+        uses: ./.github/actions/ovh
+        with:
+          operation: publish
+          run-id: ${{ inputs.build_run_id }}
+          revision: ${{ needs.guard.outputs.revision }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+
+  mirror:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    needs: [guard, publish]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mirror-addon.yml
+    secrets: inherit
+    with:
+      revision: ${{ needs.guard.outputs.revision }}
+      guard-attempt: ${{ needs.guard.outputs.attempt }}
+
+  addon-release:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    needs: mirror
+    runs-on: ubuntu-24.04
+    # Waits up to 120 minutes for the CurseForge approval in goldbook-addon.
+    timeout-minutes: 130
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - name: Wait for Package addon release in goldbook-addon
+        env:
+          COMMIT: ${{ needs.mirror.outputs.commit }}
+        run: python3 scripts/release-state.py wait-addon-release --commit "$COMMIT" --interval 180 --timeout 7200
+
+  tag:
+    if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
+    needs: [guard, publish, mirror, addon-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # GITHUB_TOKEN until the release App from P6 replaces it.
+    permissions:
+      contents: write
+    steps:
+      - name: Require the guard of this attempt
+        env:
+          GUARD_ATTEMPT: ${{ needs.guard.outputs.attempt }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$GUARD_ATTEMPT" != "$ATTEMPT" ]; then
+            echo "::error::Re-run all jobs or start a new Release promote run; re-running only failed jobs would skip guard"
+            exit 1
+          fi
+      - name: Tag the released commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          REVISION: ${{ needs.guard.outputs.revision }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version: $VERSION" >&2; exit 1; }
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid revision: $REVISION" >&2; exit 1; }
+          tag="v$VERSION"
+          # The commit the tag points at, following an annotated tag; empty when absent.
+          tagged() {
+            git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$tag" "refs/tags/$tag^{}" | awk '{ commit = $1 } END { print commit }'
+          }
+          current=$(tagged)
+          if [ -z "$current" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$REVISION" > /dev/null || true
+            current=$(tagged)
+          fi
+          if [ "$current" != "$REVISION" ]; then
+            echo "::error::Tag $tag points at ${current:-nothing}, not $REVISION"
+            exit 1
+          fi
+          # shellcheck disable=SC2016 # the backticks are Markdown
+          printf 'Tag `%s` points at `%s`.\n' "$tag" "$REVISION" >> "$GITHUB_STEP_SUMMARY"

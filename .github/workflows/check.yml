@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Deploy to OVH runs these checks for the commit it ships.
+  workflow_call:
 
 permissions:
   contents: read
@@ -74,9 +76,11 @@ jobs:
         run: python3 scripts/dev.py down
 
   # Installer builds use macOS and Windows runners, which cost more, so they run
-  # only when someone starts the workflow by hand.
+  # only when someone starts this workflow by hand. A called workflow sees its
+  # caller's name and event, so Deploy to OVH skips them:
+  # https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations
   desktop:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.workflow == 'Check' && github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

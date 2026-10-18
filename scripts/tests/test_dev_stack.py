@@ -50,7 +50,7 @@ class DevStackTests(unittest.TestCase):
             source = root / 'original.sqlite'
             data = root / 'local'
             data.mkdir()
-            with sqlite3.connect(source) as db:
+            with contextlib.closing(sqlite3.connect(source)) as db, db:
                 db.execute('CREATE TABLE sample (value TEXT)')
                 db.execute("INSERT INTO sample VALUES ('original')")
             copy = DEV['import_database']
@@ -58,7 +58,7 @@ class DevStackTests(unittest.TestCase):
                 copy(source)
                 with self.assertRaises(SystemExit):
                     copy(source)
-            with sqlite3.connect(data / 'goldbook.sqlite') as db:
+            with contextlib.closing(sqlite3.connect(data / 'goldbook.sqlite')) as db, db:
                 db.execute("UPDATE sample SET value='local edit'")
-            with sqlite3.connect(source) as db:
+            with contextlib.closing(sqlite3.connect(source)) as db, db:
                 self.assertEqual(db.execute('SELECT value FROM sample').fetchone(), ('original',))
