@@ -80,7 +80,8 @@ def main():
     for path in files:
         path.unlink()
     print(f"Added {version} to CHANGELOG.md from {len(files)} change files, and deleted them.\n"
-          "Edit the new section's prose, commit, and open the pull request with the release label.")
+          "Edit the new section's prose, commit, push, and open the pull request with\n"
+          "gh pr create --label release --template release.md")
 
 
 if __name__ == "__main__":
