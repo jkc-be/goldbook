@@ -1217,12 +1217,34 @@ async fn desktop_handoff_csrf_body_limits_and_login_limits_are_enforced() {
     let (status, cookies, body) =
         raw(&f.app, "POST", "/api/desktop-login", form.clone(), &headers).await;
     assert_eq!(status, 303);
-    assert_eq!(cookies["location"], "../#characters");
+    assert_eq!(cookies["location"], "../#gold");
     assert_eq!(cookies["cache-control"], "no-store");
     assert_eq!(
         serde_json::from_slice::<Value>(&body).unwrap(),
         json!({"id":"K7Q2M9PX"})
     );
+    for (query, location) in [
+        ("?view=bags", "../#bags"),
+        ("?view=items", "../#items"),
+        ("?view=Bags", "../#gold"),
+        ("?view=%2F%2Fevil.example", "../#gold"),
+        ("?view=bags%0D%0Aset-cookie:x", "../#gold"),
+        ("?view=", "../#gold"),
+    ] {
+        let (status, headers, _) = raw(
+            &f.app,
+            "POST",
+            &format!("/api/desktop-login{query}"),
+            form.clone(),
+            &headers,
+        )
+        .await;
+        assert_eq!(
+            (status, &headers["location"]),
+            (303, &location.parse().unwrap()),
+            "{query}"
+        );
+    }
     assert_eq!(
         raw(&f.app, "POST", "/api/login", form.clone(), &headers)
             .await

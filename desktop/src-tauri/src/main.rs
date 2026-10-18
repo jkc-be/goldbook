@@ -56,6 +56,34 @@ impl Theme {
     }
 }
 
+// The pages of the app's rail: its own Sync page, and the hubs of the
+// website it shows in the window, each opened at its first tab.
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum View {
+    Sync,
+    Prices,
+    Bags,
+    Gold,
+}
+
+impl View {
+    // The website's route, none for Sync.
+    fn route(self) -> Option<&'static str> {
+        match self {
+            View::Sync => None,
+            View::Prices => Some("prices"),
+            View::Bags => Some("bags"),
+            View::Gold => Some("gold"),
+        }
+    }
+
+    // Inventory and Ledger, and the tabs reached from them, need the web login.
+    fn signs_in(self) -> bool {
+        matches!(self, View::Bags | View::Gold)
+    }
+}
+
 #[derive(Clone, Serialize)]
 struct Snapshot {
     files: usize,
@@ -497,7 +525,7 @@ async fn open_site(app: tauri::AppHandle, account_id: Option<String>) -> Result<
     let mut logins = website::game_logins(Path::new(&settings.wow_dir));
     if logins.is_empty() {
         app.opener()
-            .open_url(format!("{}/#characters", settings.api), None::<&str>)
+            .open_url(format!("{}/#gold", settings.api), None::<&str>)
             .map_err(|e| e.to_string())?;
         let files = state.snapshot.lock().unwrap().files;
         publish(&app, Snapshot { files, message: "Log in to World of Warcraft and type /reload so Goldbook can fill in your web login.".into() });
@@ -513,9 +541,14 @@ async fn open_site(app: tauri::AppHandle, account_id: Option<String>) -> Result<
     } else {
         return Err("Choose the World of Warcraft account you want to open.".into());
     };
-    let page = website::handoff(&settings.api, logins.remove(index), Duration::from_secs(60))
-        .await
-        .map_err(|e| e.to_string())?;
+    let page = website::handoff(
+        &settings.api,
+        logins.remove(index),
+        "gold",
+        Duration::from_secs(60),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     app.opener()
         .open_url(&page.url, None::<&str>)
         .map_err(|e| e.to_string())?;
@@ -612,12 +645,13 @@ fn layout_site(
     .map_err(|e| e.to_string())
 }
 
-// Shows the website inside the window. Prices are public. Characters need the
-// web login, which the game's saved data supplies the same way Open website does.
+// Shows the website inside the window. The market is public. Inventory and
+// Ledger need the web login, which the game's saved data supplies the same
+// way Open website does; the website's tabs then share its session.
 #[tauri::command]
 async fn show_view(
     app: tauri::AppHandle,
-    name: String,
+    name: View,
     account_id: Option<String>,
     viewport_height: f64,
     left: f64,
@@ -626,21 +660,18 @@ async fn show_view(
     let window = app
         .get_window("main")
         .ok_or("The Goldbook window is closed.")?;
-    if name == "sync" {
+    let Some(route) = name.route() else {
         if let Some(site) = window.get_webview(SITE) {
             site.hide().map_err(|e| e.to_string())?;
         }
         return Ok(());
-    }
-    if name != "prices" && name != "characters" {
-        return Err("Goldbook has no such view.".into());
-    }
+    };
     let state = app.state::<AppState>();
     let _operation = state.operation.lock().await;
     let settings = settings::read(&state.config)
         .prepare()
         .map_err(|e| e.to_string())?;
-    let mut target = format!("{}/#{name}", settings.api);
+    let mut target = format!("{}/#{route}", settings.api);
     let signed_in = {
         let mut site = state.site.lock().unwrap();
         if site.0 != settings.api {
@@ -648,7 +679,7 @@ async fn show_view(
         }
         site.1
     };
-    if name == "characters" && !signed_in {
+    if name.signs_in() && !signed_in {
         let mut logins = website::game_logins(Path::new(&settings.wow_dir));
         let index = match (account_id, logins.len()) {
             (_, 0) => None,
@@ -664,10 +695,14 @@ async fn show_view(
             }
         };
         if let Some(index) = index {
-            let page =
-                website::handoff(&settings.api, logins.remove(index), Duration::from_secs(60))
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let page = website::handoff(
+                &settings.api,
+                logins.remove(index),
+                route,
+                Duration::from_secs(60),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
             target = page.url.clone();
             *state.website.lock().unwrap() = Some(page);
             state.site.lock().unwrap().1 = true;
@@ -1022,6 +1057,40 @@ mod tests {
         );
         for input in ["\"Dark\"", "\"sepia\"", "\"dark'; alert(1); '\"", "null"] {
             assert!(serde_json::from_str::<Theme>(input).is_err(), "{input}");
+        }
+    }
+
+    #[test]
+    fn rail_opens_the_website_hubs_and_signs_in_for_inventory_and_ledger() {
+        let open = |name: &str| {
+            let view: View = serde_json::from_str(&format!("\"{name}\"")).unwrap();
+            (view.route(), view.signs_in())
+        };
+        assert_eq!(open("sync"), (None, false));
+        assert_eq!(open("prices"), (Some("prices"), false));
+        assert_eq!(open("bags"), (Some("bags"), true));
+        assert_eq!(open("gold"), (Some("gold"), true));
+        for input in ["\"characters\"", "\"Gold\"", "\"gold/../x\"", "null"] {
+            assert!(serde_json::from_str::<View>(input).is_err(), "{input}");
+        }
+    }
+
+    // The rail asks which game account to sign in with where the view will.
+    #[test]
+    fn rail_buttons_mark_the_views_that_sign_in() {
+        let page = include_str!("../../ui/index.html");
+        let buttons: Vec<_> = page
+            .lines()
+            .filter_map(|line| line.split_once("data-view=\""))
+            .map(|(_, rest)| {
+                let (name, rest) = rest.split_once('"').unwrap();
+                let view: View = serde_json::from_str(&format!("\"{name}\"")).unwrap();
+                (name, view.signs_in(), rest.starts_with(" data-sign-in"))
+            })
+            .collect();
+        assert_eq!(buttons.len(), 4, "{buttons:?}");
+        for (name, signs_in, marked) in buttons {
+            assert_eq!(signs_in, marked, "{name}");
         }
     }
 

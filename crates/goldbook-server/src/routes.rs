@@ -72,7 +72,7 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
         ("POST", "/api/sellers/batch") => upload_seller_batch(&input, &mut db),
         ("GET", "/api/sellers") => sellers(&input, &db),
         ("POST", "/api/account") => upload_account(&input, &mut db),
-        ("POST", "/api/login") => authenticate(&input, app, &mut db, input.json()?, false),
+        ("POST", "/api/login") => authenticate(&input, app, &mut db, input.json()?, None),
         ("POST", "/api/desktop-login") => {
             let body = std::str::from_utf8(&input.body)
                 .map_err(|_| Error::new(400, "invalid desktop login"))?;
@@ -90,7 +90,17 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                 .into_iter()
                 .map(|(k, v)| (k.into_owned(), Value::String(v.into_owned())))
                 .collect();
-            authenticate(&input, app, &mut db, Value::Object(body), true)
+            // The app names the website's view to open in the query; the
+            // website has views of a few lowercase letters, Gold the default.
+            let view = input
+                .query
+                .get("view")
+                .map(String::as_str)
+                .filter(|view| {
+                    (1..=32).contains(&view.len()) && view.bytes().all(|b| b.is_ascii_lowercase())
+                })
+                .unwrap_or("gold");
+            authenticate(&input, app, &mut db, Value::Object(body), Some(view))
         }
         ("POST", "/api/link") => link(&input, app, &mut db),
         ("POST", "/api/logout") => {
@@ -957,7 +967,8 @@ fn authenticate(
     app: &App,
     db: &mut Connection,
     body: Value,
-    desktop: bool,
+    // From the desktop app: the website's view to send the browser on to.
+    desktop: Option<&str>,
 ) -> Result<Reply> {
     let (id, stored) = verify(input, app, db, &body, 401)?;
     let now = now();
@@ -971,9 +982,9 @@ fn authenticate(
     }
     let mut r = Reply::json(json!({"id":id}));
     r.headers.push(cookie(input, &token, SESSION_SECONDS));
-    if desktop {
+    if let Some(view) = desktop {
         r.status = 303;
-        r.headers.push(("location", "../#characters".into()));
+        r.headers.push(("location", format!("../#{view}")));
         r.headers.push(("cache-control", "no-store".into()));
     }
     Ok(r)
