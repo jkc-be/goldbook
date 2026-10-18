@@ -1768,16 +1768,19 @@ function signedMoney(copper) {
   return element("span", { className: `trend ${kind}` }, [copper > 0 ? "+" : "−", money(Math.abs(copper))]);
 }
 
-// One row per item moved, the most recently traded first. Every goods side
-// counts: sales at auction, to vendors and in player trades, and purchases at
-// auction, from merchants, in player trades and by cash on delivery. Profit
-// or loss is realized on the units both bought and sold, at the average sale
-// less the average cost, so an item never bought, or never sold, has none.
+// One row per item moved, the most recently traded first, with the time of
+// its latest entry in `last`. Every goods side counts: sales at auction, to
+// vendors and in player trades, and purchases at auction, from merchants, in
+// player trades and by cash on delivery. Profit or loss is realized on the
+// units both bought and sold, at the average sale less the average cost, so
+// an item never bought, or never sold, has none.
 function tradedItems(trades) {
   const items = new Map();
   for (const trade of trades.filter(({ side }) => SIDES[side].goods)) {
-    const item = items.get(trade.item) ?? { name: trade.item, quality: null, bought: 0, cost: 0, sold: 0, proceeds: 0 };
+    const item = items.get(trade.item) ?? { name: trade.item, quality: null, itemKey: null, bought: 0, cost: 0, sold: 0, proceeds: 0, last: trade.at };
     item.quality ??= trade.quality;
+    item.itemKey ??= trade.itemKey;
+    item.last = Math.max(item.last, trade.at);
     if (SIDES[trade.side].revenue) {
       item.sold += trade.count;
       item.proceeds += trade.price - trade.fee;
@@ -1816,7 +1819,10 @@ function tradeSums(trades) {
 
 const itemQuality = (value) => (QUALITIES[value] ? value : 1);
 
-const TRADED_ITEM_COLUMNS = [
+const optionalAverage = (copper) => (copper === null ? none() : money(Math.round(copper)));
+const optionalProfit = (copper) => (copper === null ? none() : signedMoney(copper));
+
+const ITEM_COLUMNS = [
   {
     label: "Item",
     className: "item",
@@ -1824,18 +1830,109 @@ const TRADED_ITEM_COLUMNS = [
     cell: (item) => element("span", { className: `quality-${itemQuality(item.quality)}`, textContent: item.name }),
   },
   { label: "Bought", className: "number", value: (item) => item.bought, cell: (item) => item.bought.toLocaleString("en") },
-  { label: "Average cost", className: "number average", value: (item) => item.averageCost, cell: (item) => optionalAverage(item.averageCost) },
+  { label: "Avg cost", className: "number average", value: (item) => item.averageCost, cell: (item) => optionalAverage(item.averageCost) },
   { label: "Sold", className: "number", value: (item) => item.sold, cell: (item) => item.sold.toLocaleString("en") },
-  { label: "Average sale", className: "number average", value: (item) => item.averageSale, cell: (item) => optionalAverage(item.averageSale) },
+  { label: "Avg sale", className: "number average", value: (item) => item.averageSale, cell: (item) => optionalAverage(item.averageSale) },
+  { label: "Profit", className: "number", value: (item) => item.profit, cell: (item) => optionalProfit(item.profit) },
   {
-    label: "Profit or loss",
-    className: "number",
-    value: (item) => item.profit,
-    cell: (item) => (item.profit === null ? none() : signedMoney(item.profit)),
+    label: "Last",
+    className: "number when",
+    value: (item) => item.last,
+    cell: (item) => element("span", { className: "muted", textContent: ago(item.last), title: when(item.last) }),
   },
 ];
 
-const optionalAverage = (copper) => (copper === null ? none() : money(Math.round(copper)));
+const PROFIT_HINT = "Profit counts the units both bought and sold, at the average sale less the average cost";
+const NOTHING_BOOKED = "Nothing booked yet. Gold is booked as it moves in game: type /reload or log out to upload it.";
+
+// What By item shows: the trades and professions it last loaded, and the toolbar's choices.
+const byItem = { trades: null, professions: null, q: "", profession: "", kind: "all", quality: "", sort: { column: 6, descending: true }, offset: 0 };
+
+// Each item the characters chosen bought or sold, as the addon's By item
+// lists them: the search and the character choose the entries, the other
+// chips the items.
+function drawItems() {
+  const { trades } = byItem;
+  const characters = tradeCharacters(trades);
+  const character = characters.some(([key]) => key === state.character) ? state.character : "";
+  $("items-character").replaceChildren(
+    ...[["", "All characters"], ...characters].map(([value, text]) => element("option", { value, textContent: text })),
+  );
+  $("items-character").value = character;
+  const needle = byItem.q.toLowerCase();
+  const entries = trades.filter((trade) =>
+    trade.item.toLowerCase().includes(needle) && (character === "" || characterKey(trade) === character));
+  const kept = tradedItems(entries).filter((item) =>
+    (byItem.quality === "" || itemQuality(item.quality) === Number(byItem.quality))
+    && ((byItem.profession === "" && byItem.kind === "all")
+      || (item.itemKey !== null && professionMatches(byItem.professions ?? [], item.itemKey, byItem.profession, byItem.kind))));
+  const rows = sorted(kept, ITEM_COLUMNS[byItem.sort.column].value, byItem.sort.descending);
+  byItem.offset = Math.min(byItem.offset, Math.max(0, Math.floor((rows.length - 1) / PAGE) * PAGE));
+  const page = rows.slice(byItem.offset, byItem.offset + PAGE);
+  const sum = (value) => kept.reduce((total, item) => total + value(item), 0);
+  const realized = kept.filter(({ profit }) => profit !== null);
+  const best = realized.reduce((most, item) => (most === null || item.profit > most.profit ? item : most), null);
+
+  $("items-sub").textContent = plural(kept.length, "item");
+  $("items-cards").replaceChildren(
+    stat("Bought", money(sum((item) => item.cost))),
+    stat("Sold", money(sum((item) => item.proceeds))),
+    stat("Realized profit", realized.length ? signedMoney(realized.reduce((total, item) => total + item.profit, 0)) : none()),
+    best
+      ? stat("Best item", signedMoney(best.profit), element("span", { className: `quality-${itemQuality(best.quality)}`, textContent: best.name, title: best.name }))
+      : stat("Best item", none()),
+  );
+  drawTable($("items-table"), ITEM_COLUMNS, page, {
+    sort: byItem.sort,
+    onSort: (column) => {
+      byItem.sort = nextSort(byItem.sort, column, ITEM_COLUMNS, rows[0]);
+      byItem.offset = 0;
+      drawItems();
+    },
+    empty: trades.length ? "No items match" : "",
+  });
+  drawPager($("items-status"), {
+    offset: byItem.offset,
+    count: page.length,
+    total: trades.length ? rows.length : 0,
+    hint: PROFIT_HINT,
+    none: trades.length ? PROFIT_HINT : NOTHING_BOOKED,
+    go: (offset) => {
+      byItem.offset = offset;
+      drawItems();
+    },
+  });
+}
+
+async function loadItems() {
+  const [trades, professions] = await latestOnly("view", Promise.all([loadTrades(), loadProfessions()]));
+  // A server from before trades has none.
+  byItem.trades = trades ?? [];
+  byItem.professions = professions;
+  byItem.offset = 0;
+  drawItems();
+}
+
+const itemsChanged = (change) => () => {
+  change();
+  byItem.offset = 0;
+  if (byItem.trades) {
+    drawItems();
+  }
+};
+let itemsTimer;
+$("items-search").oninput = (event) => {
+  clearTimeout(itemsTimer);
+  itemsTimer = setTimeout(itemsChanged(() => { byItem.q = event.target.value.trim(); }), 150);
+};
+$("items-profession").onchange = itemsChanged(() => {
+  byItem.profession = $("items-profession").value;
+  byItem.kind = byItem.profession ? "materials" : "all";
+  $("items-kind").value = byItem.kind;
+});
+$("items-kind").onchange = itemsChanged(() => { byItem.kind = $("items-kind").value; });
+$("items-quality").onchange = itemsChanged(() => { byItem.quality = $("items-quality").value; });
+$("items-character").onchange = itemsChanged(() => { state.character = $("items-character").value; });
 
 // "Runecloth x20 · to Kargath", as the addon names an entry: the goods and
 // how many, or what the gold was for, and who it went to or came from.
@@ -1883,8 +1980,8 @@ function chip(label, choices, chosen, onchange) {
 
 // The accounting of `trades` into `container`, as the addon's Accounting view
 // has it: a title with the choice of revenue or expenses, the cards of what
-// is shown, a search and chips, the entries, and each item's profit under
-// them. The container keeps its choices from one drawing to the next.
+// is shown, a search and chips, and the entries. The container keeps its
+// choices from one drawing to the next.
 function drawTrades(container, trades) {
   if (trades === null) {
     container.replaceChildren();
@@ -1951,23 +2048,12 @@ function drawTrades(container, trades) {
     count: page.length,
     total: trades.length ? rows.length : 0,
     hint: "Open a mailbox in game to book auction sales and purchases",
-    none: "Nothing booked yet. Gold is booked as it moves in game: type /reload or log out to upload it.",
+    none: NOTHING_BOOKED,
     go: (offset) => {
       view.offset = offset;
       redraw();
     },
   });
-  const items = tradedItems(kept);
-  const itemTable = element("table", { className: "traded-items" });
-  view.itemSort ??= { column: 0, descending: false };
-  drawTable(itemTable, TRADED_ITEM_COLUMNS, sorted(items, TRADED_ITEM_COLUMNS[view.itemSort.column].value, view.itemSort.descending), {
-    sort: view.itemSort,
-    onSort: (column) => {
-      view.itemSort = nextSort(view.itemSort, column, TRADED_ITEM_COLUMNS, items[0]);
-      redraw();
-    },
-  });
-
   container.replaceChildren(
     element("div", { className: "pagehead" }, [
       element("h1", { textContent: "Accounting" }),
@@ -1995,9 +2081,6 @@ function drawTrades(container, trades) {
       }),
     ]),
     element("div", { className: "list" }, [element("section", { className: "panel list-panel" }, [table]), pager]),
-    ...(items.length > 0
-      ? [element("section", { className: "panel list-panel" }, [element("h3", { className: "heading", textContent: "By item" }), itemTable])]
-      : []),
   );
 }
 
@@ -2416,6 +2499,7 @@ const NAV = [
     tabs: [
       { route: "gold", tab: "Gold", signIn: true, shows: ["gold-view"], load: loadGold },
       { route: "accounting", tab: "Accounting", signIn: true, shows: ["accounting-view"], load: loadAccounting },
+      { route: "items", tab: "By item", signIn: true, shows: ["items-view"], load: loadItems },
     ],
   },
   {
