@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import warnings
 from unittest import mock
 import zipfile
 
@@ -228,12 +229,13 @@ class Reasons(unittest.TestCase):
 
 
 class CommandLine(unittest.TestCase):
-    maxDiff = None
-
     def run_main(self, world, *argv, environment=None):
         stdout, stderr = io.StringIO(), io.StringIO()
+        # Other test modules leave SQLite connections for the garbage collector,
+        # whose ResourceWarnings would otherwise land in the captured stderr.
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
-                mock.patch.dict(os.environ, environment or {}, clear=True):
+                mock.patch.dict(os.environ, environment or {}, clear=True), warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
             code = STATE.main(list(argv), http=world)
         return code, stdout.getvalue(), stderr.getvalue().strip()
 
