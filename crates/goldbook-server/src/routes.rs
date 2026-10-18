@@ -22,6 +22,8 @@ const MARKET: &str = "COALESCE(m.market_value,p.market_value)";
 const CHARACTER_COLUMNS: &str = "name, realm, faction, class, level, updated_at AS updatedAt";
 // The IDs linked with ?1, the ID their group is kept under.
 const GROUP: &str = "SELECT id FROM accounts WHERE COALESCE(owner_id,id)=?1";
+// The IDs that installs of the player ?1 uploaded, each with its linked group.
+const PLAYER_GROUPS: &str = "SELECT id FROM accounts WHERE COALESCE(owner_id,id) IN (SELECT COALESCE(a.owner_id,a.id) FROM accounts a JOIN account_identities ai ON ai.account_id=a.id WHERE ai.identity_hash=?1)";
 
 pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
     if input.path.starts_with("/api/auth/battlenet/") {
@@ -106,9 +108,11 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
         }
         ("POST", "/api/link") => link(&input, app, &mut db),
         ("POST", "/api/logout") => {
+            let token = hash(input.cookie());
+            db.execute("DELETE FROM sessions WHERE token_hash=?1", [&token])?;
             db.execute(
-                "DELETE FROM sessions WHERE token_hash=?1",
-                [hash(input.cookie())],
+                "DELETE FROM battlenet_web_sessions WHERE token_hash=?1",
+                [&token],
             )?;
             let mut r = Reply::json(json!({}));
             r.headers.push(cookie(&input, "", 0));
@@ -914,7 +918,7 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
         json!({"stored":true,"characters":characters.len()}),
     ))
 }
-fn cookie(input: &Input, token: &str, age: i64) -> (&'static str, String) {
+pub(crate) fn cookie(input: &Input, token: &str, age: i64) -> (&'static str, String) {
     (
         "set-cookie",
         format!(
@@ -1002,28 +1006,67 @@ fn authenticate(
     }
     Ok(r)
 }
-// The ID the session logged in with, and the ID its group is kept under.
-fn account_of(input: &Input, db: &Connection) -> Result<(String, String)> {
-    db.query_row(
-        "SELECT a.id,COALESCE(a.owner_id,a.id) FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=?1 AND s.expires_at>?2",
-        params![hash(input.cookie()), now()],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    )
-    .optional()?
-    .ok_or_else(|| Error::new(401, "not logged in"))
+// Who a website session belongs to: an ID logged in with its key, with the ID
+// its group is kept under, or a player signed in with Battle.net.
+enum Viewer {
+    Account { id: String, owner: String },
+    Player { identity: String },
 }
-// The other IDs of the group kept under `owner`.
-fn linked(db: &Connection, id: &str, owner: &str) -> Result<Vec<String>> {
-    let mut stmt = db.prepare(&format!("{GROUP} AND id<>?2 ORDER BY id"))?;
-    let ids = stmt
-        .query_map([owner, id], |r| r.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    Ok(ids)
+impl Viewer {
+    fn of(input: &Input, db: &Connection) -> Result<Self> {
+        let token = hash(input.cookie());
+        let account = db.query_row(
+            "SELECT a.id,COALESCE(a.owner_id,a.id) FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=?1 AND s.expires_at>?2",
+            params![token, now()],
+            |r| Ok(Self::Account { id: r.get(0)?, owner: r.get(1)? }),
+        ).optional()?;
+        if let Some(account) = account {
+            return Ok(account);
+        }
+        let player: Option<(String, bool)> = db.query_row(
+            "SELECT s.identity_hash,i.blocked_at IS NOT NULL FROM battlenet_web_sessions s JOIN battlenet_identities i ON i.identity_hash=s.identity_hash WHERE s.token_hash=?1 AND s.expires_at>?2",
+            params![token, now()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).optional()?;
+        match player {
+            Some((_, true)) => Err(Error::new(403, "this player is blocked")),
+            Some((identity, false)) => Ok(Self::Player { identity }),
+            None => Err(Error::new(401, "not logged in")),
+        }
+    }
+    // The IDs whose characters and trades the viewer sees, as a query of ?1, and ?1.
+    fn visible(&self) -> (&'static str, &str) {
+        match self {
+            Self::Account { owner, .. } => (GROUP, owner),
+            Self::Player { identity } => (PLAYER_GROUPS, identity),
+        }
+    }
+    // The ID the viewer logged in with, null for a player, and the other IDs it
+    // sees, by ID.
+    fn ids(&self, db: &Connection) -> Result<(Value, Vec<String>)> {
+        let (visible, key) = self.visible();
+        let mut stmt = db.prepare(&format!("{visible} ORDER BY id"))?;
+        let mut ids: Vec<String> = stmt
+            .query_map([key], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(match self {
+            Self::Account { id, .. } => {
+                ids.retain(|other| other != id);
+                (json!(id), ids)
+            }
+            Self::Player { .. } => (Value::Null, ids),
+        })
+    }
 }
 // Links the ID in the body with the session's, and with that every ID either
 // was linked with.
 fn link(input: &Input, app: &App, db: &mut Connection) -> Result<Reply> {
-    let (id, _) = account_of(input, db)?;
+    let Viewer::Account { id, .. } = Viewer::of(input, db)? else {
+        return Err(Error::new(
+            403,
+            "Battle.net sign-in already shows the IDs your installs uploaded; log in with an ID and key to link another",
+        ));
+    };
     let (other, _) = verify(input, app, db, &input.json()?, 403)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let owner_of = |id: &str| -> rusqlite::Result<String> {
@@ -1040,26 +1083,27 @@ fn link(input: &Input, app: &App, db: &mut Connection) -> Result<Reply> {
             [&owner, &joining],
         )?;
     }
-    let linked = linked(&tx, &id, &owner)?;
+    let (_, linked) = Viewer::Account { id, owner }.ids(&tx)?;
     tx.commit()?;
     Ok(Reply::json(json!({ "linked": linked })))
 }
-// The group's characters, each one as merged from every ID that uploaded it:
+// The viewer's characters, each one as merged from every ID that uploaded it:
 // the details of its newest upload, the gold of all of them with the newer
 // upload winning an hour both have, and the newest bags and bank. Gold is
 // [[time, copper]] by time, bags and bank as uploaded or null.
 fn group_characters(
     db: &Connection,
-    owner: &str,
+    viewer: &Viewer,
     filter: &str,
     params: &[&dyn rusqlite::ToSql],
 ) -> Result<Vec<Value>> {
+    let (visible, key) = viewer.visible();
     let rows = db::query(
         db,
         &format!(
-            "SELECT {CHARACTER_COLUMNS},gold,bags,bank FROM characters WHERE account_id IN ({GROUP}){filter} ORDER BY updated_at NULLS FIRST"
+            "SELECT {CHARACTER_COLUMNS},gold,bags,bank FROM characters WHERE account_id IN ({visible}){filter} ORDER BY updated_at NULLS FIRST"
         ),
-        &[&[&owner as &dyn rusqlite::ToSql], params].concat(),
+        &[&[&key as &dyn rusqlite::ToSql], params].concat(),
     )?;
     let decode = |text: &Value| -> Result<Value> {
         text.as_str().map_or(Ok(Value::Null), |text| {
@@ -1098,8 +1142,8 @@ fn group_characters(
         .collect())
 }
 fn characters(input: &Input, db: &Connection) -> Result<Reply> {
-    let (id, owner) = account_of(input, db)?;
-    let mut characters = group_characters(db, &owner, "", &[])?;
+    let viewer = Viewer::of(input, db)?;
+    let mut characters = group_characters(db, &viewer, "", &[])?;
     for c in &mut characters {
         let object = c.as_object_mut().unwrap();
         object.remove("bags");
@@ -1118,8 +1162,9 @@ fn characters(input: &Input, db: &Connection) -> Result<Reply> {
             .then_with(|| a["name"].as_str().cmp(&b["name"].as_str()))
             .then_with(|| a["realm"].as_str().cmp(&b["realm"].as_str()))
     });
+    let (id, linked) = viewer.ids(db)?;
     Ok(Reply::json(
-        json!({"id":id,"linked":linked(db,&id,&owner)?,"characters":characters}),
+        json!({"id":id,"linked":linked,"characters":characters}),
     ))
 }
 fn container(mut found: Value) -> Result<Value> {
@@ -1136,20 +1181,21 @@ fn container(mut found: Value) -> Result<Value> {
     Ok(found)
 }
 fn character(input: &Input, db: &Connection) -> Result<Reply> {
-    let (_, owner) = account_of(input, db)?;
+    let viewer = Viewer::of(input, db)?;
     let name = required(input, "name")?;
     let realm = required(input, "realm")?;
-    let mut c = group_characters(db, &owner, " AND name=?2 AND realm=?3", &[&name, &realm])?
+    let mut c = group_characters(db, &viewer, " AND name=?2 AND realm=?3", &[&name, &realm])?
         .pop()
         .ok_or_else(|| Error::new(404, "no such character"))?;
     c["bags"] = container(c["bags"].take())?;
     c["bank"] = container(c["bank"].take())?;
     Ok(Reply::json(c))
 }
-// The group's trades, newest first, or one character's with name and realm. A
+// The viewer's trades, newest first, or one character's with name and realm. A
 // trade that more than one ID uploaded counts once.
 fn trades(input: &Input, db: &Connection) -> Result<Reply> {
-    let (_, owner) = account_of(input, db)?;
+    let viewer = Viewer::of(input, db)?;
+    let (visible, key) = viewer.visible();
     let name = input.query.get("name").map(String::as_str).unwrap_or("");
     let realm = if name.is_empty() {
         ""
@@ -1159,9 +1205,9 @@ fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     let rows = db::query(
         db,
         &format!(
-            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee,t.party FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy,MAX(party) AS party FROM trades WHERE account_id IN ({GROUP}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
+            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee,t.party FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy,MAX(party) AS party FROM trades WHERE account_id IN ({visible}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
         ),
-        &[&owner, &name, &realm],
+        &[&key, &name, &realm],
     )?;
     Ok(Reply::json(json!({"trades": rows})))
 }

@@ -7,6 +7,9 @@ use std::{io::Read, time::Duration};
 const PREFIX: &str = "/api/auth/battlenet/";
 const PAIR_SECONDS: i64 = 600;
 const SESSION_SECONDS: i64 = 30 * 86400;
+// The browser's half of a sign-in's state: the app's pairing, or the website's.
+const APP_CSRF: &str = "gb_bnet_csrf";
+const WEB_CSRF: &str = "gb_bnet_web_csrf";
 
 #[derive(Clone)]
 pub struct BattleNetConfig {
@@ -70,14 +73,14 @@ impl BattleNetConfig {
     fn endpoint(&self, suffix: &str) -> String {
         format!("{}{PREFIX}{suffix}", self.public_url.trim_end_matches('/'))
     }
-    fn cookie(&self, value: &str, age: i64) -> String {
+    fn cookie(&self, name: &str, value: &str, age: i64) -> String {
         let path = url::Url::parse(&self.public_url)
             .expect("validated public URL")
             .path()
             .trim_end_matches('/')
             .to_owned();
         format!(
-            "gb_bnet_csrf={value}; Path={path}{PREFIX}; Max-Age={age}; HttpOnly; SameSite=Lax{}",
+            "{name}={value}; Path={path}{PREFIX}; Max-Age={age}; HttpOnly; SameSite=Lax{}",
             if self.public_url.starts_with("https://") {
                 "; Secure"
             } else {
@@ -105,11 +108,19 @@ fn valid_secret(value: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
+fn csrf<'a>(input: &'a Input, name: &str) -> Option<&'a str> {
+    header(&input.headers, "cookie")
+        .split(';')
+        .find_map(|part| part.trim().strip_prefix(name)?.strip_prefix('='))
+        .filter(|value| valid_secret(value))
+}
 
 pub(super) fn respond(input: &Input, app: &App) -> Result<Reply> {
     if input.method == "GET" && input.path == format!("{PREFIX}status") {
+        // `enabled` is for the app; `web` tells the website it can sign in.
+        let enabled = app.config.battlenet.is_some();
         return Ok(no_store(Reply::json(
-            json!({"enabled":app.config.battlenet.is_some()}),
+            json!({"enabled":enabled,"web":enabled}),
         )));
     }
     let config = app
@@ -125,6 +136,7 @@ pub(super) fn respond(input: &Input, app: &App) -> Result<Reply> {
         ("POST", "start") => start(input, app, config, &mut db),
         ("GET", "authorize") => confirmation(input, &db),
         ("POST", "authorize") => authorize(input, app, config, &db),
+        ("GET", "web/start") => web_start(input, app, config, &mut db),
         ("GET", "callback") => callback(input, config, &mut db),
         ("POST", "poll") => poll(input, &mut db),
         _ => Err(failure(404, "not found")),
@@ -253,6 +265,11 @@ fn authorize(input: &Input, app: &App, config: &BattleNetConfig, db: &Connection
             "sign-in request expired or already opened; start again in Goldbook",
         ));
     }
+    to_provider(config, &state, config.cookie(APP_CSRF, &csrf, PAIR_SECONDS))
+}
+// Sends the browser on to Battle.net with the sign-in's state, and keeps the
+// browser's half of it in `cookie`.
+fn to_provider(config: &BattleNetConfig, state: &str, cookie: String) -> Result<Reply> {
     let mut url = url::Url::parse(&config.authorization_endpoint)
         .map_err(|_| failure(500, "sign-in configuration error"))?;
     url.query_pairs_mut()
@@ -260,25 +277,70 @@ fn authorize(input: &Input, app: &App, config: &BattleNetConfig, db: &Connection
         .append_pair("response_type", "code")
         .append_pair("scope", "openid")
         .append_pair("redirect_uri", &config.endpoint("callback"))
-        .append_pair("state", &state);
+        .append_pair("state", state);
     let mut reply = Reply::json(json!({}));
     reply.status = 303;
     reply.headers.push(("location", url.into()));
-    reply
-        .headers
-        .push(("set-cookie", config.cookie(&csrf, PAIR_SECONDS)));
+    reply.headers.push(("set-cookie", cookie));
     Ok(reply)
 }
+fn web_start(
+    input: &Input,
+    app: &App,
+    config: &BattleNetConfig,
+    db: &mut Connection,
+) -> Result<Reply> {
+    if app.oauth_starts.lock().unwrap().begin(
+        None,
+        Some(input.client.as_deref().unwrap_or("unknown")),
+        now(),
+    ) > 0
+    {
+        return Err(failure(429, "too many sign-in attempts, try again later"));
+    }
+    let state = secret();
+    let csrf = secret();
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute(
+        "DELETE FROM battlenet_web_logins WHERE expires_at<=?1",
+        [now()],
+    )?;
+    tx.execute(
+        "INSERT INTO battlenet_web_logins(state_hash,csrf_hash,expires_at) VALUES (?1,?2,?3)",
+        params![hash(&state), hash(&csrf), now() + PAIR_SECONDS],
+    )?;
+    tx.commit()?;
+    to_provider(config, &state, config.cookie(WEB_CSRF, &csrf, PAIR_SECONDS))
+}
+// The player Battle.net verified, from the code it sent the browser back with.
+fn verified_identity(input: &Input, config: &BattleNetConfig) -> Result<String> {
+    if input.query.contains_key("error") {
+        return Err(failure(401, "Battle.net sign-in was cancelled"));
+    }
+    let code = input
+        .query
+        .get("code")
+        .filter(|value| !value.is_empty() && value.len() <= 4096)
+        .ok_or_else(|| failure(400, "missing sign-in code"))?;
+    provider_identity(config, code)
+}
+// Battle.net sends both the app's and the website's sign-ins back here, so the
+// portal keeps one redirect URL. The state says which one it is.
 fn callback(input: &Input, config: &BattleNetConfig, db: &mut Connection) -> Result<Reply> {
     let state = input
         .query
         .get("state")
         .filter(|value| valid_secret(value))
         .ok_or_else(|| failure(400, "invalid sign-in state"))?;
-    let csrf = header(&input.headers, "cookie")
-        .split(';')
-        .find_map(|part| part.trim().strip_prefix("gb_bnet_csrf="))
-        .filter(|value| valid_secret(value))
+    let web: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM battlenet_web_logins WHERE state_hash=?1)",
+        [hash(state)],
+        |row| row.get(0),
+    )?;
+    if web {
+        return web_callback(input, config, db, state);
+    }
+    let csrf = csrf(input, APP_CSRF)
         .ok_or_else(|| failure(400, "sign-in cookie missing; start again in Goldbook"))?;
     let request: Option<String> = db.query_row("SELECT request_id FROM battlenet_pairings WHERE state_hash=?1 AND csrf_hash=?2 AND expires_at>?3 AND consumed_at IS NULL",params![hash(state),hash(csrf),now()],|row| row.get(0)).optional()?;
     let request = request.ok_or_else(|| failure(400, "sign-in state expired or already used"))?;
@@ -286,15 +348,7 @@ fn callback(input: &Input, config: &BattleNetConfig, db: &mut Connection) -> Res
         return Err(failure(400,"sign-in state expired or already used"));
     }
     let identity = (|| -> Result<String> {
-        if input.query.contains_key("error") {
-            return Err(failure(401, "Battle.net sign-in was cancelled"));
-        }
-        let code = input
-            .query
-            .get("code")
-            .filter(|value| !value.is_empty() && value.len() <= 4096)
-            .ok_or_else(|| failure(400, "missing sign-in code"))?;
-        let identity = provider_identity(config, code)?;
+        let identity = verified_identity(input, config)?;
         let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute(
             "INSERT INTO battlenet_identities(identity_hash) VALUES (?1) ON CONFLICT DO NOTHING",
@@ -316,7 +370,52 @@ fn callback(input: &Input, config: &BattleNetConfig, db: &mut Connection) -> Res
         return Err(error);
     }
     let mut reply = html(r#"<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Goldbook connected</title><main><h1>Battle.net connected.</h1><p>Return to Goldbook. You can close this tab.</p></main></html>"#.into());
-    reply.headers.push(("set-cookie", config.cookie("", 0)));
+    reply
+        .headers
+        .push(("set-cookie", config.cookie(APP_CSRF, "", 0)));
+    Ok(reply)
+}
+// Signs the browser in to the website as the player, and sends it on to Gold.
+fn web_callback(
+    input: &Input,
+    config: &BattleNetConfig,
+    db: &mut Connection,
+    state: &str,
+) -> Result<Reply> {
+    let csrf = csrf(input, WEB_CSRF)
+        .ok_or_else(|| failure(400, "sign-in cookie missing; sign in again"))?;
+    if db.execute("UPDATE battlenet_web_logins SET consumed_at=?1 WHERE state_hash=?2 AND csrf_hash=?3 AND expires_at>?1 AND consumed_at IS NULL", params![now(),hash(state),hash(csrf)])? != 1 {
+        return Err(failure(400, "sign-in state expired or already used"));
+    }
+    let identity = verified_identity(input, config)?;
+    let token = secret();
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute(
+        "INSERT INTO battlenet_identities(identity_hash) VALUES (?1) ON CONFLICT DO NOTHING",
+        [&identity],
+    )?;
+    check_player(&tx, &identity)?;
+    tx.execute(
+        "DELETE FROM battlenet_web_sessions WHERE expires_at<=?1",
+        [now()],
+    )?;
+    tx.execute(
+        "INSERT INTO battlenet_web_sessions(token_hash,identity_hash,expires_at) VALUES (?1,?2,?3)",
+        params![hash(&token), identity, now() + SESSION_SECONDS],
+    )?;
+    tx.commit()?;
+    let mut reply = Reply::json(json!({}));
+    reply.status = 303;
+    reply.headers.push((
+        "location",
+        format!("{}/#gold", config.public_url.trim_end_matches('/')),
+    ));
+    reply
+        .headers
+        .push(crate::routes::cookie(input, &token, SESSION_SECONDS));
+    reply
+        .headers
+        .push(("set-cookie", config.cookie(WEB_CSRF, "", 0)));
     Ok(reply)
 }
 fn provider_json(response: reqwest::blocking::Response) -> Result<Value> {
