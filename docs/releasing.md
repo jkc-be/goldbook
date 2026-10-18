@@ -108,11 +108,20 @@ merge commit keeps their changes out of the release, without blocking them.
 
 The `guard` job resolves the input to a full SHA and requires it to be the
 commit the run started on or an earlier commit in `main`'s history. Every
-later job builds that revision: the checks, the installers, the signed addon,
+later job builds that revision: the installers, the signed addon,
 the server image, tagged `server:<revision>` and labelled
 `org.opencontainers.image.revision=<revision>`, and the feed, whose package
 URLs and `addon.json` name it. `Goldbook-server-image` records it in
 `image.json`.
+
+The checks are not run again. Every push to `main` starts **Check** for
+exactly that commit, and the `check` job waits up to 30 minutes for that run
+and requires it to pass. So the revision must be a commit that was pushed to
+`main`, such as the release PR's merge commit, not a commit in the middle of a
+merged branch. `check.yml` takes no ref input, so its jobs never run code
+checked out from an input while holding `main`'s caches. The build jobs do
+check out the input revision, but only after `guard` has confirmed it is in
+`main`'s history, so they run nothing that was not already merged.
 
 Promote reads the revision from `image.json`, not from the commit the build
 run started on. It requires the build's `addon.json` to name the same
@@ -132,7 +141,7 @@ The `guard` job refuses to build when:
 
 A build run proves:
 
-- the checks of `check.yml` pass for the revision
+- the **Check** run of the revision's push to `main` passed
 - the installers build and are signed
 - the addon update is signed
 - the feed has the layout the OVH helper accepts

@@ -436,6 +436,63 @@ class DownstreamWait(unittest.TestCase):
                          f"Package addon release did not finish within 120 minutes for {MIRROR_R1}")
 
 
+class Checks(unittest.TestCase):
+    URL = f"{SOURCE}/actions/workflows/check.yml/runs?head_sha={R1}&event=push&branch=main&per_page=100"
+
+    def runs(self, world, *runs):
+        world.urls[self.URL] = {"workflow_runs": [
+            {"id": run_id, "status": status, "conclusion": conclusion,
+             "html_url": f"https://github.com/jkc-be/goldbook/actions/runs/{run_id}"}
+            for run_id, status, conclusion in runs]}
+
+    def wait(self, world, polls):
+        clock = [0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+            if polls:
+                polls.pop(0)(world)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return STATE.wait_for_checks(world, R1, 60, 1800, sleep=sleep, clock=lambda: clock[0])
+
+    def test_waits_for_the_push_run_to_appear_and_pass(self):
+        world = World()
+        message = self.wait(world, [lambda w: self.runs(w, (31, "in_progress", None)),
+                                    lambda w: self.runs(w, (31, "completed", "success"))])
+        self.assertEqual(message, f"Check passed on main for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
+        self.assertIn(self.URL, world.authenticated)
+
+    def test_the_newest_run_decides(self):
+        world = World()
+        self.runs(world, (31, "completed", "failure"), (32, "completed", "success"))
+        self.assertTrue(self.wait(world, []).startswith("Check passed on main"))
+
+    def test_a_failed_run_stops_the_build(self):
+        world = World()
+        self.runs(world, (31, "completed", "failure"))
+        with self.assertRaises(STATE.Failure) as raised:
+            self.wait(world, [])
+        self.assertEqual(str(raised.exception), (
+            f"Check ended with failure on main for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31. "
+            "Re-run it if it was a flake, otherwise fix main and prepare the release again. "
+            "Then start a new Release build."))
+
+    def test_a_commit_without_a_push_run_is_refused_after_the_timeout(self):
+        with self.assertRaises(STATE.Failure) as raised:
+            self.wait(World(), [])
+        self.assertEqual(str(raised.exception), (
+            f"No Check run on main for {R1}. Build a commit that was pushed to main, "
+            "such as the merge commit of the release PR."))
+
+    def test_gives_up_on_a_run_that_does_not_finish(self):
+        world = World()
+        self.runs(world, (31, "queued", None))
+        with self.assertRaises(STATE.Failure) as raised:
+            self.wait(world, [])
+        self.assertEqual(str(raised.exception),
+                         f"Check did not finish within 30 minutes for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
+
+
 class Feed(unittest.TestCase):
     def folder(self, files):
         directory = tempfile.TemporaryDirectory()

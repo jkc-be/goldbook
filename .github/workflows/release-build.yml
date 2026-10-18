@@ -97,14 +97,30 @@ jobs:
           REVISION: ${{ steps.revision.outputs.revision }}
         run: python3 scripts/release-state.py state --version "$VERSION" --revision "$REVISION" --build
 
+  # Every push to main runs Check for exactly that commit. Requiring that run,
+  # rather than calling check.yml with a ref, keeps check.yml free of input
+  # checkouts while it holds main's caches.
   check:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
     needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     permissions:
       contents: read
-    uses: ./.github/workflows/check.yml
-    with:
-      ref: ${{ needs.guard.outputs.revision }}
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - name: Require the Check run of the revision's push to main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ needs.guard.outputs.revision }}
+        run: python3 scripts/release-state.py wait-checks --revision "$REVISION"
 
   installers:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'

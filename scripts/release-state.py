@@ -402,6 +402,35 @@ def wait_for_addon_release(http, commit, interval, timeout, sleep=time.sleep, cl
         sleep(interval)
 
 
+def wait_for_checks(http, revision, interval, timeout, sleep=time.sleep, clock=time.monotonic):
+    """Wait for the Check run that the push of `revision` to main started, and require it to pass."""
+    deadline = clock() + timeout
+    while True:
+        listing = get_json(http, f"{API}/repos/{REPOSITORY}/actions/workflows/check.yml/runs"
+                                 f"?head_sha={revision}&event=push&branch=main&per_page=100", authenticated=True)
+        runs = listing["workflow_runs"] if listing else []
+        run = max(runs, key=lambda r: r["id"], default=None)
+        if run is None:
+            message = f"No Check run on main for {revision} yet"
+        elif run["status"] != "completed":
+            message = f"Check for {revision} is {run['status']}: {run['html_url']}"
+        elif run["conclusion"] == "success":
+            message = f"Check passed on main for {revision}: {run['html_url']}"
+            print(message, flush=True)
+            return message
+        else:
+            raise Failure(f"Check ended with {run['conclusion']} on main for {revision}: {run['html_url']}. "
+                          "Re-run it if it was a flake, otherwise fix main and prepare the release again. "
+                          "Then start a new Release build.")
+        print(message, flush=True)
+        if clock() + interval > deadline:
+            if run is None:
+                raise Failure(f"No Check run on main for {revision}. Build a commit that was pushed to main, "
+                              "such as the merge commit of the release PR.")
+            raise Failure(f"Check did not finish within {timeout // 60} minutes for {revision}: {run['html_url']}")
+        sleep(interval)
+
+
 # The version, the feed and the command line.
 
 def read_version(source):
@@ -526,6 +555,10 @@ def main(argv=None, http=None):
     feed.add_argument("--revision", required=True)
     build_run = commands.add_parser("check-build-run", help="Check that a build run can be promoted")
     build_run.add_argument("--run-id", required=True)
+    checks = commands.add_parser("wait-checks", help="Wait for the Check run of a commit pushed to main")
+    checks.add_argument("--revision", required=True)
+    checks.add_argument("--interval", type=int, default=60)
+    checks.add_argument("--timeout", type=int, default=1800)
     wait = commands.add_parser("wait-addon-release", help="Wait for goldbook-addon to release a mirror commit")
     wait.add_argument("--commit", required=True)
     wait.add_argument("--interval", type=int, default=180)
@@ -551,6 +584,8 @@ def main(argv=None, http=None):
             print(f"The update feed holds {args.version} from {args.revision}.")
         elif args.command == "check-build-run":
             command_check_build_run(http, args)
+        elif args.command == "wait-checks":
+            wait_for_checks(http, args.revision, args.interval, args.timeout)
         else:
             wait_for_addon_release(http, args.commit, args.interval, args.timeout)
     except Failure as error:
