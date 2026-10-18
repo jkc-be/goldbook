@@ -9,6 +9,9 @@ on:
       release:
         type: boolean
         default: false
+      sign-macos:
+        type: boolean
+        default: false
       bundles:
         required: true
         type: string
@@ -22,8 +25,8 @@ permissions:
 
 jobs:
   build:
-    if: ${{ !inputs.release || (github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be') }}
-    environment: ${{ inputs.release && 'release-signing' || 'ci' }}
+    if: ${{ !(inputs.release || inputs.sign-macos) || (github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be') }}
+    environment: ${{ (inputs.release || inputs.sign-macos) && 'release-signing' || 'ci' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 40
     steps:
@@ -43,8 +46,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: cargo test --locked -p goldbook-desktop
       - run: npm ci
+      - name: Build Apple-signed and notarized macOS installers
+        if: runner.os == 'macOS' && (inputs.release || inputs.sign-macos)
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: 'Developer ID Application: jkc (P5339LSR49)'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: P5339LSR49
+          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.release && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+          RELEASE_BUILD: ${{ inputs.release }}
+          BUNDLES: ${{ inputs.bundles }}
+        run: bash scripts/build-signed-macos.sh
       - name: Build signed update installers
-        if: inputs.release
+        if: inputs.release && runner.os != 'macOS'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
@@ -65,7 +83,7 @@ jobs:
           # How long a Release build run can be promoted.
           retention-days: 30
       - name: Build installers
-        if: ${{ !inputs.release }}
+        if: ${{ !inputs.release && !inputs.sign-macos }}
         env:
           BUNDLES: ${{ inputs.bundles }}
         run: npm run desktop:pack -- --ci --bundles "$BUNDLES"

@@ -1036,9 +1036,37 @@ and the operating system's webview.
 Installers are built by hand, to save GitHub runner minutes. In **Actions**,
 choose **Build macOS**, **Build Windows**, **Build Ubuntu**, or **Build Fedora**.
 Click **Run workflow**, select a branch, then click **Run workflow** to build
-only that installer. These buttons appear after the workflows reach `main`.
+only that installer. **Build macOS** runs only on `main`, requires the owner's
+approval in `release-signing`, and signs and notarizes the app and DMG with Apple.
+Other branches can use the **Check** workflow's installer build for an ad hoc
+macOS build. These buttons appear after the workflows reach `main`.
 Download the installer from the run's **Artifacts**. Downloads stay available
 for 30 days.
+
+Before running **Build macOS** or **Release build**, add these secrets under
+**Settings > Environments > release-signing > Environment secrets**:
+
+| Secret | Value |
+|---|---|
+| `APPLE_CERTIFICATE` | Base64-encoded `.p12` containing the Developer ID Application certificate and its private key |
+| `APPLE_CERTIFICATE_PASSWORD` | Password chosen when exporting the `.p12` |
+| `APPLE_ID` | Apple account email used for notarization |
+| `APPLE_PASSWORD` | An Apple app-specific password, not the account's sign-in password |
+
+In Keychain Access, select **login > My Certificates**, select
+**Developer ID Application: jkc (P5339LSR49)** with its private key, and export it
+as a password-protected `.p12`. Encode that file with
+`openssl base64 -A -in /path/to/Goldbook.p12 -out /path/to/Goldbook-base64.txt`
+and save the encoded contents as `APPLE_CERTIFICATE`. Keep the export and
+credentials out of the repository and logs. Create the app-specific password at
+[account.apple.com](https://account.apple.com/).
+
+The builder uses team `P5339LSR49`, imports the signing key into a temporary
+keychain, and deletes the keychain and certificate export when it exits.
+It checks the app and DMG signatures, Apple notarization tickets and Gatekeeper
+acceptance before uploading artifacts. Missing signing or notarization credentials
+fail the build. The update feed still requires its separate
+`TAURI_SIGNING_PRIVATE_KEY` secret in the same protected environment.
 
 To run all checks and build every installer, use **Actions > Check > Run
 workflow**. Pull requests and pushes to `main` run the test, local Docker stack, and secret
