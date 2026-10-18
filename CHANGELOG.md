@@ -1,11 +1,12 @@
 # Changelog
 
 The changes in each Goldbook version, newest first. The desktop app and the
-addon share one version, set with `make version`. The server and the website
-have no version of their own; their changes are listed under the version they
-were released with.
+addon share one version. The server and the website have no version of their
+own; their changes are listed under the version they were released with.
 
-## Unreleased
+Changes not yet released live as files in [changes/](changes/README.md). The
+release pull request runs `make prepare-release VERSION=x.y.z`, which adds
+them here as a new version and sets that version everywhere.
 
 ## 0.2.4 - 2026-10-17
 

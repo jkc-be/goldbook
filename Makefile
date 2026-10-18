@@ -1,12 +1,12 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version hooks clean reset-local
+.PHONY: help build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version prepare-release release hooks clean reset-local
 
 OVH_HOST ?= fedora_ovh
 
 help: ## Show available commands and options
 	@printf 'Usage: make <target> [VARIABLE=value]\n\n'
 	@awk -F ':.*## ' '/^[a-zA-Z_-][a-zA-Z_ -]*:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf '\nOptions:\n  WOW=/path         WoW folder for install-addon or reset-local\n  DRY_RUN=1         Preview reset-local without deleting data\n  VERSION=0.2.5     Version to set with make version\n  OVH_HOST=host     Deployment host, default: fedora_ovh\n  FORCE=1           Skip deploy branch and clean-checkout checks\n'
+	@printf '\nOptions:\n  WOW=/path         WoW folder for install-addon or reset-local\n  DRY_RUN=1         Preview reset-local without deleting data\n  VERSION=0.2.5     Version for make version or prepare-release\n  REVISION=sha      Commit of main for make release, default: main\n  OVH_HOST=host     Deployment host, default: fedora_ovh\n  FORCE=1           Skip deploy branch and clean-checkout checks\n'
 
 node_modules: package-lock.json
 	npm ci
@@ -82,10 +82,23 @@ endif
 	bash server/deploy.sh $(OVH_HOST)
 
 # Sets the client and addon version everywhere a release reads it, such as
-# make version VERSION=0.1.5. Then commit, merge to main and run Release desktop.
+# make version VERSION=0.1.5. A release uses prepare-release instead.
 version: ## Set client and addon versions, requires VERSION
 	@test -n "$(VERSION)" || { echo "Usage: make version VERSION=0.1.5"; exit 1; }
 	python3 scripts/set-version.py $(VERSION)
+
+# Turns the files in changes/ into a CHANGELOG.md section, sets the version and
+# deletes the files, such as make prepare-release VERSION=0.2.5. Then edit the
+# section's prose and open the release pull request with the release label.
+prepare-release: ## Turn changes/ into a CHANGELOG.md section and set VERSION
+	@test -n "$(VERSION)" || { echo "Usage: make prepare-release VERSION=0.2.5"; exit 1; }
+	python3 scripts/prepare-release.py $(VERSION)
+
+# Runs Release build on GitHub as you, through gh, for the current main or for
+# a commit of main, such as make release REVISION=1a2b3c4. Then asks whether to
+# run Release promote for that build. See docs/releasing.md.
+release: ## Run Release build on GitHub, then offer Release promote
+	python3 scripts/release.py $(if $(REVISION),--revision "$(REVISION)")
 
 # Run once per clone: makes git use .githooks, so every push runs make check.
 hooks: ## Enable the pre-push checks for this clone

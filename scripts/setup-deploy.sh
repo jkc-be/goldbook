@@ -21,12 +21,24 @@ ssh -T "$host" 'test -O /opt/goldbook && test -f /opt/goldbook/.env && docker in
 scp -q "$repo/scripts/deploy-ovh.py" "$host:/opt/goldbook/deploy-public.py.new"
 ssh -T "$host" 'python3 -' <<'PY'
 import ast
+import os
 from pathlib import Path
 import shutil
+import sqlite3
 
 root = Path('/opt/goldbook')
 helper = root / 'deploy-public.py.new'
 ast.parse(helper.read_text())
+# A deployment backs up the database first, as this user, through the backup API.
+database = root / 'data/goldbook.sqlite'
+try:
+    sqlite3.connect(database.as_uri() + '?mode=ro', uri=True).execute('SELECT count(*) FROM sqlite_master').fetchone()
+except sqlite3.Error as error:
+    raise SystemExit(f'The deployment user cannot read {database}: {error}')
+backups = root / 'backups'
+backups.mkdir(mode=0o700, exist_ok=True)
+if not os.access(backups, os.W_OK | os.X_OK):
+    raise SystemExit(f'The deployment user cannot write {backups}')
 compose = root / 'app/server/compose.yaml'
 original = compose.read_text()
 old = '    image: goldbook\n'

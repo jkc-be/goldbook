@@ -15,6 +15,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="goldbook-professions-") as temporary:
         with helpers["server"](Path(temporary), None, ROOT / "target/debug/goldbook-server") as api:
             items = {"2589": ["Linen Cloth", 1], "2447": ["Peacebloom", 1], "2840": ["Copper Bar", 1],
+                     "2318": ["Light Leather", 1],
                      "2881": ["Plans: Runed Copper Breastplate", 2], "858": ["Lesser Healing Potion", 1],
                      "10504:584": ["Green Lens variant", 2], "999999": ["Unknown sample", 0]}
             scan = dict(realm="Filter", faction="Horde", region="EU", scannedAt=1760000000,
@@ -35,7 +36,10 @@ def main():
             check("&profession=blacksmithing&kind=recipes", ["2881"])
             check("&profession=alchemy&kind=crafted", ["858"])
             check("&profession=engineering&kind=crafted", ["10504:584"])
-            check("&profession=tailoring&kind=materials", ["2589"])
+            check("&profession=tailoring&kind=materials", ["2589", "2318"])
+            check("&profession=skinning&kind=materials", ["2318"])
+            check("&profession=skinning&kind=crafted", [])
+            check("&profession=leatherworking&kind=materials", ["2318"])
             check("&profession=first-aid&kind=materials", ["2589"])
             check("&quality=2", ["2881", "10504:584"])
             check("&quality=2&limit=1&offset=1&sort=name", ["2881"], 2)
@@ -48,6 +52,8 @@ def main():
             catalog = api.request("GET", "/api/professions")[0]["body"]["professions"]
             alchemy = next(p for p in catalog if p["id"] == "alchemy")
             assert 2447 in alchemy["materials"] and 118 in alchemy["crafted"]
+            skinning = next(p for p in catalog if p["id"] == "skinning")
+            assert 2318 in skinning["materials"] and skinning["crafted"] == [], skinning["crafted"]
     print("Verified profession lists, quality, text search, pagination, empty pages and invalid filters.")
 
 
