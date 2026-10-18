@@ -12,6 +12,10 @@ on:
       bundles:
         required: true
         type: string
+      ref:
+        description: The commit to build; empty builds the commit the caller runs on
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -26,6 +30,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref }}
       - name: Install the Rust toolchain from rust-toolchain.toml
         run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -43,7 +48,8 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
-        run: npm run desktop:pack -- --ci --bundles ${{ inputs.bundles }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          BUNDLES: ${{ inputs.bundles }}
+        run: npm run desktop:pack -- --ci --bundles "$BUNDLES" --config '{"bundle":{"createUpdaterArtifacts":true}}'
       - name: Upload signed updates
         if: inputs.release
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -56,10 +62,13 @@ jobs:
             target/release/bundle/rpm/*.rpm*
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
+          # How long a Release build run can be promoted.
+          retention-days: 30
       - name: Build installers
         if: ${{ !inputs.release }}
-        run: npm run desktop:pack -- --ci --bundles ${{ inputs.bundles }}
+        env:
+          BUNDLES: ${{ inputs.bundles }}
+        run: npm run desktop:pack -- --ci --bundles "$BUNDLES"
       - name: Upload macOS and Windows installers
         if: runner.os != 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

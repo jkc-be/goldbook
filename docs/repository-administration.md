@@ -45,6 +45,11 @@ needs one new push, such as a rebase or an empty commit, before it can merge.
 | `release-signing` | `TAURI_SIGNING_PRIVATE_KEY` | `jkc-be` | `main` |
 | `addon-mirror` | `ADDON_MIRROR_SSH_KEY` | `jkc-be` | `main` |
 
+`release-signing` signs the installers and the addon update in **Release
+build**. `production` approves **Deploy to OVH**, the `verify` job of
+**Release build**, and the `server` and `publish` jobs of **Release promote**.
+`addon-mirror` approves the mirror push in **Release promote**.
+
 Administrator bypass is disabled for all three environments. Self-review is allowed
 so the sole maintainer can approve a workflow they started. Only the listed
 reviewer can approve. Jobs cannot receive environment secrets before approval.
@@ -96,8 +101,8 @@ one `main` pointed at when the run started.
 | --- | --- | --- |
 | `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the run's image and the running service, and reports whether `deploy` would replace it. Changes nothing. |
 | `deploy` | `deploy.yml`, `release-build.yml` | When the commit is newer than the running one, backs up the database, then replaces the running image with the run's image. |
-| `check-publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
-| `publish` | `release-desktop.yml`, `update-addon.yml`, `release-build.yml` | Validates and publishes the run's update feed. |
+| `check-publish` | `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
+| `publish` | `release-build.yml` | Validates and publishes the run's update feed. |
 
 The run's image is the one it pushed, not whatever its commit's tag points at
 now, because another run for the same commit can push the tag again. The run
@@ -128,10 +133,8 @@ an image built on the server. Reconcile by hand: set `GOLDBOOK_IMAGE` to a
 labelled image, such as the one the last deploy pinned, and restart the service.
 
 A feed must come from a run with exactly one unexpired `Goldbook-update-feed`
-artifact. A `release-desktop.yml` feed publishes `latest.json` and its package
-folder, an `update-addon.yml` feed publishes `addon.json`, and a
-`release-build.yml` feed publishes `latest.json`, its package folder and
-`addon.json`. The helper rejects the feed before
+artifact. Only a `release-build.yml` feed is accepted, and it publishes
+`latest.json`, its package folder and `addon.json`. The helper rejects the feed before
 it replaces anything when a manifest is missing, a package is missing, the
 revision already has different packages, or a manifest is older than the one
 already published. A `latest.json` is older when its `version` is lower; an
@@ -161,11 +164,19 @@ database, copy the backup over `/opt/goldbook/data/goldbook.sqlite`, set `GOLDBO
 back from the `.env.before-<stamp>-*` file with the same stamp, and start the
 service. The helper does not delete old backups.
 
+**Deploy to OVH** first runs every check in `check.yml` for the same commit and
+builds the image only when they pass. It shares the concurrency group
+`goldbook-production` with **Release promote**, so a server-only deploy and a
+promotion never interleave.
+
 The server retains its Compose files. Review and copy Compose changes separately
-before deploying an image that depends on them. Deployment and update publication
-use separate locks. Desktop releases and addon publication require signing
-approval followed by production publication approval. The public source import
-does not itself require publishing a new release.
+before deploying an image that depends on them. On OVH, deployment and update
+publication use separate locks. Releases go through **Release build** and
+**Release promote**, described in [releasing](releasing.md). The SSH handling
+for all three workflows lives in the composite action `.github/actions/ovh`.
+Build artifacts are kept for 30 days, which is how long a build run can be
+promoted. The public source import does not itself require publishing a new
+release.
 
 GitHub documents [rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
 and [environment protection](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
@@ -176,9 +187,12 @@ the all-rights-reserved license does not make this open source.
 ## Addon distribution mirror
 
 `jkc-be/goldbook-addon` is generated from this repository's `addon/` directory.
-After a push to main changes the addon, approve **Mirror addon** in the
+**Release promote** mirrors the released commit through the called **Mirror
+addon** workflow, which has no trigger of its own; approve it in the
 `addon-mirror` environment. The workflow uses a dedicated write deploy key for
-the addon repository. It cannot deploy to OVH or sign client updates.
+the addon repository. It cannot deploy to OVH or sign client updates. Its push
+starts the target's **Package addon release** workflow, which Release promote
+waits for before it tags the release.
 
 The addon repository's main branch permits updates only by the sole maintainer
 or this deploy key. Force pushes and deletion are blocked, including for the

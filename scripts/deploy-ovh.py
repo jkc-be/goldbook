@@ -22,8 +22,6 @@ GITHUB_REPOSITORY = "jkc-be/goldbook"
 DEPLOY_WORKFLOWS = (".github/workflows/deploy.yml", ".github/workflows/release-build.yml")
 # The manifests each feed workflow must publish, in publication order.
 FEED_MANIFESTS = {
-    ".github/workflows/release-desktop.yml": ("latest.json",),
-    ".github/workflows/update-addon.yml": ("addon.json",),
     ".github/workflows/release-build.yml": ("latest.json", "addon.json"),
 }
 

@@ -34,14 +34,15 @@ class PublishUpdates(unittest.TestCase):
         self.patch = mock.patch.object(DEPLOY, 'ROOT', self.root)
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        self.run = dict(head_sha=REVISION, head_branch='main', name='Release Goldbook client from main',
-                        path='.github/workflows/release-desktop.yml', event='workflow_dispatch',
+        self.run = dict(head_sha=REVISION, head_branch='main', name='Release build',
+                        path='.github/workflows/release-build.yml', event='workflow_dispatch',
                         repository={'full_name': 'jkc-be/goldbook'},
                         head_repository={'full_name': 'jkc-be/goldbook'},
                         actor={'id': 156444954}, triggering_actor={'id': 156444954})
         self.manifest = {'version': '0.1.3', 'platforms': {'darwin-aarch64': {
             'url': 'https://app.jkc-be.com/goldbook/updates/' + REVISION + '/client.tar.gz', 'signature': 'signed'}}}
-        self.files = {'latest.json': json.dumps(self.manifest), REVISION + '/client.tar.gz': 'signed package'}
+        self.files = {'latest.json': json.dumps(self.manifest), 'addon.json': ADDON,
+                      REVISION + '/client.tar.gz': 'signed package'}
         self.artifacts = [{'id': 456, 'name': 'Goldbook-update-feed', 'expired': False}]
         self.relation = None
         self.compares = []
@@ -53,11 +54,6 @@ class PublishUpdates(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
         return root / 'data/updates'
-
-    def release_build(self):
-        self.run['name'] = 'Release build'
-        self.run['path'] = '.github/workflows/release-build.yml'
-        self.files['addon.json'] = ADDON
 
     def published_before(self):
         destination = self.root / 'data/updates'
@@ -106,7 +102,6 @@ class PublishUpdates(unittest.TestCase):
         self.assertEqual((destination / REVISION / 'client.tar.gz').read_text(), 'signed package')
 
     def test_run_for_the_revision_needs_no_comparison(self):
-        self.release_build()
         self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
         self.assertEqual(self.compares, [])
 
@@ -115,7 +110,6 @@ class PublishUpdates(unittest.TestCase):
         self.run['head_sha'] = 'b' * 40
         for relation in ('behind', 'diverged'):
             self.relation = relation
-            self.release_build()
             with self.subTest(relation=relation), self.assertRaisesRegex(
                     RuntimeError, f'^Run 123 is for commit {"b" * 40}, which does not contain {REVISION}$'):
                 self.publish()
@@ -165,27 +159,26 @@ class PublishUpdates(unittest.TestCase):
                 DEPLOY.main()
                 publish.assert_called_once_with('123', REVISION, 'test-token', check_only=True)
 
-    def test_addon_feed_uses_one_atomic_signed_envelope(self):
-        self.run['name'] = 'Publish addon update'
-        self.run['path'] = '.github/workflows/update-addon.yml'
-        self.files = {'addon.json': ADDON}
-        self.assertEqual(self.publish(), {'published': ['addon.json'], 'revision': REVISION})
-        self.assertEqual((self.root / 'data/updates/addon.json').read_text(), ADDON)
+    def test_feeds_of_the_retired_release_workflows_are_refused(self):
+        for workflow in ('.github/workflows/release-desktop.yml', '.github/workflows/update-addon.yml'):
+            with self.subTest(workflow=workflow):
+                self.run['path'] = workflow
+                with self.assertRaisesRegex(RuntimeError, 'Only a maintainer Goldbook workflow on main'):
+                    self.publish()
+                self.assertFalse((self.root / 'data/updates').exists())
 
     def test_release_build_feed_publishes_both_manifests(self):
-        self.release_build()
         self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
         self.assertEqual(self.snapshot(), {'latest.json': json.dumps(self.manifest).encode(), 'addon.json': ADDON.encode(),
                                            REVISION + '/client.tar.gz': b'signed package'})
 
     def test_release_build_feed_missing_a_manifest_changes_nothing(self):
         before = self.published_before()
-        self.release_build()
         del self.files['addon.json']
         with self.assertRaisesRegex(RuntimeError, '^Update feed is missing addon.json$'):
             self.publish()
         self.assertEqual(self.snapshot(), before)
-        self.release_build()
+        self.files['addon.json'] = ADDON
         del self.files['latest.json']
         with self.assertRaisesRegex(RuntimeError, '^Update feed is missing latest.json$'):
             self.publish()
@@ -193,7 +186,6 @@ class PublishUpdates(unittest.TestCase):
 
     def test_run_needs_exactly_one_unexpired_feed_artifact(self):
         before = self.published_before()
-        self.release_build()
         feed = {'id': 456, 'name': 'Goldbook-update-feed', 'expired': False}
         for artifacts, count in [([feed, dict(feed, id=789)], 2), ([], 0), ([dict(feed, expired=True)], 0)]:
             self.artifacts = artifacts
@@ -205,7 +197,6 @@ class PublishUpdates(unittest.TestCase):
         self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
 
     def test_interrupted_publication_completes_with_the_same_bytes_on_retry(self):
-        self.release_build()
         self.publish()
         uninterrupted = self.snapshot()
         replace = os.replace
@@ -229,7 +220,6 @@ class PublishUpdates(unittest.TestCase):
         before = self.published_before()
         (self.root / 'data/updates/latest.json').write_text('{"version": "0.1.10"}')
         before['latest.json'] = b'{"version": "0.1.10"}'
-        self.release_build()
         for check_only in (False, True):
             with self.subTest(check_only=check_only), self.assertRaisesRegex(
                     RuntimeError, '^latest.json has version 0.1.3, older than the published version 0.1.10$'):
@@ -240,7 +230,6 @@ class PublishUpdates(unittest.TestCase):
         before = self.published_before()
         (self.root / 'data/updates/addon.json').write_text(addon(1770000000))
         before['addon.json'] = addon(1770000000).encode()
-        self.release_build()
         for check_only in (False, True):
             with self.subTest(check_only=check_only), self.assertRaisesRegex(
                     RuntimeError, '^addon.json has sequence 1760000000, older than the published sequence 1770000000$'):
@@ -252,7 +241,6 @@ class PublishUpdates(unittest.TestCase):
         destination = self.root / 'data/updates'
         (destination / 'latest.json').write_text('{"version": "0.1.3", "notes": "earlier build"}')
         (destination / 'addon.json').write_text(addon(1760000000).replace('signed', 'earlier'))
-        self.release_build()
         self.assertEqual(self.publish(check_only=True), {'checked': ['latest.json', 'addon.json'], 'revision': REVISION})
         self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
         self.assertEqual((destination / 'latest.json').read_text(), json.dumps(self.manifest))
@@ -263,7 +251,6 @@ class PublishUpdates(unittest.TestCase):
         destination.mkdir(parents=True)
         (destination / 'latest.json').write_text('not json')
         (destination / 'addon.json').write_text('{"payload":"old","signature":"old"}')
-        self.release_build()
         self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
         self.assertEqual((destination / 'addon.json').read_text(), ADDON)
 
@@ -271,7 +258,6 @@ class PublishUpdates(unittest.TestCase):
         before = self.published_before()
         for name, content in [('addon.json', '{"payload":"data","signature":"signed"}'),
                               ('latest.json', json.dumps(dict(self.manifest, version='0.1')))]:
-            self.release_build()
             self.files[name] = content
             with self.subTest(name=name), self.assertRaisesRegex(RuntimeError, f'^Update feed has an invalid {name}$'):
                 self.publish()
@@ -280,7 +266,6 @@ class PublishUpdates(unittest.TestCase):
 
     def test_check_publish_validates_without_changing_the_feed(self):
         before = self.published_before()
-        self.release_build()
         self.assertEqual(self.publish(check_only=True), {'checked': ['latest.json', 'addon.json'], 'revision': REVISION})
         self.assertEqual(self.snapshot(), before)
         self.files.pop(REVISION + '/client.tar.gz')

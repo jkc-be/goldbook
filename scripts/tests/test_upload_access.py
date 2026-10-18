@@ -1,3 +1,4 @@
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 import subprocess
@@ -14,7 +15,7 @@ class UploadAccessTest(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.database = Path(directory.name) / "goldbook.sqlite"
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.executescript((ROOT / "server/migrations/0010_upload_tokens.sql").read_text())
             db.executescript((ROOT / "server/migrations/0011_battlenet_oauth.sql").read_text())
             db.execute("INSERT INTO upload_identities (fingerprint) VALUES (?)", ("a" * 64,))
@@ -37,13 +38,13 @@ class UploadAccessTest(unittest.TestCase):
         for fingerprint in ("a" * 64, "b" * 64):
             self.assertEqual(self.run_cli("block", fingerprint).returncode, 0)
             self.assertEqual(self.run_cli("block", fingerprint).returncode, 0)
-            with sqlite3.connect(self.database) as db:
+            with closing(sqlite3.connect(self.database)) as db, db:
                 self.assertIsNotNone(db.execute("SELECT blocked_at FROM upload_identities WHERE fingerprint=?", (fingerprint,)).fetchone()[0])
             self.assertIn(fingerprint + "\tyes\t" + ("2" if fingerprint == "a" * 64 else "0") + "\t0\t\n", self.run_cli("list").stdout)
             self.assertEqual(self.run_cli("unblock", fingerprint).returncode, 0)
-            with sqlite3.connect(self.database) as db:
+            with closing(sqlite3.connect(self.database)) as db, db:
                 self.assertIsNone(db.execute("SELECT blocked_at FROM upload_identities WHERE fingerprint=?", (fingerprint,)).fetchone()[0])
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             self.assertEqual(db.execute("SELECT count(*) FROM upload_tokens").fetchone()[0], 2)
 
     def test_unknown_unblock_fails(self):
@@ -53,7 +54,7 @@ class UploadAccessTest(unittest.TestCase):
 
     def test_player_block_covers_all_linked_fingerprints(self):
         player = "c" * 64
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("INSERT INTO battlenet_identities (identity_hash) VALUES (?)", (player,))
             db.execute("UPDATE upload_identities SET battlenet_identity=?", (player,))
             db.execute("INSERT INTO upload_identities (fingerprint,battlenet_identity) VALUES (?,?)", ("b" * 64, player))
