@@ -23,7 +23,9 @@
   startup code are either absent until the feature is switched on, or proven
   harmless to existing data and requests by a test.
 - Server changes stay compatible with every client and addon version at or
-  above the support floor, the oldest version under `fixtures/clients/`. The
+  above the support floor, the oldest version under `fixtures/clients/`, in
+  every mode that version's fixtures cover. Modes the server dropped are
+  listed in [fixtures/clients/README.md](fixtures/clients/README.md). The
   server deploys before clients update, and users can skip releases.
 - Never run **Release build**, **Release promote** or **Deploy to OVH** or any
   other release workflow, never approve an environment deployment, and never

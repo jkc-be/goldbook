@@ -61,3 +61,13 @@ still run. A release whose requests did not change needs no folder.
 Raising the floor means deleting the oldest folder, in a PR that says why,
 such as that players no longer run that version. After that the server may
 drop what only that version needed.
+
+The same PR may also drop a way the new floor version talks to the server,
+such as a setting it still offers. It lists the mode below, and a fixture in
+that version's folder records how the server refuses it, so the app shows an
+error rather than failing silently. The server stays compatible with every
+other mode the fixtures cover.
+
+| Version | Mode no longer supported | How the server refuses it |
+|---|---|---|
+| 0.3.0 | An upload token entered in Settings, such as the server's shared `UPLOAD_TOKEN`. Only Battle.net sign-in uploads | 401, which the app shows as "The server refused this app's upload access" (`19-manual-token-refused.json`) |
