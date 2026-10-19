@@ -32,3 +32,22 @@ end
 if ChatFrameUtil and ChatFrameUtil.InsertLink then
   hooksecurefunc(ChatFrameUtil, "InsertLink", shiftClick)
 end
+
+local function searchInventory(location, button)
+  local modifier = IsControlKeyDown() or (IsMacClient() and IsMetaKeyDown())
+  if button ~= "LeftButton" or not modifier or IsShiftKeyDown() or IsAltKeyDown()
+    or (ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()) then return end
+  ns.AuctionUI.SearchItem(location)
+end
+
+if HandleModifiedItemClick then
+  hooksecurefunc("HandleModifiedItemClick", function(_, location)
+    searchInventory(location, GetMouseButtonClicked())
+  end)
+end
+if ContainerFrameItemButton_OnClick then
+  hooksecurefunc("ContainerFrameItemButton_OnClick", function(self, button)
+    local bag = self.GetBagID and self:GetBagID() or self:GetParent():GetID()
+    searchInventory(ItemLocation:CreateFromBagAndSlot(bag, self:GetID()), button)
+  end)
+end

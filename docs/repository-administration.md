@@ -204,20 +204,26 @@ The target's **Package addon release** workflow uses its own GitHub token to
 publish an installable ZIP. It does not have production or signing secrets.
 The workflow verifies byte-for-byte equality on retries and rejects overwriting
 an existing version with different contents. Source ZIPs from GitHub have an
-extra directory and must not be uploaded to CurseForge.
+extra directory and must not be uploaded to CurseForge or WoWInterface.
 
-The mirror stores `CURSEFORGE_API_TOKEN` only in its `curseforge` environment.
-That environment permits the `main` branch, requires approval by `jkc-be`, and
-disables administrator bypass. There are no repository-level secrets. The
+The mirror stores `CURSEFORGE_API_TOKEN` only in its `curseforge` environment
+and `WOWINTERFACE_API_TOKEN` only in its `wowinterface` environment. Both
+environments permit the `main` branch, require approval by `jkc-be`, and
+disable administrator bypass. The repository variable
+`WOWINTERFACE_PROJECT_ID` enables WoWInterface publishing after the first
+entry is created through its website. There are no repository-level secrets. The
 release workflow accepts only runs initiated and rerun by `jkc-be`; the
 existing mirror key's pushes are attributed to that account. Tests and GitHub
-packaging run before the separate job can receive the CurseForge token.
+packaging run before each publishing job can receive its token. WoWInterface
+runs in a separate workflow after the CurseForge workflow succeeds, with its
+own concurrency group. Release promotion waits only for the primary
+GitHub/CurseForge workflow.
 
 Only `jkc-be` is a collaborator, and the mirror key is the only write deploy
 key. Public contributors can fork and propose pull requests, but cannot push
 to this repository, merge changes, edit secrets, or approve publishing jobs.
-External pull-request workflows require approval and receive no CurseForge
-secret. GitHub Actions has read-only permissions by default and cannot approve
+External pull-request workflows require approval and receive no publishing
+secrets. GitHub Actions has read-only permissions by default and cannot approve
 pull requests.
 
 Public workflow logs remain readable. Keep secrets out of commands, source,

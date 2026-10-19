@@ -269,9 +269,7 @@ local sorting = {}
 local chosen = {}
 local refreshPending = false
 local refresh
-local function noFilters()
-  return { profession = "", kind = "all" }
-end
+local noFilters = ns.ItemFilters.New
 local filters = noFilters()
 
 local function copy(list)
@@ -388,8 +386,7 @@ local function shownHistory()
 end
 
 local function keepItem(row)
-  return ns.Professions.Matches(row.key, filters.profession, filters.kind)
-    and (filters.quality == nil or row.quality == filters.quality)
+  return ns.ItemFilters.Matches(row.key, row.quality, filters)
 end
 
 -- Entries within the last month, and the sale of goods that brought in the most.
@@ -970,28 +967,9 @@ end
 
 -- The chips a toolbar can show: what each offers, as { value, label }.
 local FILTERS = {
-  profession = function()
-    local options = { { "", "All professions" } }
-    for _, profession in ipairs(ns.ProfessionData) do
-      if #profession.materials > 0 then
-        options[#options + 1] = { profession.id, profession.name }
-      end
-    end
-    return options
-  end,
-  kind = function()
-    return { { "all", "All items" }, { "materials-recipes", "Materials and recipes" }, { "materials", "Materials" },
-      { "recipes", "Recipes" }, { "crafted", "Crafted items" } }
-  end,
-  quality = function()
-    local options = { { nil, "All qualities" } }
-    -- The qualities the auction house lists: legendaries are bound, and
-    -- Classic has no artifacts or heirlooms.
-    for id, name in ipairs({ "Poor", "Common", "Uncommon", "Rare", "Epic" }) do
-      options[#options + 1] = { id - 1, name }
-    end
-    return options
-  end,
+  profession = ns.ItemFilters.Options.profession,
+  kind = ns.ItemFilters.Options.kind,
+  quality = ns.ItemFilters.Options.quality,
   source = function()
     local present = {}
     for _, row in ipairs(Trades.Rows(ns.db)) do
@@ -1947,10 +1925,7 @@ local function openMenu(chip, name)
       choice.label:SetText(option[2])
       choice.label:SetTextColor(rgb(option[1] == filters[name] and "goldhi" or "text"))
       choice:SetScript("OnClick", function()
-        filters[name] = option[1]
-        if name == "profession" then
-          filters.kind = option[1] ~= "" and "materials" or "all"
-        end
+        ns.ItemFilters.Select(filters, name, option[1])
         chipLabels()
         menu:Hide()
         refresh()
