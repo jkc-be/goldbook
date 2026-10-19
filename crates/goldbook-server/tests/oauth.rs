@@ -1316,3 +1316,33 @@ async fn website_sign_in_starts_leave_the_apps_starts_alone() {
         "another site sending a browser to the website's sign-in cannot stop the app's"
     );
 }
+#[tokio::test]
+async fn website_sign_in_moves_to_the_public_host_before_setting_its_cookie() {
+    let f = Fixture::new().await;
+    let moved = call(
+        &f.app,
+        "GET",
+        "/api/auth/battlenet/web/start",
+        Value::Null,
+        &[("host", "goldbook.localhost:8443")],
+    )
+    .await;
+    assert_eq!(moved.0, 303);
+    assert_eq!(
+        moved.1["location"],
+        "https://gold.example/goldbook/api/auth/battlenet/web/start"
+    );
+    assert!(!moved.1.contains_key("set-cookie"));
+    let started = call(
+        &f.app,
+        "GET",
+        "/api/auth/battlenet/web/start",
+        Value::Null,
+        &[("host", "gold.example")],
+    )
+    .await;
+    assert_eq!(started.0, 303);
+    assert!(cookies(&started.1)[0].starts_with("gb_bnet_web_csrf="));
+    let provider = url::Url::parse(started.1["location"].to_str().unwrap()).unwrap();
+    assert_eq!(provider.path(), "/authorize");
+}

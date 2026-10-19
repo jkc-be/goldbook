@@ -290,6 +290,18 @@ fn web_start(
     config: &BattleNetConfig,
     db: &mut Connection,
 ) -> Result<Reply> {
+    // The cookie belongs to the host the browser asked, but Battle.net returns
+    // to the public URL's host, so the sign-in starts there.
+    let public = url::Url::parse(&config.public_url).expect("validated URL");
+    let asked = url::Url::parse(&format!("http://{}", header(&input.headers, "host"))).ok();
+    if asked.is_some_and(|asked| asked.host_str() != public.host_str()) {
+        let mut reply = Reply::json(json!({}));
+        reply.status = 303;
+        reply
+            .headers
+            .push(("location", config.endpoint("web/start")));
+        return Ok(reply);
+    }
     if app.web_starts.lock().unwrap().begin(
         None,
         Some(input.client.as_deref().unwrap_or("unknown")),
