@@ -1247,6 +1247,14 @@ static INDEX: LazyLock<Vec<u8>> = LazyLock::new(|| {
     }
     index.into_bytes()
 });
+// An asset's name with its content version, as the website's pages link it.
+pub(crate) fn versioned(name: &str) -> String {
+    let (_, bytes, _) = ASSETS
+        .iter()
+        .find(|(asset, ..)| *asset == name)
+        .expect("a known asset");
+    format!("{name}?v={}", &hex::encode(Sha256::digest(bytes))[..12])
+}
 fn static_file(web: Option<&Path>, path: &str) -> Option<Reply> {
     let (body, extension) = if let Some(web) = web {
         let web = web.canonicalize().ok()?;
