@@ -56,7 +56,7 @@
   --edge: #bcad92;
   --ink: #352c25;
   --ink-soft: #3f342b;
-  --muted: #6a5d50;
+  --muted: #685b4f;
   --gold: #96661a;
   --gold-ink: #764f1a;
   --gold-edge: #b39260;
@@ -72,26 +72,26 @@
   --series-1: #96661a;
   --series-2: #6e6e7a;
   --compare-1: #96661a;
-  --compare-2: #1a5dc8;
-  --compare-3: #29722f;
-  --compare-4: #8638c2;
-  --compare-5: #ad342b;
+  --compare-2: #1a57b9;
+  --compare-3: #28692d;
+  --compare-4: #7e35b5;
+  --compare-5: #a23229;
   --compare-6: #6e6e7a;
-  --up: #29722f;
-  --down: #ad342b;
-  --warn: #9c4b1a;
-  --info: #1a5dc8;
-  --coin-g: #7e601a;
-  --coin-s: #6e6e7a;
-  --coin-c: #9c4a2d;
-  --q-poor: #646464;
+  --up: #28692d;
+  --down: #a23229;
+  --warn: #91481a;
+  --info: #1a57b9;
+  --coin-g: #74581a;
+  --coin-s: #5d5d67;
+  --coin-c: #91462c;
+  --q-poor: #5d5d5d;
   --q-common: #352c25;
-  --q-uncommon: #2b7c23;
-  --q-rare: #1a5dc8;
-  --q-epic: #8638c2;
-  --q-legendary: #9c4b1a;
-  --q-artifact: #836928;
-  --q-heirloom: #1a7391;
+  --q-uncommon: #276921;
+  --q-rare: #1a57b9;
+  --q-epic: #7e35b5;
+  --q-legendary: #91481a;
+  --q-artifact: #6f5b26;
+  --q-heirloom: #1a637c;
 }
 
 :root[data-theme="dark"] {

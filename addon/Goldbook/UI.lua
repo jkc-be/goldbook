@@ -57,13 +57,13 @@ local BACKDROP = { bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 }
 local PALETTES = {
   light = {
     bg = "b0aaa0", rail = "aaa397", panel = "b8b4ac", line = "9b9281", edge = "877a64", field = "bcbab6",
-    text = "170f09", muted = "43382d", railText = "1f160e", gold = "673f00", goldhi = "4d2c00", brand = "5d3800",
-    on = "a69c87", gain = "0d4912", loss = "7a160e", warn = "6c2900", info = "003891",
+    text = "170f09", muted = "41362c", railText = "1f160e", gold = "673f00", goldhi = "4d2c00", brand = "5d3800",
+    on = "a69c87", gain = "0c4210", loss = "71140d", warn = "632600", info = "003384",
     titleTop = "aaa397", titleBottom = "a7a092",
     buttonTop = "b8b4ac", buttonBottom = "b1aa9e", buttonEdge = "7f643a", buttonText = "170f09",
     hover = 0.1, area = 0.65, bar = 1, second = "464650",
-    coins = { gold = "533a00", silver = "464650", copper = "6c2810" },
-    quality = { [0] = "3e3e3e", "170f09", "0e5208", "003891", "5a198c", "6c2900", "57420c", "004a63" },
+    coins = { gold = "4b3400", silver = "383840", copper = "63250f" },
+    quality = { [0] = "383838", "170f09", "0b4206", "003384", "531781", "632600", "47360a", "003d52" },
   },
   dark = {
     bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
