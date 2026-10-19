@@ -25,8 +25,7 @@ class LocalEnvironmentTests(unittest.TestCase):
             self.assertEqual(dict(os.environ), inherited)
         self.assertEqual(environment, {
             "PATH": "/tools/bin", "DATABASE": "/temporary/test/goldbook.sqlite",
-            "HOST": "127.0.0.1", "PORT": "12345", "UPLOAD_TOKEN": "dev-token,friend-token",
-            "SELF_REGISTRATION": "true", "BNET_CLIENT_ID": "test-client",
+            "HOST": "127.0.0.1", "PORT": "12345", "BNET_CLIENT_ID": "test-client",
             "BNET_CLIENT_SECRET": "test-secret", "GOLDBOOK_PUBLIC_URL": "http://127.0.0.1:12345",
         })
 

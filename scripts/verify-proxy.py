@@ -52,7 +52,7 @@ def production_config(backend_port):
     # Render the real files with a clean environment: never load production .env.
     env = {k: os.environ[k] for k in ('PATH', 'HOME', 'DOCKER_CONFIG') if k in os.environ}
     env.update(GOLDBOOK_HOST='localhost', GOLDBOOK_PATH_HOST='127.0.0.1',
-               TRUSTED_PROXY='127.0.0.1/32', UPLOAD_TOKEN='dev-token')
+               TRUSTED_PROXY='127.0.0.1/32')
     command = ['docker', 'compose', '--env-file', os.devnull]
     for file in ('compose.yaml', 'compose.traefik.yaml', 'compose.path.yaml'):
         command += ['-f', str(ROOT / 'server' / file)]

@@ -9,8 +9,6 @@ services:
     # write the database there.
     user: "${GOLDBOOK_USER:-10001:10001}"
     environment:
-      UPLOAD_TOKEN: "${UPLOAD_TOKEN:?set UPLOAD_TOKEN in the env file}"
-      SELF_REGISTRATION: "${SELF_REGISTRATION:-false}"
       BNET_CLIENT_ID: "${BNET_CLIENT_ID:-}"
       BNET_CLIENT_SECRET: "${BNET_CLIENT_SECRET:-}"
       GOLDBOOK_PUBLIC_URL: "${GOLDBOOK_PUBLIC_URL:-}"
