@@ -3,9 +3,42 @@ local UI, House, Rules, Codec = ns.UI, ns.AuctionHouse, ns.AuctionRules, ns.Code
 local AuctionUI = {}
 ns.AuctionUI = AuctionUI
 local window, view, offset, selected, lastRows = nil, "browse", 0, nil, nil
-local WIDTH, HEIGHT, ROWS, ROW_HEIGHT = 1020, 650, 15, 28
+local WIDTH, HEIGHT, ROW_HEIGHT = 1020, 650, 28
+local MIN_WIDTH, MIN_HEIGHT = 940, 630
+local visibleRows = 15
+local DURATIONS = { 2, 8, 24 }
 local refresh, editor
 local TIME_LEFT = { "Short", "Medium", "Long", "Very long" }
+local hiddenBlizzard
+
+local function restoreBlizzard()
+  if not hiddenBlizzard then return end
+  local saved = hiddenBlizzard
+  hiddenBlizzard = nil
+  saved.frame:SetScale(saved.scale)
+  saved.frame:SetAlpha(saved.alpha)
+  saved.frame:EnableMouse(saved.mouse)
+end
+
+local function syncBlizzard()
+  if not (House.open and window and window:IsShown() and ns.db.settings.hideBlizzardAH) then
+    restoreBlizzard()
+  elseif not hiddenBlizzard and AuctionHouseFrame then
+    local frame = AuctionHouseFrame
+    hiddenBlizzard = { frame = frame, scale = frame:GetScale(), alpha = frame:GetAlpha(), mouse = frame:IsMouseEnabled() }
+    -- Hiding this frame runs Blizzard's OnHide and closes the auction session.
+    -- Keep it shown at a tiny scale, as TSM does, with no visible pixels.
+    frame:SetScale(0.001)
+    frame:SetAlpha(0)
+    frame:EnableMouse(false)
+  end
+end
+
+function AuctionUI.SetHideBlizzard(hidden)
+  ns.db.settings.hideBlizzardAH = hidden and true or false
+  syncBlizzard()
+  if window then refresh() end
+end
 
 local function label(parent, text, x, y, width, role, colour)
   local widget = UI.Label(parent, role or "body", colour or "text")
@@ -114,7 +147,7 @@ local function detail()
       elseif selected.kind == "skip" then body = body .. selected.reason
       elseif selected.kind == "post" then
         body = body .. "Post " .. selected.quantity .. " at " .. money(selected.unitPrice) .. " each.\n\n"
-          .. "Buyout total: " .. money(selected.quantity * selected.unitPrice) .. "\nDuration: " .. ({ 12, 24, 48 })[selected.duration] .. " hours"
+          .. "Buyout total: " .. money(selected.quantity * selected.unitPrice) .. "\nDuration: " .. DURATIONS[selected.duration] .. " hours"
         actionable, action = true, "Review post"
       elseif selected.kind == "cancel" then
         body = body .. "A competitor is listed at " .. money(selected.competitor) .. " each.\n\nReview the cancellation fee before cancelling."
@@ -162,7 +195,7 @@ local function detail()
       title, confirm = "Review post", "Post auction"
       text = plan.quantity .. " × " .. plan.name .. "\n\nUnit price: " .. money(plan.unitPrice)
         .. "\nBuyout total: " .. money(plan.total) .. "\nDeposit: " .. money(plan.deposit)
-        .. "\nDuration: " .. ({ 12, 24, 48 })[plan.duration] .. " hours"
+        .. "\nDuration: " .. DURATIONS[plan.duration] .. " hours"
     elseif plan.kind == "cancel" then
       title, confirm = "Review cancellation", "Cancel auction"
       text = plan.quantity .. " × " .. plan.name .. "\n\nCancellation fee: " .. money(plan.total)
@@ -181,6 +214,7 @@ end
 
 refresh = function()
   if not window or not window:IsShown() then return end
+  syncBlizzard()
   local listing = rows()
   if listing ~= lastRows then
     lastRows, selected, offset = listing, nil, 0
@@ -203,13 +237,15 @@ refresh = function()
   window.groupButton:SetEnabled(not busy)
   for _, scan in ipairs(window.scans) do scan:SetShown(view == "queue"); scan:SetEnabled(House.open and not busy) end
   window.stop:SetShown(Rules.running)
+  window.blizzardToggle:SetShown(not Rules.running)
+  window.blizzardToggle.label:SetText(ns.db.settings.hideBlizzardAH and "Show Blizzard AH" or "Hide Blizzard AH")
   window.more:SetShown(view == "browse" and House.more)
   window.more:SetEnabled(not busy)
   window.header:SetText(view == "queue" and "ITEM / GROUP" or "ITEM")
   window.priceHeader:SetText(view == "queue" and "ACTION / PRICE" or view == "sell" and "BAG" or "UNIT BUYOUT")
-  offset = math.max(0, math.min(offset, math.max(0, #listing - ROWS)))
+  offset = math.max(0, math.min(offset, math.max(0, #listing - visibleRows)))
   for index, row in ipairs(window.rows) do
-    local item = listing[index + offset]
+    local item = index <= visibleRows and listing[index + offset] or nil
     row:SetShown(item ~= nil)
     row.item = item
     if item then
@@ -231,9 +267,9 @@ refresh = function()
     or view == "sell" and "No auctionable bag stacks."
     or view == "owned" and "No auctions to display."
     or "Search by item name to see live listings.")
-  window.page:SetText(#listing == 0 and "0 items" or ((offset + 1) .. "–" .. math.min(#listing, offset + ROWS) .. " of " .. #listing))
+  window.page:SetText(#listing == 0 and "0 items" or ((offset + 1) .. "–" .. math.min(#listing, offset + visibleRows) .. " of " .. #listing))
   window.previous:SetEnabled(offset > 0)
-  window.next:SetEnabled(offset + ROWS < #listing)
+  window.next:SetEnabled(offset + visibleRows < #listing)
   detail()
 end
 
@@ -256,9 +292,9 @@ local function createEditor()
   }
   for _, spec in ipairs(definitions) do editor.fields[spec[1]] = field(editor, spec[2], spec[3], spec[4], spec[5], spec[6]) end
   label(editor, "Duration", 260, 259, 220, "label", "muted")
-  editor.duration = button(editor, "24 hours", 260, 277, 220, function(self)
+  editor.duration = button(editor, "8 hours", 260, 277, 220, function(self)
     self.value = self.value % 3 + 1
-    self.label:SetText(({ 12, 24, 48 })[self.value] .. " hours")
+    self.label:SetText(DURATIONS[self.value] .. " hours")
   end)
   editor.duration.value = 2
   editor.below = button(editor, "Below minimum: skip", 20, 330, 330, function(self)
@@ -295,7 +331,7 @@ local function createEditor()
     for key, box in pairs(editor.fields) do box:SetText(key == "items" and table.concat(rule.items, ", ") or tostring(rule[key])) end
     editor.below.value, editor.above.value = rule.below, rule.above
     editor.duration.value = rule.duration
-    editor.duration.label:SetText(({ 12, 24, 48 })[rule.duration] .. " hours")
+    editor.duration.label:SetText(DURATIONS[rule.duration] .. " hours")
     editor.below.label:SetText("Below minimum: " .. rule.below)
     editor.above.label:SetText("Above maximum: " .. rule.above)
     editor.message:SetText("Editing " .. rule.name .. ". Saving replaces this group by name.")
@@ -312,6 +348,124 @@ local function createEditor()
   button(editor, "Close", 580, 518, 140, function() editor:Hide() end)
 end
 
+local function addRow(tableFrame, index)
+  local row = CreateFrame("Button", nil, tableFrame)
+  row:SetPoint("TOPLEFT", 1, -27 - (index - 1) * ROW_HEIGHT)
+  row:SetSize(648, ROW_HEIGHT)
+  if index % 2 == 0 then
+    local background = row:CreateTexture(nil, "BACKGROUND")
+    background:SetAllPoints()
+    UI.Fill(background, "rail")
+  end
+  row.marker = row:CreateTexture(nil, "BORDER")
+  row.marker:SetAllPoints()
+  UI.Fill(row.marker, "on")
+  local hover = row:CreateTexture(nil, "HIGHLIGHT")
+  hover:SetAllPoints()
+  UI.Fill(hover, "gold", 0.1)
+  row.icon = row:CreateTexture(nil, "ARTWORK")
+  row.icon:SetPoint("LEFT", 10, 0)
+  row.icon:SetSize(20, 20)
+  row.title = label(row, "", 38, 7, 330)
+  row.count = label(row, "", 380, 6, 60, "number")
+  row.price = label(row, "", 450, 6, 185, "number")
+  row.price:SetJustifyH("RIGHT")
+  row:SetScript("OnClick", function(self) selectRow(self.item) end)
+  row:SetScript("OnEnter", function(self)
+    local item = self.item
+    if not item then return end
+    local key = item.itemKey or (item.item and item.item.itemKey) or (House.selected and House.selected.itemKey)
+    if key then
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetHyperlink(item.link or ("item:" .. key.itemID))
+      GameTooltip:Show()
+    end
+  end)
+  row:SetScript("OnLeave", GameTooltip_Hide)
+  window.rows[index] = row
+end
+
+local function layout()
+  local width, height = window:GetWidth(), window:GetHeight()
+  local tableWidth, tableHeight = width - 370, height - 202
+  visibleRows = math.max(1, math.floor((tableHeight - 28) / ROW_HEIGHT))
+  window.tableFrame:SetSize(tableWidth, tableHeight)
+  window.side:SetPoint("TOPLEFT", width - 340, -166)
+  window.side:SetSize(324, tableHeight)
+  window.header:SetWidth(tableWidth - 290)
+  window.quantityHeader:SetPoint("TOPLEFT", tableWidth - 270, -8)
+  window.priceHeader:SetPoint("TOPLEFT", tableWidth - 200, -8)
+  for index = #window.rows + 1, visibleRows do addRow(window.tableFrame, index) end
+  for _, row in ipairs(window.rows) do
+    row:SetSize(tableWidth - 2, ROW_HEIGHT)
+    row.title:SetWidth(tableWidth - 320)
+    row.count:SetPoint("TOPLEFT", tableWidth - 270, -6)
+    row.price:SetPoint("TOPLEFT", tableWidth - 200, -6)
+  end
+  window.empty:SetWidth(tableWidth - 80)
+  window.empty:SetPoint("TOPLEFT", 40, -math.floor(tableHeight / 2))
+  window.groupButton:SetPoint("TOPLEFT", width - 332, -60)
+  window.themeButton:SetPoint("TOPLEFT", width - 132, -60)
+  window.stop:SetPoint("TOPLEFT", width - 332, -121)
+  window.blizzardToggle:SetPoint("TOPLEFT", width - 332, -121)
+  window.balance:ClearAllPoints()
+  window.balance:SetPoint("TOPRIGHT", -59, -16)
+  window.history:SetPoint("TOPLEFT", 16, -(tableHeight - 98))
+  window.action:SetPoint("TOPLEFT", 16, -(tableHeight - 50))
+  window.review.body:SetHeight(tableHeight - 120)
+  window.review.back:SetPoint("TOPLEFT", 16, -(tableHeight - 50))
+  window.review.confirm:SetPoint("TOPLEFT", 106, -(tableHeight - 50))
+  window.more:SetPoint("TOPLEFT", 16, -(height - 34))
+  window.previous:SetPoint("TOPLEFT", 142, -(height - 34))
+  window.next:SetPoint("TOPLEFT", 178, -(height - 34))
+  window.page:SetPoint("TOPLEFT", 220, -(height - 27))
+  window.status:SetPoint("TOPLEFT", 405, -(height - 28))
+  window.status:SetWidth(width - 437)
+end
+
+local function fitSize()
+  local maxWidth = math.max(MIN_WIDTH, UIParent:GetWidth() / UI.Scale())
+  local maxHeight = math.max(MIN_HEIGHT, UIParent:GetHeight() / UI.Scale())
+  if window.SetResizeBounds then
+    window:SetResizeBounds(MIN_WIDTH, MIN_HEIGHT, maxWidth, maxHeight)
+  else
+    window:SetMinResize(MIN_WIDTH, MIN_HEIGHT)
+    window:SetMaxResize(maxWidth, maxHeight)
+  end
+  local saved = ns.db.settings.auctionSize or {}
+  window:SetSize(math.max(MIN_WIDTH, math.min(maxWidth, tonumber(saved[1]) or WIDTH)),
+    math.max(MIN_HEIGHT, math.min(maxHeight, tonumber(saved[2]) or HEIGHT)))
+end
+
+local function addResizeGrip()
+  local grip = CreateFrame("Button", nil, window)
+  grip:SetSize(18, 18)
+  grip:SetPoint("BOTTOMRIGHT", -2, 2)
+  for _, inset in ipairs({ 3, 7, 11 }) do
+    for _, style in ipairs({ { "ARTWORK", "muted" }, { "HIGHLIGHT", "gold" } }) do
+      local line = grip:CreateLine(nil, style[1])
+      line:SetThickness(1.5)
+      line:SetStartPoint("BOTTOMRIGHT", grip, -inset, 2)
+      line:SetEndPoint("BOTTOMRIGHT", grip, -2, inset)
+      UI.Fill(line, style[2])
+    end
+  end
+  grip:SetScript("OnMouseDown", function(_, mouseButton)
+    if mouseButton == "LeftButton" then window:StartSizing("BOTTOMRIGHT") end
+  end)
+  grip:SetScript("OnMouseUp", function()
+    window:StopMovingOrSizing()
+    ns.db.settings.auctionSize = { math.floor(window:GetWidth() + 0.5), math.floor(window:GetHeight() + 0.5) }
+  end)
+  grip:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine("Drag to resize")
+    GameTooltip:Show()
+  end)
+  grip:SetScript("OnLeave", GameTooltip_Hide)
+  window.resizeGrip = grip
+end
+
 local function createWindow()
   window = CreateFrame("Frame", "GoldbookAuctionHouse", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   window:SetSize(WIDTH, HEIGHT)
@@ -322,10 +476,13 @@ local function createWindow()
   window:SetToplevel(true)
   window:EnableMouse(true)
   window:SetMovable(true)
+  window:SetResizable(true)
   window:RegisterForDrag("LeftButton")
   window:SetScript("OnDragStart", window.StartMoving)
   window:SetScript("OnDragStop", window.StopMovingOrSizing)
   window:SetScript("OnHide", function()
+    window:StopMovingOrSizing()
+    restoreBlizzard()
     if Rules.running then Rules.Stop() end
     House.Dismiss()
     if editor then editor:Hide() end
@@ -347,7 +504,7 @@ local function createWindow()
     end
     editor:Show()
   end)
-  button(window, "Theme", 888, 60, 116, function() UI.SetTheme(UI.Theme() == "dark" and "light" or "dark") end)
+  window.themeButton = button(window, "Theme", 888, 60, 116, function() UI.SetTheme(UI.Theme() == "dark" and "light" or "dark") end)
   window.search = field(window, "Search the auction house", 16, 103, 330, "")
   local function search()
     window.search:ClearFocus()
@@ -367,56 +524,25 @@ local function createWindow()
     end)
   end
   window.stop = button(window, "Stop scan", 688, 121, 130, function() Rules.Stop(); refresh() end)
+  window.blizzardToggle = button(window, "Hide Blizzard AH", 688, 121, 316, function()
+    AuctionUI.SetHideBlizzard(not ns.db.settings.hideBlizzardAH)
+  end)
   local tableFrame = CreateFrame("Frame", nil, window, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  window.tableFrame = tableFrame
   tableFrame:SetPoint("TOPLEFT", 16, -166)
   tableFrame:SetSize(650, 448)
   UI.Box(tableFrame, "panel", "line")
   tableFrame:EnableMouseWheel(true)
   tableFrame:SetScript("OnMouseWheel", function(_, delta) offset = offset - delta * 3; refresh() end)
   window.header = label(tableFrame, "ITEM", 12, 8, 360, "header", "muted")
-  label(tableFrame, "QTY", 380, 8, 60, "header", "muted")
+  window.quantityHeader = label(tableFrame, "QTY", 380, 8, 60, "header", "muted")
   window.priceHeader = label(tableFrame, "UNIT BUYOUT", 450, 8, 185, "header", "muted")
   window.priceHeader:SetJustifyH("RIGHT")
   window.rows = {}
-  for index = 1, ROWS do
-    local row = CreateFrame("Button", nil, tableFrame)
-    row:SetPoint("TOPLEFT", 1, -27 - (index - 1) * ROW_HEIGHT)
-    row:SetSize(648, ROW_HEIGHT)
-    if index % 2 == 0 then
-      local background = row:CreateTexture(nil, "BACKGROUND")
-      background:SetAllPoints()
-      UI.Fill(background, "rail")
-    end
-    row.marker = row:CreateTexture(nil, "BORDER")
-    row.marker:SetAllPoints()
-    UI.Fill(row.marker, "on")
-    local hover = row:CreateTexture(nil, "HIGHLIGHT")
-    hover:SetAllPoints()
-    UI.Fill(hover, "gold", 0.1)
-    row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetPoint("LEFT", 10, 0)
-    row.icon:SetSize(20, 20)
-    row.title = label(row, "", 38, 7, 330)
-    row.count = label(row, "", 380, 6, 60, "number")
-    row.price = label(row, "", 450, 6, 185, "number")
-    row.price:SetJustifyH("RIGHT")
-    row:SetScript("OnClick", function(self) selectRow(self.item) end)
-    row:SetScript("OnEnter", function(self)
-      local item = self.item
-      if not item then return end
-      local key = item.itemKey or (item.item and item.item.itemKey) or (House.selected and House.selected.itemKey)
-      if key then
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetHyperlink(item.link or ("item:" .. key.itemID))
-        GameTooltip:Show()
-      end
-    end)
-    row:SetScript("OnLeave", GameTooltip_Hide)
-    window.rows[index] = row
-  end
   window.empty = label(tableFrame, "", 40, 190, 570, "body", "muted")
   window.empty:SetJustifyH("CENTER")
   local side = CreateFrame("Frame", nil, window, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  window.side = side
   side:SetPoint("TOPLEFT", 680, -166)
   side:SetSize(324, 448)
   UI.Box(side, "panel", "line")
@@ -428,9 +554,9 @@ local function createWindow()
   window.quantity = field(side, "Quantity", 16, 236, 120, "1")
   window.price = field(side, "Unit price in gold", 152, 236, 156, "")
   window.durationLabel = label(side, "Duration", 16, 300, 120, "label", "muted")
-  window.duration = button(side, "24 hours", 152, 294, 156, function(self)
+  window.duration = button(side, "8 hours", 152, 294, 156, function(self)
     self.value = self.value % 3 + 1
-    self.label:SetText(({ 12, 24, 48 })[self.value] .. " hours")
+    self.label:SetText(DURATIONS[self.value] .. " hours")
   end)
   window.duration.value = 2
   window.history = button(side, "Price history", 16, 350, 292, function()
@@ -449,17 +575,25 @@ local function createWindow()
   window.review.back = button(window.review, "Back", 16, 398, 80, function() House.Dismiss(); refresh() end)
   window.review.confirm = button(window.review, "Confirm", 106, 398, 202, function() House.Confirm(); refresh() end)
   window.more = button(window, "Load more", 16, 616, 116, House.More)
-  window.previous = button(window, "<", 142, 616, 30, function() offset = offset - ROWS; refresh() end)
-  window.next = button(window, ">", 178, 616, 30, function() offset = offset + ROWS; refresh() end)
+  window.previous = button(window, "<", 142, 616, 30, function() offset = offset - visibleRows; refresh() end)
+  window.next = button(window, ">", 178, 616, 30, function() offset = offset + visibleRows; refresh() end)
   window.page = label(window, "", 220, 623, 170, "small", "muted")
   window.status = label(window, "", 405, 622, 599, "status", "muted")
   window.status:SetJustifyH("RIGHT")
   window.status:SetWordWrap(true)
   window.status:SetHeight(26)
+  addResizeGrip()
+  fitSize()
+  layout()
+  window:SetScript("OnSizeChanged", function()
+    layout()
+    refresh()
+  end)
 end
 
 function AuctionUI.Show(text)
   if not window then createWindow() end
+  fitSize()
   window:Show()
   window:Raise()
   if text and text ~= "" and House.open and not Rules.running and not House.Busy() then
@@ -470,16 +604,33 @@ function AuctionUI.Show(text)
   refresh()
 end
 
+function AuctionUI.SearchItem(location)
+  if not House.open or House.Busy() or Rules.running or ns.Scanner.state ~= "idle"
+    or not location or not location:IsBagAndSlot() or not location:IsValid() then return false end
+  local bag = location:GetBagAndSlot()
+  if bag < 0 or bag > (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) then return false end
+  local key = C_AuctionHouse.GetItemKeyFromItem(location)
+  if not key or key.itemID == 0 then return false end
+  AuctionUI.Show()
+  view = "browse"
+  resetSelection()
+  local info = C_AuctionHouse.GetItemKeyInfo(key)
+  window.search:SetText(info and info.itemName or "")
+  window.search:ClearFocus()
+  return House.Find({ itemKey = key })
+end
+
 House.Subscribe(refresh)
 Rules.Subscribe(refresh)
 UI.Watch(function()
-  if window then window:SetScale(UI.Scale()); refresh() end
+  if window then window:SetScale(UI.Scale()); fitSize(); refresh() end
 end)
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("AUCTION_HOUSE_SHOW")
 frame:RegisterEvent("AUCTION_HOUSE_CLOSED")
 frame:SetScript("OnEvent", function(_, event)
   if event == "AUCTION_HOUSE_CLOSED" then
+    restoreBlizzard()
     if window then window:Hide() end
   elseif AuctionHouseFrame and not GoldbookAuctionButton then
     local launch = UI.Button(AuctionHouseFrame, "Goldbook", 120, 22, "GoldbookAuctionButton")

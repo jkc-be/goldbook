@@ -5,6 +5,7 @@ local ns = Stub.loadAddon(here .. "/../Goldbook")
 Stub.fire("ADDON_LOADED", "Goldbook")
 Stub.fire("PLAYER_LOGIN")
 server.seed()
+UIParent:SetSize(1920, 1080)
 local House, Rules = ns.AuctionHouse, ns.AuctionRules
 local checks = 0
 local function eq(actual, expected, label)
@@ -41,9 +42,12 @@ eq(House.more, true, "browse exposes pagination")
 click(panel.more)
 Stub.advance(0.3)
 eq(#House.rows, 3, "browse second page")
+eq(panel.rows[1].icon.texture, 134566, "browse shows the item icon")
 click(panel.rows[1])
 Stub.advance(0.3)
 eq(#House.offers, 2, "commodity listings loaded")
+eq(panel.rows[1].icon.texture, 134566, "commodity order book keeps the item icon")
+eq(panel.rows[2].icon.texture, 134566, "each commodity listing keeps the icon")
 click(panel.rows[1])
 panel.quantity:SetText("4")
 click(panel.action)
@@ -63,6 +67,7 @@ Stub.fire("COMMODITY_PURCHASE_SUCCEEDED")
 eq(House.phase, "idle", "purchase completes on server event")
 
 search(1206)
+eq(panel.rows[1].icon.texture, 134105, "item order book keeps the item icon")
 eq(House.ReviewBuy(House.offers[1], 1), true, "whole item listing can be reviewed")
 eq(House.Review().quantity, 2, "item quantity is whole listing")
 server.offers[1206][1].buyoutAmount = 110000
@@ -260,6 +265,186 @@ Stub.fire("AUCTION_HOUSE_THROTTLED_SYSTEM_READY")
 eq(server.count("buy-commodity"), purchases, "readiness event never purchases")
 House.Dismiss()
 ns.AuctionUI.Show()
+
+-- The same inventory shortcut works with Command on Mac and Ctrl on Windows.
+local function inventoryClick(slot)
+  HandleModifiedItemClick(Stub.bags[0][slot] and Stub.bags[0][slot].hyperlink,
+    ItemLocation:CreateFromBagAndSlot(0, slot))
+end
+for _, platform in ipairs({ "Mac", "Windows" }) do
+  Stub.mac, Stub.meta, Stub.ctrl = platform == "Mac", platform == "Mac", platform == "Windows"
+  click(panel.tabs.sell)
+  panel:Hide()
+  calls = server.count("search")
+  inventoryClick(1)
+  eq(panel.shown, true, platform .. " shortcut opens the panel")
+  eq(server.count("search"), calls + 1, platform .. " shortcut searches the bag item")
+  inventoryClick(1)
+  eq(server.count("search"), calls + 1, platform .. " duplicate hooks do not repeat a pending search")
+  Stub.advance(0.3)
+  eq(panel.search.text, "Copper Ore", platform .. " shortcut updates the search field")
+  eq(panel.rows[1].item.price, 125, platform .. " shortcut displays live offers")
+end
+
+calls = server.count("search")
+Stub.ctrl = false
+inventoryClick(1)
+Stub.meta = true
+inventoryClick(1)
+eq(server.count("search"), calls, "plain click and Windows key do not search")
+Stub.ctrl, Stub.meta, Stub.shift = true, false, true
+inventoryClick(1)
+Stub.shift, Stub.alt = false, true
+inventoryClick(1)
+Stub.alt, Stub.mouseButton = false, "RightButton"
+inventoryClick(1)
+Stub.mouseButton = "LeftButton"
+HandleModifiedItemClick(Stub.bags[0][1].hyperlink)
+inventoryClick(99)
+HandleModifiedItemClick(Stub.bags[0][1].hyperlink, { IsBagAndSlot = function() return false end })
+eq(server.count("search"), calls, "other chords, links, empty slots and equipment do not search")
+
+House.ReviewBuy(House.offers[1], 1)
+Stub.advance(0.2)
+local quote = House.Review()
+inventoryClick(2)
+eq(House.Review(), quote, "shortcut preserves the purchase review")
+eq(server.count("search"), calls, "shortcut does not query during a review")
+House.Dismiss()
+Rules.Start("post")
+calls = server.count("search")
+inventoryClick(2)
+eq(Rules.running, true, "shortcut leaves automation running")
+eq(server.count("search"), calls, "shortcut does not interrupt automation")
+Rules.Stop()
+Stub.advance(0.3)
+ns.Scanner.state = "browse"
+inventoryClick(2)
+eq(server.count("search"), calls, "shortcut does not interrupt a price scan")
+ns.Scanner.state = "idle"
+
+Stub.bags[0][2].suffix, Stub.bags[0][2].level, Stub.bags[0][2].species = 7, 80, 42
+Stub.ah.keyInfo["1206:7"] = Stub.ah.keyInfo["1206:0"]
+local bagButton = { GetBagID = function() return 0 end, GetID = function() return 2 end }
+ContainerFrameItemButton_OnClick(bagButton, "LeftButton")
+Stub.advance(0.3)
+local searchedKey = server.calls[#server.calls].args[1]
+eq(searchedKey.itemID, 1206, "container shortcut searches the selected item")
+eq(searchedKey.itemSuffix, 7, "shortcut retains suffix")
+eq(searchedKey.itemLevel, 80, "shortcut retains item level")
+eq(searchedKey.battlePetSpeciesID, 42, "shortcut retains pet species")
+Stub.fire("AUCTION_HOUSE_CLOSED")
+calls = server.count("search")
+inventoryClick(1)
+eq(panel.shown, false, "shortcut outside the auction house does not open the panel")
+eq(server.count("search"), calls, "shortcut outside the auction house does not query")
+Stub.ctrl = false
+reopen()
+server.seed()
+ns.AuctionUI.Show()
+
+-- Duration labels, reviews and posting arguments stay aligned.
+click(panel.tabs.sell)
+click(panel.rows[1])
+panel.quantity:SetText("1")
+panel.price:SetText("2s")
+for _, duration in ipairs({ { 8, 2 }, { 24, 3 }, { 2, 1 } }) do
+  eq(panel.duration.label.text, duration[1] .. " hours", "sell duration label")
+  click(panel.action)
+  eq(panel.review.body.text:match("Duration: (%d+) hours"), tostring(duration[1]), "review duration label")
+  click(panel.review.confirm)
+  eq(server.calls[#server.calls].args[2], duration[2], "posting uses the matching duration enum")
+  Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 500 + duration[2])
+  click(panel.duration)
+  click(panel.rows[1])
+  panel.quantity:SetText("1")
+  panel.price:SetText("2s")
+end
+click(panel.groupButton)
+for _, duration in ipairs({ { 8, 2 }, { 24, 3 }, { 2, 1 } }) do
+  eq(GoldbookAuctionRules.duration.label.text, duration[1] .. " hours", "rule duration label")
+  eq(GoldbookAuctionRules.duration.value, duration[2], "rule duration enum")
+  click(GoldbookAuctionRules.duration)
+end
+GoldbookAuctionRules:Hide()
+
+-- Resizing adds visible rows, keeps pagination usable, and survives reopening.
+UIParent:SetSize(1920, 1080)
+ns.AuctionUI.Show()
+Stub.ah.pageSize, Stub.ah.browse = 40, {}
+for index = 1, 30 do
+  Stub.ah.browse[index] = { itemKey = { itemID = 2770 }, minPrice = index, totalQuantity = index }
+end
+click(panel.tabs.browse)
+click(panel.searchButton)
+Stub.advance(0.3)
+eq(panel.resizable, true, "auction window can resize")
+panel.resizeGrip.scripts.OnMouseDown(panel.resizeGrip, "LeftButton")
+eq(panel.sizing, "BOTTOMRIGHT", "grip starts resizing")
+panel:SetSize(1300, 900)
+panel.resizeGrip.scripts.OnMouseUp(panel.resizeGrip, "LeftButton")
+eq(panel.sizing, nil, "release stops resizing")
+eq(panel.page.text, "1–23 of 30", "taller window shows more listings")
+eq(panel.rows[23].shown, true, "new row is visible")
+eq(panel.rows[23].item.price, 23, "new row has the correct listing")
+click(panel.next)
+eq(panel.rows[23].item.price, 30, "resized pagination reaches the final listing")
+panel:Hide()
+ns.AuctionUI.Show()
+eq(panel:GetWidth(), 1300, "saved width restored")
+eq(panel:GetHeight(), 900, "saved height restored")
+panel:SetSize(940, 630)
+eq(panel.rows[15].shown, false, "shrinking hides surplus rows")
+eq(panel.tableFrame:GetWidth(), 570, "table follows window width")
+eq(panel.rows[1].price.point[2], 370, "price column follows window width")
+eq(panel.action.point[3], -378, "review button follows sidebar height")
+ns.db.settings.auctionSize = { 1, 9999 }
+ns.AuctionUI.Show()
+eq(panel:GetWidth(), 940, "saved width is clamped to minimum")
+eq(panel:GetHeight(), 1080, "saved height is clamped to screen")
+ns.db.settings.auctionSize = nil
+ns.AuctionUI.Show()
+Stub.ah.pageSize = 2
+server.seed()
+
+-- Suppressing the native frame must never run its session-closing OnHide.
+local nativeHides = 0
+AuctionHouseFrame:SetScript("OnHide", function() nativeHides = nativeHides + 1 end)
+AuctionHouseFrame:SetScale(0.9)
+AuctionHouseFrame:SetAlpha(0.75)
+AuctionHouseFrame:EnableMouse(true)
+click(panel.blizzardToggle)
+eq(ns.db.settings.hideBlizzardAH, true, "hide preference is saved")
+eq(AuctionHouseFrame:GetAlpha(), 0, "native auction house is invisible")
+eq(AuctionHouseFrame:IsMouseEnabled(), false, "native auction house cannot intercept clicks")
+eq(AuctionHouseFrame:IsShown(), true, "native auction session stays open")
+eq(nativeHides, 0, "hide preference never calls native OnHide")
+Stub.ctrl = true
+inventoryClick(1)
+Stub.advance(0.3)
+eq(panel.rows[1].item.price, 125, "inventory shortcut works with Blizzard hidden")
+Stub.ctrl = false
+panel:Hide()
+eq(AuctionHouseFrame:GetScale(), 0.9, "closing Goldbook restores original native scale")
+eq(AuctionHouseFrame:GetAlpha(), 0.75, "closing Goldbook restores original native alpha")
+eq(AuctionHouseFrame:IsMouseEnabled(), true, "closing Goldbook restores native mouse input")
+ns.AuctionUI.Show()
+eq(AuctionHouseFrame:GetAlpha(), 0, "reopening applies saved hide preference")
+click(panel.blizzardToggle)
+eq(ns.db.settings.hideBlizzardAH, false, "show button clears hide preference")
+eq(AuctionHouseFrame:GetAlpha(), 0.75, "show button restores native window")
+local options = Stub.categories[1].frame
+options.checks.hideBlizzardAH:SetChecked(true)
+click(options.checks.hideBlizzardAH)
+eq(AuctionHouseFrame:GetAlpha(), 0, "options checkbox applies immediately")
+Stub.fire("AUCTION_HOUSE_CLOSED")
+eq(AuctionHouseFrame:GetAlpha(), 0.75, "leaving auction house restores native window")
+reopen()
+eq(AuctionHouseFrame:GetAlpha(), 0.75, "native window stays visible until Goldbook opens")
+ns.AuctionUI.Show()
+eq(AuctionHouseFrame:GetAlpha(), 0, "new session applies saved hide preference when Goldbook opens")
+eq(nativeHides, 0, "native session never closed by the hide option")
+ns.AuctionUI.SetHideBlizzard(false)
 
 ns.UI.SetTheme("light")
 eq(GoldbookAuctionHouse.scale, ns.UI.Scale(), "panel follows shared scale")

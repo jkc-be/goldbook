@@ -83,6 +83,7 @@ These are recorded sell listings, not a live feed or standing buy orders.
 | Action | Result |
 |---|---|
 | `/gb ah`, or **Goldbook** above the auction house | Search, buy, sell, manage your auctions and run rule-based scans |
+| Command+click a bag item on macOS, or Ctrl+click on Windows | Open its live listings in Goldbook while at the auction house |
 | Left click **Goldbook scan**, or `/gb scan` | Quick scan: lowest price and quantity per item |
 | Right click **Goldbook scan**, or `/gb scan full` | Full scan: every auction, adds market values and order books |
 | `/gb deals` | What is listed right now below its resale or vendor value |
@@ -104,8 +105,19 @@ These are recorded sell listings, not a live feed or standing buy orders.
 
 Open the auction house and click **Goldbook** above it, beside **Goldbook
 scan**, or type `/gb ah`. The panel uses the same dark/light theme and scale
-as the rest of Goldbook. Blizzard's window stays available. Closing the
-auction house closes the panel and clears its live results.
+as the rest of Goldbook. Drag its bottom-right corner to resize it; Goldbook
+remembers the size. Closing the auction house closes the panel and clears
+its live results.
+
+Command+click a bag item on macOS, or Ctrl+click on Windows, to open that
+item's live listings. This preserves the item's variant and works while
+Blizzard's window is hidden. Finish any scan or trade review before using
+the shortcut.
+
+Click **Hide Blizzard AH** in the panel, or use the checkbox in
+Options > AddOns > Goldbook, to hide Blizzard's window while this panel is
+open. The choice is saved. **Show Blizzard AH** or closing the Goldbook
+panel restores Blizzard's window without ending the auction session.
 
 - **Browse** searches current listings. Select an item, then a listing, and
   review the purchase. Commodities get a current total for the quantity you
@@ -137,7 +149,7 @@ cycles through saved groups. Saving replaces the group with that name.
 | Undercut | Copper to subtract from the cheapest competing unit price; zero matches it |
 | Post cap | Maximum number of your items listed for that exact item variant; existing auctions count |
 | Items per auction | Maximum commodity quantity in each queued post, within the selected bag stack; ordinary items post one at a time |
-| Duration | 12, 24 or 48 hours |
+| Duration | 2, 8 or 24 hours |
 | Shopping limit | Highest unit price to include in shopping scan results |
 
 Price fields accept a gold amount such as `12.50`, coin amounts such as

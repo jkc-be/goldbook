@@ -37,7 +37,7 @@ local DPR = assert(tonumber(flags.dpr), USAGE)
 local Stub = dofile(here .. "/wowstub.lua")
 local Client = dofile(here .. "/client.lua")
 
-local SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 800
+local SCREEN_WIDTH, SCREEN_HEIGHT = flags.auctions and 1600 or 1280, flags.auctions and 1000 or 800
 local DAY = 24 * 3600
 
 -- Recording. records[widget] holds what the stub does not keep: kind, parent,
@@ -1251,6 +1251,7 @@ if flags.auctions then
     shot("browse")
     click(panel.rows[1])
     Stub.advance(0.3)
+    shot("order-book")
     click(panel.rows[1])
     panel.quantity:SetText("4")
     click(panel.action)
@@ -1260,6 +1261,11 @@ if flags.auctions then
     click(panel.tabs.sell)
     click(panel.rows[1])
     shot("sell")
+    panel:SetSize(940, 630)
+    shot("sell-small")
+    panel:SetSize(1300, 900)
+    shot("sell-large")
+    panel:SetSize(1020, 650)
     ns.AuctionRules.Save({ name = "Ore", items = "2770,2771", minimum = "1s", normal = "2s", maximum = "5s", shopping = "3s",
       undercut = "1", cap = "10", stack = "4", duration = "2", below = "skip", above = "normal" })
     click(panel.tabs.queue)

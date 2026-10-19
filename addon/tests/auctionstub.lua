@@ -4,12 +4,17 @@ return function(Stub)
   local server = { offers = {}, owned = {}, calls = {}, quote = { 125, 500 }, complete = true, silent = false }
   Enum.ItemCommodityStatus = { Unknown = 0, Item = 1, Commodity = 2 }
   ItemLocation = {}
-  function ItemLocation:CreateFromBagAndSlot(bag, slot) return { bagID = bag, slotIndex = slot } end
   local function info(location) return C_Container.GetContainerItemInfo(location.bagID, location.slotIndex) end
+  function ItemLocation:CreateFromBagAndSlot(bag, slot)
+    return { bagID = bag, slotIndex = slot,
+      IsBagAndSlot = function() return true end,
+      IsValid = function(self) return info(self) ~= nil end,
+      GetBagAndSlot = function(self) return self.bagID, self.slotIndex end }
+  end
   function AH.IsSellItemValid(location) local item = info(location); return item and not item.isBound end
   function AH.GetItemKeyFromItem(location)
     local item = info(location)
-    return item and { itemID = item.itemID, itemLevel = 0, itemSuffix = item.suffix or 0, battlePetSpeciesID = 0 }
+    return item and { itemID = item.itemID, itemLevel = item.level or 0, itemSuffix = item.suffix or 0, battlePetSpeciesID = item.species or 0 }
   end
   function AH.GetItemCommodityStatus(location)
     local item = info(location)
@@ -68,9 +73,9 @@ return function(Stub)
     Stub.items[2770] = { name = "Copper Ore", quality = 1, vendor = 5, cached = true }
     Stub.items[2771] = { name = "Tin Ore", quality = 1, vendor = 5, cached = true }
     Stub.items[1206] = { name = "Moss Agate", quality = 2, vendor = 50, cached = true }
-    Stub.ah.keyInfo["2770:0"] = { itemName = "Copper Ore", quality = 1, isCommodity = true }
-    Stub.ah.keyInfo["2771:0"] = { itemName = "Tin Ore", quality = 1, isCommodity = true }
-    Stub.ah.keyInfo["1206:0"] = { itemName = "Moss Agate", quality = 2, isCommodity = false }
+    Stub.ah.keyInfo["2770:0"] = { itemName = "Copper Ore", quality = 1, isCommodity = true, iconFileID = 134566 }
+    Stub.ah.keyInfo["2771:0"] = { itemName = "Tin Ore", quality = 1, isCommodity = true, iconFileID = 134579 }
+    Stub.ah.keyInfo["1206:0"] = { itemName = "Moss Agate", quality = 2, isCommodity = false, iconFileID = 134105 }
     Stub.ah.browse = {
       { itemKey = { itemID = 2770 }, minPrice = 125, totalQuantity = 50 },
       { itemKey = { itemID = 1206 }, minPrice = 50000, totalQuantity = 2 },

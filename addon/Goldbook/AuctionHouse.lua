@@ -178,7 +178,7 @@ local function readOffers()
         rows[#rows + 1] = { auctionID = info.auctionID, quantity = info.quantity, total = price,
           price = item.commodity and price or math.ceil(price / info.quantity), link = info.itemLink,
           owned = info.containsOwnerItem or info.containsAccountItem, ownQuantity = info.numOwnerItems or 0,
-          name = item.name, owners = table.concat(info.owners or {}, ", ") }
+          name = item.name, itemKey = item.itemKey, icon = item.icon, owners = table.concat(info.owners or {}, ", ") }
       end
     end
   end

@@ -19,6 +19,7 @@ local ABOUT = {
 }
 
 local HELP = {
+  "/gb ah opens the auction panel. Command+click a bag item on Mac, or Ctrl+click on Windows, to search its live listings at the auction house.",
   "Goldbook scan button at the auction house: left click for a quick scan, right click for a full scan.",
   "/gb scan and /gb scan full do the same from chat.",
   "/gb deals lists what is listed below its resale or vendor value.",
@@ -73,6 +74,16 @@ local intro = paragraph(title, INTRO, -12)
 local settings = heading(intro, "Settings")
 
 local CHECKS = {
+  {
+    name = "hideBlizzardAH",
+    label = "Hide Blizzard's auction house while the Goldbook auction panel is open",
+    get = function()
+      return ns.db.settings.hideBlizzardAH == true
+    end,
+    set = function(checked)
+      ns.AuctionUI.SetHideBlizzard(checked)
+    end,
+  },
   {
     name = "minimap",
     label = "Show the minimap button",
