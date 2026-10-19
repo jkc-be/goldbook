@@ -1,9 +1,9 @@
 {
   "about": "The app's updater reads latest.json from the server's updates folder.",
-  "source": "desktop/src-tauri/tauri.conf.json:47",
+  "source": "desktop/src-tauri/tauri.conf.json:48",
   "files": {
     "updates/latest.json": {
-      "version": "0.2.4",
+      "version": "0.3.0",
       "notes": "Goldbook client update",
       "platforms": {
         "darwin-aarch64": {

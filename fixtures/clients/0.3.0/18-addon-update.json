@@ -3,7 +3,7 @@
   "source": "desktop/src-tauri/src/updates.rs:209",
   "files": {
     "updates/addon.json": {
-      "payload": "eyJ2ZXJzaW9uIjoiMC4yLjQiLCJzZXF1ZW5jZSI6NywicmV2aXNpb24iOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZmlsZXMiOnsiR29sZGJvb2sudG9jIjoiIyMgVmVyc2lvbjogMC4yLjRcbkNvcmUubHVhXG4iLCJDb3JlLmx1YSI6Ii0tIHN5bnRoZXRpY1xuIn19",
+      "payload": "eyJ2ZXJzaW9uIjoiMC4zLjAiLCJzZXF1ZW5jZSI6NywicmV2aXNpb24iOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiZmlsZXMiOnsiR29sZGJvb2sudG9jIjoiIyMgVmVyc2lvbjogMC4zLjBcbkNvcmUubHVhXG4iLCJDb3JlLmx1YSI6Ii0tIHN5bnRoZXRpY1xuIn19",
       "signature": "c3ludGhldGljIHNpZ25hdHVyZQ=="
     }
   },

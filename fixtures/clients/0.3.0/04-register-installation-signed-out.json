@@ -1,7 +1,6 @@
 {
   "about": "Without a Battle.net session, registration must answer 401, which the app turns into a sign-in prompt.",
-  "source": "desktop/src-tauri/src/registration.rs:28",
-  "server": "battlenet",
+  "source": "desktop/src-tauri/src/registration.rs:31",
   "request": {
     "method": "POST",
     "path": "/api/installations",

@@ -1,7 +1,6 @@
 {
   "about": "Sign in with Battle.net starts a pairing. The app opens authorizationUrl, which must be this server's authorize page, and shows userCode.",
-  "source": "desktop/src-tauri/src/battlenet.rs:91",
-  "server": "battlenet",
+  "source": "desktop/src-tauri/src/battlenet.rs:93",
   "request": {
     "method": "POST",
     "path": "/api/auth/battlenet/start",

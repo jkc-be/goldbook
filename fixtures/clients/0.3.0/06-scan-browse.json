@@ -1,6 +1,6 @@
 {
-  "about": "A browse scan from GoldbookDB.scans, with names from GoldbookDB.items, sent with a registered upload token.",
-  "source": "crates/goldbook-sync/src/sync.rs:228",
+  "about": "A browse scan from GoldbookDB.scans, with names from GoldbookDB.items.",
+  "source": "crates/goldbook-sync/src/sync.rs:233",
   "request": {
     "method": "POST",
     "path": "/api/scans",
