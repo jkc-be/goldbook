@@ -14,6 +14,9 @@ local Stub = {
   shift = false,
   alt = false,
   ctrl = false,
+  meta = false,
+  mac = false,
+  mouseButton = "LeftButton",
   money = 0,
   reloads = 0,
   name = "Sultan",
@@ -76,10 +79,14 @@ function methods:GetText()
   return self.text
 end
 function methods:Show()
+  local changed = not self.shown
   self.shown = true
+  if changed and self.scripts.OnShow then self.scripts.OnShow(self) end
 end
 function methods:Hide()
+  local changed = self.shown
   self.shown = false
+  if changed and self.scripts.OnHide then self.scripts.OnHide(self) end
 end
 function methods:IsShown()
   return self.shown
@@ -123,10 +130,27 @@ function methods:UnlockHighlight()
   self.highlighted = false
 end
 function methods:SetShown(shown)
-  self.shown = shown
+  if shown then self:Show() else self:Hide() end
 end
 function methods:SetSize(width, height)
+  local changed = self.width ~= width or self.height ~= height
   self.width, self.height = width, height
+  if changed and self.scripts.OnSizeChanged then self.scripts.OnSizeChanged(self, width, height) end
+end
+function methods:SetResizable(resizable)
+  self.resizable = resizable
+end
+function methods:SetResizeBounds(...)
+  self.resizeBounds = { ... }
+end
+function methods:StartSizing(point)
+  self.sizing = point
+end
+function methods:StopMovingOrSizing()
+  self.sizing = nil
+end
+function methods:SetWidth(width)
+  self.width = width
 end
 function methods:SetHeight(height)
   self.height = height
@@ -202,6 +226,8 @@ end
 function methods:GetHeight()
   return rawget(self, "height") or 0
 end
+function methods:SetFrameLevel(level) self.frameLevel = level end
+function methods:GetFrameLevel() return rawget(self, "frameLevel") or 0 end
 function methods:GetRight()
   return rawget(self, "right") or 0
 end
@@ -215,6 +241,18 @@ function methods:SetScale(scale)
 end
 function methods:GetScale()
   return rawget(self, "scale") or 1
+end
+function methods:SetAlpha(alpha)
+  self.alpha = alpha
+end
+function methods:GetAlpha()
+  return rawget(self, "alpha") or 1
+end
+function methods:EnableMouse(enabled)
+  self.mouseEnabled = enabled
+end
+function methods:IsMouseEnabled()
+  return rawget(self, "mouseEnabled") ~= false
 end
 function methods:SetValue(value)
   self.value = value
@@ -597,6 +635,16 @@ end
 function IsControlKeyDown()
   return Stub.ctrl
 end
+function IsMetaKeyDown()
+  return Stub.meta
+end
+function IsMacClient()
+  return Stub.mac
+end
+function GetMouseButtonClicked()
+  return Stub.mouseButton
+end
+function ContainerFrameItemButton_OnClick() end
 
 date = os.date
 

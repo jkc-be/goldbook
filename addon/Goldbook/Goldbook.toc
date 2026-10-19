@@ -14,6 +14,7 @@ Stats.lua
 Codec.lua
 ProfessionData.lua
 Professions.lua
+ItemFilters.lua
 Database.lua
 Advisor.lua
 Ledger.lua
@@ -25,6 +26,9 @@ Core.lua
 Accounting.lua
 Tooltip.lua
 UI.lua
+AuctionHouse.lua
+AuctionRules.lua
+AuctionUI.lua
 Clicks.lua
 WebLogin.lua
 Minimap.lua

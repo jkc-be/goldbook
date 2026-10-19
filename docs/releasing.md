@@ -52,6 +52,10 @@ address hits it, the job fails without changing anything and can be rerun.
 
 ## Release with make release
 
+Run `make help release` for arguments and examples without starting a
+workflow, or `make help prepare-release` for the preparation step.
+`make release --help` displays Make's own help.
+
 1. Merge the release PR that `make prepare-release VERSION=<version>`
    produced. The release PR carries the label `release`, not `no-changes`.
 2. Note the release PR's merge commit, then run:
