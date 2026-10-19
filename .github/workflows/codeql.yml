@@ -1,28 +1,11 @@
 name: CodeQL
-# Default setup scans every pull request, including a documentation change.
-# This workflow leaves those for the weekly run. Turn default setup off, then
-# set the repository variable CODEQL_ADVANCED to true. Until that variable is
-# set, the job stays skipped and default setup keeps scanning.
+# Scan main daily instead of every push and pull request. After merging this
+# workflow, turn default setup off and set CODEQL_ADVANCED to true. Until that
+# repository variable is set, the job stays skipped and default setup keeps scanning.
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'changes/**'
-      - 'LICENSE'
-      - '.gitattributes'
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'changes/**'
-      - 'LICENSE'
-      - '.gitattributes'
   schedule:
-    - cron: '17 4 * * 1'
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
 concurrency:
