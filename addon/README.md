@@ -149,11 +149,20 @@ needed. Enabling both publishing methods can produce duplicate uploads.
 
 ## Publish to Wago
 
+[Goldbook on Wago Addons](https://addons.wago.io/addons/goldbook), project
+`aN0adQ6j`, the `X-Wago-ID` in `Goldbook.toc`, gets each release through a
+webhook. goldbook-addon sends its `release` events to
+`https://addons.wago.io/api/github/webhook`, and Wago takes the release from
+GitHub by itself. The webhook secret is set on the Wago project's GitHub
+settings and on the webhook, nowhere else.
+
+The release workflow can upload to Wago instead, through its `wago` job. Keep
+it off while the webhook is active, or each release reaches Wago twice. To
+switch from the webhook to the job, delete the webhook first.
+
 Wago Addons uploads are off until the repository variable `WAGO_UPLOAD` is
 `true`. Until then the `wago` job is skipped and changes nothing. When it is
-on, approve the `wago` job to upload the same tested ZIP to
-[Goldbook on Wago Addons](https://addons.wago.io/addons/goldbook-addon),
-project `aN0adQ6j`, the `X-Wago-ID` in `Goldbook.toc`. The supported patch is
+on, approve the `wago` job to upload the same tested ZIP to Wago. The supported patch is
 the Forever patch Wago lists for the TOC interface, or the newest one before
 it. Versions containing `alpha` or `beta` use that stability.
 

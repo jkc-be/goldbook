@@ -1286,8 +1286,8 @@ The mirror's release workflow uploads that exact ZIP to CurseForge project
 `1747971` after approval of its protected `curseforge` environment. The API
 token is an environment secret, and a release receipt prevents repeat uploads
 of an already recorded ZIP. Each release also carries a `release.json` that
-tells WowUp the ZIP is for WoW Forever. Uploads to Wago Addons work the same
-way once switched on. See [addon publishing](addon/README.md#publish-to-curseforge).
+tells WowUp the ZIP is for WoW Forever. Wago Addons takes each release through
+a GitHub webhook. See [addon publishing](addon/README.md#publish-to-curseforge).
 Use the release asset for manual installs. GitHub's automatic
 **Source code** archives contain an extra repository folder and cannot be
 uploaded as an addon. Build the same archive locally with:

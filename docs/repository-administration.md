@@ -208,9 +208,12 @@ extra directory and must not be uploaded to CurseForge.
 
 The mirror stores `CURSEFORGE_API_TOKEN` only in its `curseforge` environment.
 That environment permits the `main` branch, requires approval by `jkc-be`, and
-disables administrator bypass. Wago Addons uploads are off until the repository
-variable `WAGO_UPLOAD` is `true`; then `WAGO_API_TOKEN` lives only in a `wago`
-environment with the same rules. There are no repository-level secrets. The
+disables administrator bypass. Wago Addons takes releases through a webhook on
+`release` events to `https://addons.wago.io/api/github/webhook`. The
+workflow's own Wago uploads are off until the repository variable
+`WAGO_UPLOAD` is `true`; then `WAGO_API_TOKEN` lives only in a `wago`
+environment with the same rules. Turn them on only after deleting the webhook,
+or each release reaches Wago twice. There are no repository-level secrets. The
 release workflow accepts only runs initiated and rerun by `jkc-be`; the
 existing mirror key's pushes are attributed to that account. Tests and GitHub
 packaging run before the separate upload jobs can receive a token.
