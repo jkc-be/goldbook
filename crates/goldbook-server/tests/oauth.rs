@@ -1402,3 +1402,100 @@ async fn sign_in_failures_are_pages_for_browsers_and_json_for_the_app() {
     assert_eq!(cancelled.1["content-type"], "text/html; charset=utf-8");
     assert!(cancelled.2.as_str().unwrap().contains("<h1>Sign-in"));
 }
+#[tokio::test]
+async fn the_apps_battlenet_session_signs_its_website_view_in_as_the_player() {
+    let f = Fixture::new().await;
+    let mine = f.session("approved").await;
+    let laptop = install(&f, "a", &mine).await;
+    let stored = call(
+        &f.app,
+        "POST",
+        "/api/account",
+        named("K7Q2M9PX", KEY, "Sultan"),
+        &[("authorization", &laptop)],
+    )
+    .await;
+    assert_eq!(stored.0, 200);
+    let from_app = [
+        ("content-type", "application/x-www-form-urlencoded"),
+        ("origin", "http://127.0.0.1:43210"),
+    ];
+    let opened = call(
+        &f.app,
+        "POST",
+        "/api/desktop-login?view=bags",
+        json!({"session":mine}),
+        &from_app,
+    )
+    .await;
+    assert_eq!(opened.0, 303);
+    assert_eq!(opened.1["location"], "../#bags");
+    let cookie = cookies(&opened.1)[0].split(';').next().unwrap().to_owned();
+    assert_eq!(
+        view(&f.app, "/api/account", &cookie).await,
+        (
+            200,
+            json!({"id":null,"linked":["K7Q2M9PX"],"characters":[listed("Sultan")]})
+        ),
+        "the website shows what a Battle.net sign-in on it would"
+    );
+
+    for (session, why) in [
+        (
+            "bne_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "an unknown session",
+        ),
+        (laptop.trim_start_matches("Bearer "), "an upload token"),
+    ] {
+        let refused = call(
+            &f.app,
+            "POST",
+            "/api/desktop-login?view=bags",
+            json!({"session":session}),
+            &from_app,
+        )
+        .await;
+        assert_eq!(
+            (refused.0, refused.2),
+            (
+                401,
+                json!({"error":"sign in with Battle.net again in Goldbook"})
+            ),
+            "{why}"
+        );
+        assert!(cookies(&refused.1).is_empty(), "{why}");
+    }
+    let web_page = call(
+        &f.app,
+        "POST",
+        "/api/desktop-login?view=bags",
+        json!({"session":mine}),
+        &[
+            ("content-type", "application/x-www-form-urlencoded"),
+            ("origin", "https://attacker.example"),
+        ],
+    )
+    .await;
+    assert_eq!(web_page.0, 403, "only the app's own page may post it");
+
+    db::connect(&f.database())
+        .unwrap()
+        .execute(
+            "UPDATE battlenet_identities SET blocked_at=unixepoch() WHERE identity_hash=?1",
+            [player("123")],
+        )
+        .unwrap();
+    let blocked = call(
+        &f.app,
+        "POST",
+        "/api/desktop-login?view=bags",
+        json!({"session":mine}),
+        &from_app,
+    )
+    .await;
+    assert_eq!(
+        (blocked.0, blocked.2),
+        (403, json!({"error":"this player is blocked"}))
+    );
+    assert!(cookies(&blocked.1).is_empty());
+}

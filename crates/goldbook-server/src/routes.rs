@@ -82,16 +82,6 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                 return Err(Error::new(400, "invalid desktop login"));
             }
             let fields: Vec<_> = url::form_urlencoded::parse(body.as_bytes()).collect();
-            if fields.len() != 2
-                || !fields.iter().any(|(k, _)| k == "id")
-                || !fields.iter().any(|(k, _)| k == "key")
-            {
-                return Err(Error::new(400, "invalid desktop login"));
-            }
-            let body: serde_json::Map<String, Value> = fields
-                .into_iter()
-                .map(|(k, v)| (k.into_owned(), Value::String(v.into_owned())))
-                .collect();
             // The app names the website's view to open in the query; the
             // website has views of a few lowercase letters. Without one, as
             // from an app before 0.2.4, #characters, which the website now
@@ -104,6 +94,22 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
                     (1..=32).contains(&view.len()) && view.bytes().all(|b| b.is_ascii_lowercase())
                 })
                 .unwrap_or("characters");
+            // An app signed in with Battle.net sends its session instead of an ID and key.
+            if let [(name, session)] = fields.as_slice()
+                && name == "session"
+            {
+                return crate::oauth::desktop_login(&input, app, &mut db, session, view);
+            }
+            if fields.len() != 2
+                || !fields.iter().any(|(k, _)| k == "id")
+                || !fields.iter().any(|(k, _)| k == "key")
+            {
+                return Err(Error::new(400, "invalid desktop login"));
+            }
+            let body: serde_json::Map<String, Value> = fields
+                .into_iter()
+                .map(|(k, v)| (k.into_owned(), Value::String(v.into_owned())))
+                .collect();
             authenticate(&input, app, &mut db, Value::Object(body), Some(view))
         }
         ("POST", "/api/link") => link(&input, app, &mut db),
