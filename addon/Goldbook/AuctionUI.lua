@@ -21,7 +21,7 @@ local function restoreBlizzard()
 end
 
 local function syncBlizzard()
-  if not (House.open and window and window:IsShown() and ns.db.settings.hideBlizzardAH) then
+  if not (House.open and window and window:IsShown() and ns.db.settings.hideBlizzardAH ~= false) then
     restoreBlizzard()
   elseif not hiddenBlizzard and AuctionHouseFrame then
     local frame = AuctionHouseFrame
@@ -238,7 +238,7 @@ refresh = function()
   for _, scan in ipairs(window.scans) do scan:SetShown(view == "queue"); scan:SetEnabled(House.open and not busy) end
   window.stop:SetShown(Rules.running)
   window.blizzardToggle:SetShown(not Rules.running)
-  window.blizzardToggle.label:SetText(ns.db.settings.hideBlizzardAH and "Show Blizzard AH" or "Hide Blizzard AH")
+  window.blizzardToggle.label:SetText(ns.db.settings.hideBlizzardAH ~= false and "Show Blizzard AH" or "Hide Blizzard AH")
   window.more:SetShown(view == "browse" and House.more)
   window.more:SetEnabled(not busy)
   window.header:SetText(view == "queue" and "ITEM / GROUP" or "ITEM")
@@ -524,8 +524,8 @@ local function createWindow()
     end)
   end
   window.stop = button(window, "Stop scan", 688, 121, 130, function() Rules.Stop(); refresh() end)
-  window.blizzardToggle = button(window, "Hide Blizzard AH", 688, 121, 316, function()
-    AuctionUI.SetHideBlizzard(not ns.db.settings.hideBlizzardAH)
+  window.blizzardToggle = button(window, "Show Blizzard AH", 688, 121, 316, function()
+    AuctionUI.SetHideBlizzard(ns.db.settings.hideBlizzardAH == false)
   end)
   local tableFrame = CreateFrame("Frame", nil, window, BackdropTemplateMixin and "BackdropTemplate" or nil)
   window.tableFrame = tableFrame

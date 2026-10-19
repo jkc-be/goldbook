@@ -114,10 +114,11 @@ item's live listings. This preserves the item's variant and works while
 Blizzard's window is hidden. Finish any scan or trade review before using
 the shortcut.
 
-Click **Hide Blizzard AH** in the panel, or use the checkbox in
-Options > AddOns > Goldbook, to hide Blizzard's window while this panel is
-open. The choice is saved. **Show Blizzard AH** or closing the Goldbook
-panel restores Blizzard's window without ending the auction session.
+Blizzard's auction window is hidden by default while the Goldbook panel is
+open. Click **Show Blizzard AH**, or clear the checkbox in
+Options > AddOns > Goldbook, to keep it visible. Your choice is saved.
+Closing the Goldbook panel restores Blizzard's window without ending the
+auction session.
 
 - **Browse** searches current listings. Select an item, then a listing, and
   review the purchase. Commodities get a current total for the quantity you

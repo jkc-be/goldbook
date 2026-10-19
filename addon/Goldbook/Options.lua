@@ -78,7 +78,7 @@ local CHECKS = {
     name = "hideBlizzardAH",
     label = "Hide Blizzard's auction house while the Goldbook auction panel is open",
     get = function()
-      return ns.db.settings.hideBlizzardAH == true
+      return ns.db.settings.hideBlizzardAH ~= false
     end,
     set = function(checked)
       ns.AuctionUI.SetHideBlizzard(checked)
