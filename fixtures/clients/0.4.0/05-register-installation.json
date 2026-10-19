@@ -1,6 +1,6 @@
 {
   "about": "After Battle.net sign-in, upload setup registers each WoW account by its fingerprint with the session and keeps the upload token it gets.",
-  "source": "desktop/src-tauri/src/registration.rs:31",
+  "source": "desktop/src-tauri/src/registration.rs:25",
   "request": {
     "method": "POST",
     "path": "/api/installations",
