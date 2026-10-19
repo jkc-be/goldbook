@@ -1526,7 +1526,11 @@ const GOLD_COLUMNS = [
     value: (character) => character.name,
     cell: (character) => {
       const pick = characterPick(character, drawGold);
-      pick.style.color = classColor(character.class);
+      const colour = classColor(character.class);
+      if (colour) {
+        pick.classList.add("class-mark");
+        pick.style.setProperty("--class", colour);
+      }
       return pick;
     },
   },
