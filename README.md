@@ -190,11 +190,12 @@ list (Esc, AddOns) under **Auctions**, and under Options, AddOns.
 ### 3. Start the API and the web UI
 
 ```sh
-UPLOAD_TOKEN=dev-token,friend-token cargo run -p goldbook-server
+SELF_REGISTRATION=true UPLOAD_TOKEN=dev-token,friend-token cargo run -p goldbook-server
 ```
 
-The server creates `data/goldbook.sqlite` on its first start and accepts
-uploads with the token `dev-token`. Leave it running and open
+The server creates `data/goldbook.sqlite` on its first start, registers the
+app's uploads by itself, and accepts terminal uploads with the token
+`dev-token`. Leave it running and open
 <http://localhost:8787>. It says that no scans have been uploaded yet.
 
 ### 4. Sync
@@ -213,23 +214,23 @@ the status and settings, and **Log in** at the bottom of the rail signs in
 with Battle.net.
 
 Open **Settings** and confirm the game folder. Under **Advanced**, set the
-server to `http://localhost:8787` and enter `dev-token` as the upload token for
-this local server. Click **Save** to install the addon and start uploading.
+server to `http://localhost:8787`. Click **Save** to install the addon and
+start uploading.
 **Sync automatically** is on by default. It uploads after each game file write
 and checks again every 15 minutes, which you can change. With it off, nothing
 uploads until you click **Sync now**.
 The default server address is <https://app.jkc-be.com/goldbook>; **Use the
-default server** under **Advanced** puts it back. For automatic setup, leave
-**Upload token** empty and click **Save**. The server must have
-`SELF_REGISTRATION=true` enabled. The app saves a separate token for each
-WoW account and reuses it on later starts. If setup fails while offline,
+default server** under **Advanced** puts it back. The app sets up uploads by
+itself: on a server with Battle.net sign-in after **Sign in with Battle.net**,
+and on one without it when the server has `SELF_REGISTRATION=true`. It saves a
+separate token for each WoW account and reuses it on later starts. If setup fails while offline,
 it retries every minute; **Sync now** retries immediately.
 Leave Goldbook running. Closing the window leaves it in the menu
 bar on macOS, or the tray on Windows and Linux. Quit from that menu, or from
 the Goldbook menu.
 
-Change the game folder from **Settings** in the window, and the server or
-upload token under its **Advanced** tab. **Sync now** checks for new scans
+Change the game folder from **Settings** in the window, and the server under
+its **Advanced** tab. **Sync now** checks for new scans
 immediately; the sync icon beside the theme switch at the foot of the rail
 does the same from any view. **Open website** signs
 you in to the website's Gold as your Battle.net player when the app is signed
@@ -890,11 +891,10 @@ files on the host. This setting allows anyone to register for upload access.
 Registration allows 20 attempts per source address every 15 minutes, grouping
 IPv6 addresses by /64. Keep the public proxy rate limits enabled.
 
-Users choose their game folder and click **Save** with **Upload token** empty.
+Users choose their game folder and click **Save**.
 The app registers each WoW account, saves its private token, and starts syncing.
-Updating an installation that saved `dev-token` for the official server also
-registers it automatically. Custom tokens are preserved. Revoked account
-tokens are not replaced automatically.
+An installation that saved a manual token in an earlier version drops it and
+registers instead. Revoked account tokens are not replaced automatically.
 
 The account fingerprint is SHA-256 of `goldbook:wow-account:v1:` followed by
 the account-folder identifier in ASCII uppercase. The identifier comes from
@@ -946,13 +946,9 @@ The server accepts any token in the list. Keep your own token first, because
 the `export GOLDBOOK_TOKEN` command above takes the first one. To revoke a
 token, remove it from the line and deploy again.
 
-Your friend can use the desktop installer, or, with access to this private
-repository, build it with Rust and the Tauri prerequisites. To build, run `npm ci` and `npm run desktop`,
-then open **Settings** and choose
-their World of Warcraft folder, your server's address, and their upload token.
-**Save** installs the addon and starts uploading.
-
-From a terminal, the same step is `cargo run -p goldbook-sync -- --api https://gold.example.com --token <their token>`.
+The desktop app sets up its own uploads and takes no manual token, so a friend
+with a token uploads from a terminal:
+`cargo run -p goldbook-sync -- --api https://gold.example.com --token <their token>`.
 Setting `GOLDBOOK_TOKEN` instead of `--token` keeps the token out of their
 shell history. Their scans go into the same price history as yours. On the
 web page they log in with the ID and key from their own `/gb web`, and see

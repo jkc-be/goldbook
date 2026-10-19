@@ -1,6 +1,4 @@
 const field = (id) => document.getElementById(id);
-let tokenEdited = false;
-field("token").addEventListener("input", () => { tokenEdited = true; });
 
 // Whether the app holds a Battle.net session, which signs in Inventory and
 // Ledger without asking for a game account.
@@ -88,8 +86,6 @@ field("battlenet-login").addEventListener("click", async () => {
     const result = await window.goldbook.battlenetLogin();
     notify(result.message);
     if (result.ok && result.settings) {
-      field("token").value = result.settings.token;
-      tokenEdited = false;
       drawSession(result.settings.battlenetSession);
       showPage("settings", document.querySelector('[data-view="settings"]'));
     }
@@ -208,16 +204,13 @@ async function save(event) {
     const result = await window.goldbook.save({
       wowDir: field("wow").value,
       api: field("api").value,
-      token: field("token").value,
       openAtLogin: field("login").checked,
       autoSync: field("auto").checked,
       syncMinutes: Number(field("minutes").value),
-    }, tokenEdited);
+    });
     notify(result.message);
     if (result.settings?.api) {
       field("api").value = result.settings.api;
-      field("token").value = result.settings.token;
-      tokenEdited = false;
       drawSession(result.settings.battlenetSession);
     }
   } catch {
@@ -278,22 +271,10 @@ window.goldbook.onBattlenetCode((code) => {
   field("battlenet-code").hidden = false;
 }).catch(() => notify("Goldbook could not display the sign-in code. Restart the app."));
 
-window.goldbook.onUploadReady(async () => {
-  try {
-    const state = await window.goldbook.getState();
-    if (field("api").value === state.settings.api && !tokenEdited) {
-      field("token").value = state.settings.token;
-    }
-  } catch {
-    notify("Goldbook could not refresh its upload settings. Restart the app.");
-  }
-}).catch(() => notify("Goldbook could not refresh its upload settings. Restart the app."));
-
 async function fill() {
   const initial = await window.goldbook.getState();
   field("wow").value = initial.settings.wowDir;
   field("api").value = initial.settings.api;
-  field("token").value = initial.settings.token;
   field("login").checked = initial.settings.openAtLogin;
   field("auto").checked = initial.settings.autoSync;
   field("minutes").value = String(initial.settings.syncMinutes);
