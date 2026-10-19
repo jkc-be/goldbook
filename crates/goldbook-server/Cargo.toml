@@ -15,12 +15,12 @@ goldbook-core.workspace = true
 hex.workspace = true
 rand.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "form"] }
-rusqlite = { version = "0.39", features = ["bundled", "functions"] }
+rusqlite = { version = "0.40.2", features = ["bundled", "functions"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 subtle = "2"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "signal"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.7.1", features = ["fs"] }
 url.workspace = true

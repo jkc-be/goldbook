@@ -50,7 +50,7 @@ tests override database and upload settings and remove inherited Battle.net,
 proxy and web-directory configuration. Deployment tooling tests use fixtures;
 the suite does not deploy anything. Cargo may download build dependencies.
 
-The proxy check starts real Traefik 3.7.13, matching OVH, on a random loopback
+The proxy check starts real Traefik 3.7.15 on a random loopback
 port. It renders both production Compose proxy configurations with test-only
 settings and uses their routing rules, priorities, middleware chains and body
 limits. It tests an authenticated batch larger than 64 KiB, both host layouts,
@@ -84,7 +84,7 @@ make dev
 Docker must be running. `npm run dev` and `make sandbox` start this same stack.
 It builds `server/Dockerfile` and combines `compose.yaml`,
 `compose.traefik.yaml` and `compose.path.yaml` with `compose.local.yaml`.
-The local overlay supplies Traefik 3.7.13 with Docker discovery
+The local overlay supplies Traefik 3.7.15 with Docker discovery
 and the production routing, buffering and rate-limit middleware.
 Goldbook has no directly published port; requests go through Traefik.
 
