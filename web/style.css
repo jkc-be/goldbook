@@ -1773,6 +1773,53 @@ code {
   }
 }
 
+/* The server's Battle.net sign-in pages: one panel under the title bar. */
+.confirm {
+  display: grid;
+  justify-items: center;
+  padding: 48px 16px;
+}
+
+.confirm .panel {
+  width: 100%;
+  max-width: 440px;
+  padding: 20px 22px 22px;
+}
+
+.confirm h1 {
+  font-size: 24px;
+}
+
+.confirm .lede {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.confirm .code-entry {
+  width: 100%;
+  height: 52px;
+  padding: 0 12px;
+  font: 26px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.3em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.confirm .button.primary {
+  width: 100%;
+  min-height: 34px;
+  font-size: 16px;
+}
+
+.confirm .warning {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  background: var(--tint);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
 /* The desktop app marks the page it embeds and draws its own rail, brand and
    theme switch beside it. */
 :root[data-embed="desktop"] .rail,

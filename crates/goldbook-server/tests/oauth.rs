@@ -96,7 +96,11 @@ impl Fixture {
         assert_eq!(opened.0, 200);
         assert!(!opened.1.contains_key("location"));
         let page = opened.2.as_str().unwrap();
-        assert!(page.contains("Only continue if you started sign-in in Goldbook."));
+        assert!(page.contains("Only continue if you started sign-in in Goldbook yourself."));
+        assert!(
+            page.contains(r#"<link rel="stylesheet" href="/goldbook/style.css?v="#),
+            "the page wears the website's versioned style from the public URL"
+        );
         assert!(!page.contains(started.2["userCode"].as_str().unwrap()));
         // Browsers enforce every copy of these headers, so each must be the only one.
         let only = |name| {
@@ -144,11 +148,13 @@ impl Fixture {
         )
         .await;
         assert_eq!(wrong.0, 400);
+        // Typed in lowercase, the app's code still matches.
+        let typed = started.2["userCode"].as_str().unwrap().to_ascii_lowercase();
         let opened = call(
             &self.app,
             "POST",
             "/api/auth/battlenet/authorize",
-            json!({"request":request,"userCode":started.2["userCode"]}),
+            json!({"request":request,"userCode":typed}),
             &[
                 ("content-type", "application/x-www-form-urlencoded"),
                 ("origin", "https://gold.example"),
@@ -1356,4 +1362,43 @@ async fn website_sign_in_moves_to_the_public_host_before_setting_its_cookie() {
     assert!(cookies(&started.1)[0].starts_with("gb_bnet_web_csrf="));
     let provider = url::Url::parse(started.1["location"].to_str().unwrap()).unwrap();
     assert_eq!(provider.path(), "/authorize");
+}
+#[tokio::test]
+async fn sign_in_failures_are_pages_for_browsers_and_json_for_the_app() {
+    let f = Fixture::new().await;
+    let target =
+        "/api/auth/battlenet/authorize?request=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let browser = call(
+        &f.app,
+        "GET",
+        target,
+        Value::Null,
+        &[("accept", "text/html,application/xhtml+xml")],
+    )
+    .await;
+    assert_eq!(browser.0, 400);
+    assert_eq!(browser.1["content-type"], "text/html; charset=utf-8");
+    assert_eq!(browser.1["cache-control"], "no-store");
+    let page = browser.2.as_str().unwrap();
+    assert!(page.contains(
+        r#"<h1>Sign-in could not continue</h1><p class="lede">Sign-in request expired or already opened.</p><p class="muted">Start again in Goldbook.</p>"#
+    ));
+    let app = call(&f.app, "GET", target, Value::Null, &[]).await;
+    assert_eq!(
+        (app.0, app.2),
+        (
+            400,
+            json!({"error":"sign-in request expired or already opened; start again in Goldbook"})
+        )
+    );
+    let cancelled = call(
+        &f.app,
+        "GET",
+        "/api/auth/battlenet/callback?state=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&error=access_denied",
+        Value::Null,
+        &[("accept", "text/html")],
+    )
+    .await;
+    assert_eq!(cancelled.1["content-type"], "text/html; charset=utf-8");
+    assert!(cancelled.2.as_str().unwrap().contains("<h1>Sign-in"));
 }

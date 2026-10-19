@@ -140,15 +140,29 @@ pub(super) fn respond(input: &Input, app: &App) -> Result<Reply> {
         input.path.strip_prefix(PREFIX).unwrap_or(""),
     ) {
         ("POST", "start") => start(input, app, config, &mut db),
-        ("GET", "authorize") => confirmation(input, &db),
+        ("GET", "authorize") => confirmation(input, config, &db),
         ("POST", "authorize") => authorize(input, app, config, &db),
         ("GET", "web/start") => web_start(input, app, config, &mut db),
         ("GET", "callback") => callback(input, config, &mut db),
         ("POST", "poll") => poll(input, &mut db),
         _ => Err(failure(404, "not found")),
     };
+    // A browser on a sign-in page gets its failure as a page too.
+    let page = matches!(
+        (
+            input.method.as_str(),
+            input.path.strip_prefix(PREFIX).unwrap_or("")
+        ),
+        ("GET" | "POST", "authorize") | ("GET", "web/start" | "callback")
+    ) && header(&input.headers, "accept").contains("text/html");
     // Failures must not be cached either; never include provider response content.
-    Ok(no_store(reply.unwrap_or_else(Reply::error)))
+    Ok(no_store(reply.unwrap_or_else(|error| {
+        if page {
+            error_page(config, &error)
+        } else {
+            Reply::error(error)
+        }
+    })))
 }
 fn start(input: &Input, app: &App, config: &BattleNetConfig, db: &mut Connection) -> Result<Reply> {
     if !input
@@ -193,15 +207,72 @@ fn start(input: &Input, app: &App, config: &BattleNetConfig, db: &mut Connection
         json!({"authorizationUrl":url.as_str(),"pollToken":poll,"userCode":code,"expiresIn":PAIR_SECONDS,"interval":3}),
     ))
 }
-fn html(body: String) -> Reply {
+fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+// A sign-in page in the website's look and the reader's theme, under the
+// public URL where every sign-in page is served.
+fn page(config: &BattleNetConfig, title: &str, body: &str) -> Reply {
+    let root = url::Url::parse(&config.public_url)
+        .expect("validated URL")
+        .path()
+        .trim_end_matches('/')
+        .to_owned();
+    let (css, js) = (
+        crate::routes::versioned("style.css"),
+        crate::routes::versioned("theme.js"),
+    );
     Reply {
         status: 200,
-        body: body.into_bytes(),
+        body: format!(
+            r#"<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} · Goldbook</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23eda100'/%3E%3C/svg%3E"><link rel="stylesheet" href="{root}/{css}"><script src="{root}/{js}"></script></head><body><header class="titlebar"><span class="brand"><span class="crest" aria-hidden="true"></span>Goldbook</span></header><main class="confirm"><section class="panel login">{body}</section></main></body></html>"#
+        )
+        .into_bytes(),
         content_type: "text/html; charset=utf-8",
         headers: vec![],
     }
 }
-fn confirmation(input: &Input, db: &Connection) -> Result<Reply> {
+// A failure the browser shows: its message's first clause, then the next step.
+fn error_page(config: &BattleNetConfig, error: &Error) -> Reply {
+    let title = match error.status {
+        401 => "Sign-in cancelled",
+        403 => "Sign-in refused",
+        429 => "Too many attempts",
+        500.. => "Battle.net could not complete sign-in",
+        _ => "Sign-in could not continue",
+    };
+    let sentence = |text: &str| {
+        let mut chars = text.trim().chars();
+        let first = chars
+            .next()
+            .map(|c| c.to_ascii_uppercase())
+            .unwrap_or_default();
+        escape(&format!("{first}{}.", chars.as_str()))
+    };
+    let (what, next) = error
+        .message
+        .split_once("; ")
+        .unwrap_or((&error.message, ""));
+    let next = if next.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<p class="muted">{}</p>"#, sentence(next))
+    };
+    let mut reply = page(
+        config,
+        title,
+        &format!(
+            r#"<h1>{title}</h1><p class="lede">{}</p>{next}"#,
+            sentence(what)
+        ),
+    );
+    reply.status = error.status;
+    reply
+}
+fn confirmation(input: &Input, config: &BattleNetConfig, db: &Connection) -> Result<Reply> {
     let request = input
         .query
         .get("request")
@@ -214,9 +285,13 @@ fn confirmation(input: &Input, db: &Connection) -> Result<Reply> {
             "sign-in request expired or already opened; start again in Goldbook",
         ));
     }
-    let mut page = html(format!(
-        r#"<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Connect Goldbook</title><main><h1>Connect Goldbook to Battle.net</h1><p>Only continue if you started sign-in in Goldbook.</p><p>Enter the eight-character code shown in the Goldbook app. Never enter a code sent by someone else.</p><form method="post" action="authorize"><input type="hidden" name="request" value="{request}"><label>Goldbook code <input name="userCode" required minlength="8" maxlength="8" autocomplete="off" spellcheck="false" pattern="[A-Z2-9]{{8}}"></label><button type="submit">Continue to Battle.net</button></form></main></html>"#
-    ));
+    let mut page = page(
+        config,
+        "Connect Goldbook",
+        &format!(
+            r#"<h1>Connect Goldbook to Battle.net</h1><p class="lede">Enter the code shown in the Goldbook app, then sign in with Battle.net.</p><form method="post" action="authorize"><input type="hidden" name="request" value="{request}"><label>Code from the Goldbook app<input class="code-entry" name="userCode" required minlength="8" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" pattern="[A-Za-z2-9]{{8}}" autofocus></label><button class="button primary" type="submit">Continue to Battle.net</button></form><p class="warning">Only continue if you started sign-in in Goldbook yourself. A code someone sent you would connect your Battle.net account to their app.</p>"#
+        ),
+    );
     // Browsers send the form's Origin only under a referrer policy that
     // allows it. Its redirect to Battle.net continues through regional login
     // hosts, and form-action would have to name every one.
@@ -271,6 +346,8 @@ fn authorize(input: &Input, app: &App, config: &BattleNetConfig, db: &Connection
     if !valid_secret(request) || code.len() != 8 {
         return Err(failure(400, "invalid Goldbook confirmation code"));
     }
+    // The app shows the code in capitals; a lowercase one is the same code.
+    let code = &code.to_ascii_uppercase();
     let state = secret();
     let csrf = secret();
     let updated = db.execute("UPDATE battlenet_pairings SET state_hash=?1,csrf_hash=?2 WHERE request_id=?3 AND expires_at>?4 AND state_hash IS NULL AND user_code_hash=?5", params![hash(&state),hash(&csrf),request,now(),hash(code)])?;
@@ -396,7 +473,11 @@ fn callback(input: &Input, config: &BattleNetConfig, db: &mut Connection) -> Res
         )?;
         return Err(error);
     }
-    let mut reply = html(r#"<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Goldbook connected</title><main><h1>Battle.net connected.</h1><p>Return to Goldbook. You can close this tab.</p></main></html>"#.into());
+    let mut reply = page(
+        config,
+        "Goldbook connected",
+        r#"<h1>Battle.net connected</h1><p class="lede">Return to Goldbook. You can close this tab.</p>"#,
+    );
     reply
         .headers
         .push(("set-cookie", config.cookie(APP_CSRF, "", 0)));
