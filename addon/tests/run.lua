@@ -435,6 +435,7 @@ Stub.money = 1000000
 Stub.fire("PLAYER_MONEY")
 eq(next(GoldbookDB.gold), nil, "gold that changes before login is not booked under a realm name that is not normalized yet")
 Stub.fire("PLAYER_LOGIN")
+Stub.fire("PLAYER_ENTERING_WORLD")
 eq(lastPrint(), "Goldbook " .. Stub.metadata.Version .. " loaded. Type /gb for commands.", "the login message gives the version from the .toc")
 eq(stored(GoldbookDB.gold["Sultan-Faramon"]), "488887:1000000 488888:1000000", "gold recorded at login")
 eq(Stub.categories[1].name, "Goldbook", "options entry registered")
@@ -931,6 +932,7 @@ Stub.bags[0] = {
   { hyperlink = "|Hitem:6948::::::|h[Hearthstone]|h", stackCount = 1, isBound = true },
 }
 Stub.bags[1] = { slots = 1, { hyperlink = "|Hitem:4306::::::|h[Silk Cloth]|h", stackCount = 2 } }
+Stub.fire("BAG_UPDATE_DELAYED")
 GoldbookWindow.hubs.inventory.scripts.OnClick()
 eq(navigation(), "Inventory: [Bags] Mail", "a hub not opened before opens on its first tab")
 eq(cells(1), "Linen Cloth x25 | 99c | 13c | 23s 50c | Auction", "bags view undercuts the lowest listing")
@@ -986,12 +988,14 @@ eq(plain(GoldbookWindow.purse.text), "126g 00s 00c", "the title bar shows the ac
 Stub.items[5000] = { name = "Rough Stone", quality = 1, vendor = 2, itemData = 3, cached = false }
 Stub.bags[1][2] = { hyperlink = "|Hitem:5000::::::|h[Rough Stone]|h", stackCount = 4 }
 Stub.bags[1].slots = 2
+Stub.fire("BAG_UPDATE_DELAYED")
 GoldbookWindow.hubs.inventory.scripts.OnClick()
 eq(cells(4), "item 5000 x4 |  |  | 0c | No price", "a bag item whose name is still loading is listed by its id")
 Stub.advance(0.7)
 eq(cells(4), "Rough Stone x4 |  | 2c | 8c | Vendor", "the name and the tooltip's vendor price fill in once they arrive, not the item's data")
 Stub.bags[1][3] = { stackCount = 1 }
 Stub.bags[1].slots = 3
+Stub.fire("BAG_UPDATE_DELAYED")
 GoldbookWindow.hubs.inventory.scripts.OnClick()
 eq(plain(GoldbookWindow.head.aside.text), "Worth 38s 58c after the cut", "a bag slot whose item has no link yet is left out")
 
@@ -1516,6 +1520,17 @@ eq(sultan.bank.at .. " " .. rowsText(sultan.bank.rows),
   "1760001326 2592 Thrall's \"Ünicode\" Wool, Fine 1 8 auction 300 0 2280 / 2589 Linen Cloth 1 17 auction 99 13 1598 / 3576 Tin Bar 1 5 vendor nil 25 125",
   "the bank keeps its unbound items as last read while open, priced at logout with the details that arrived since")
 
+-- Quitting the game, unlike /reload, empties the bags before PLAYER_LOGOUT.
+local inBags = Stub.bags
+Stub.bags = {}
+Stub.fire("PLAYER_LOGOUT")
+Stub.bags = inBags
+local quit = GoldbookDB.characters["Sultan-Faramon"].bags
+eq(quit.at .. " " .. rowsText(quit.rows),
+  "1760001336 2589 Linen Cloth 1 25 auction 99 13 2350 / 7070 Elemental Water 1 3 vendor nil 400 1200 / 4306 Silk Cloth 1 2 vendor nil 150 300 / "
+    .. "5000 Rough Stone 1 4 vendor nil 2 8",
+  "quitting keeps the bags as last seen in play")
+
 -- The client's own SavedVariables layout: one value per line, array entries
 -- tagged with their index, control characters as decimal escapes.
 local function quote(text)
@@ -1576,6 +1591,7 @@ eq(tostring(GoldbookDB.account ~= account) .. " " .. GoldbookDB.account.id .. " 
 
 Stub.name, Stub.class, Stub.level = "Mirelle", "MAGE", 42
 Stub.fire("PLAYER_LOGIN")
+Stub.fire("PLAYER_ENTERING_WORLD")
 Stub.fire("PLAYER_MONEY")
 Stub.fire("PLAYER_LOGOUT")
 local mirelle = GoldbookDB.characters["Mirelle-Faramon"]
