@@ -52,7 +52,7 @@ async fn register(api: &str, fingerprint: &str, session: Option<&str>) -> Result
     }
     match status {
         200..=299 => {}
-        401 => bail!("Sign in with Battle.net in Settings to set up uploads."),
+        401 => bail!("Log in with Battle.net in Goldbook to set up uploads."),
         403 if serde_json::from_slice::<serde_json::Value>(&body)
             .ok()
             .is_some_and(|v| v["error"] == "this account is blocked") =>
@@ -100,7 +100,7 @@ pub async fn prepare_uploads(settings: &mut Settings, config: &Path) -> Result<U
     } else {
         if settings.battlenet_session.is_none() && !known_files.is_empty() {
             match crate::battlenet::enabled(&settings.api).await {
-                Ok(true) => bail!("Sign in with Battle.net in Settings to set up uploads."),
+                Ok(true) => bail!("Log in with Battle.net in Goldbook to set up uploads."),
                 Ok(false) => {}
                 Err(error) => {
                     let all_cached = known_files.iter().all(|file| {
@@ -229,7 +229,7 @@ mod tests {
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("Sign in with Battle.net")
+                .contains("Log in with Battle.net in Goldbook")
         );
         settings.upload_tokens.clear();
         settings.battlenet_session = Some("enrollment-session".into());

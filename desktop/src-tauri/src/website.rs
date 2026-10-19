@@ -68,6 +68,28 @@ fn html(text: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+// What the one-use page signs the website in with: the app's Battle.net
+// session, or the ID and key from the game's saved data while they last.
+pub enum Credential {
+    Battlenet(String),
+    Game(GameLogin),
+}
+
+impl Credential {
+    fn fields(&self) -> String {
+        let field = |name: &str, value: &str| {
+            format!(
+                r#"<input type="hidden" name="{name}" value="{}">"#,
+                html(value)
+            )
+        };
+        match self {
+            Credential::Battlenet(session) => field("session", session),
+            Credential::Game(login) => field("id", &login.id) + &field("key", &login.key),
+        }
+    }
+}
+
 pub struct Handoff {
     pub url: String,
     task: JoinHandle<()>,
@@ -82,7 +104,7 @@ impl Drop for Handoff {
 // The server signs in and sends the browser on to the website's `view`.
 pub async fn handoff(
     api: &str,
-    login: GameLogin,
+    credential: Credential,
     view: &str,
     lifetime: Duration,
 ) -> Result<Handoff> {
@@ -98,10 +120,9 @@ pub async fn handoff(
     let url = format!("http://{host}{path}");
     let content = format!(
         r#"<!doctype html><html lang="en"><meta charset="utf-8"><title>Opening Goldbook</title>
-<p>Signing in to Goldbook...</p><form method="post" action="{}"><input type="hidden" name="id" value="{}"><input type="hidden" name="key" value="{}"><noscript><button type="submit">Continue to Goldbook</button></noscript></form><script nonce="{nonce}">document.forms[0].submit();</script></html>"#,
+<p>Signing in to Goldbook...</p><form method="post" action="{}">{}<noscript><button type="submit">Continue to Goldbook</button></noscript></form><script nonce="{nonce}">document.forms[0].submit();</script></html>"#,
         html(target.as_str()),
-        html(&login.id),
-        html(&login.key)
+        credential.fields()
     );
     let headers = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: origin\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'nonce-{nonce}'; form-action {}; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n",
@@ -165,7 +186,7 @@ mod tests {
         };
         let page = handoff(
             "https://example.com/goldbook",
-            login,
+            Credential::Game(login),
             "bags",
             Duration::from_secs(10),
         )
@@ -190,14 +211,31 @@ mod tests {
         assert!(client.get(&page.url).send().await.is_err());
     }
     #[tokio::test]
+    async fn battlenet_form_posts_only_the_session() {
+        let page = handoff(
+            "https://example.com/goldbook",
+            Credential::Battlenet("bne_session<&>".into()),
+            "gold",
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        let text = reqwest::get(&page.url).await.unwrap().text().await.unwrap();
+        assert!(text.contains(
+            r#"<form method="post" action="https://example.com/goldbook/api/desktop-login?view=gold"><input type="hidden" name="session" value="bne_session&#60;&#38;&#62;"><noscript>"#
+        ));
+        assert!(!text.contains(r#"name="id""#));
+        assert!(!page.url.contains("bne_"));
+    }
+    #[tokio::test]
     async fn expires_without_opening_browser() {
         let page = handoff(
             "http://localhost:8787",
-            GameLogin {
+            Credential::Game(GameLogin {
                 id: "K7Q2M9PX".into(),
                 key: "key".into(),
                 label: "Account".into(),
-            },
+            }),
             "gold",
             Duration::from_millis(10),
         )

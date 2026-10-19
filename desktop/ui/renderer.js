@@ -2,6 +2,59 @@ const field = (id) => document.getElementById(id);
 let tokenEdited = false;
 field("token").addEventListener("input", () => { tokenEdited = true; });
 
+// Whether the app holds a Battle.net session, which signs in Inventory and
+// Ledger without asking for a game account.
+let signedIn = false;
+
+function drawSession(session) {
+  signedIn = Boolean(session);
+  field("session").textContent = signedIn ? "Signed in with Battle.net" : "Not signed in";
+  field("log-in").hidden = signedIn;
+  field("log-out").hidden = !signedIn;
+}
+
+// The app's own pages, under the website view.
+const PAGES = {
+  settings: ["Settings", "Uploads your scans and characters, and keeps the app and the addon up to date."],
+  login: ["Log in", "Sign in once to see your characters, inventory and ledger, and to set up uploads."],
+};
+
+function showPage(name, current) {
+  field("page-title").textContent = PAGES[name][0];
+  field("page-sub").textContent = PAGES[name][1];
+  field("settings-page").hidden = name !== "settings";
+  field("login-page").hidden = name !== "login";
+  for (const other of document.querySelectorAll(".views button, #log-in")) {
+    if (other === current) {
+      other.setAttribute("aria-current", "page");
+    } else {
+      other.removeAttribute("aria-current");
+    }
+  }
+}
+
+field("log-in").addEventListener("click", async () => {
+  const result = await window.goldbook.showView("login").catch(() => ({ ok: false, message: "Goldbook could not open that view." }));
+  if (!result.ok) {
+    notify(result.message);
+    return;
+  }
+  showPage("login", field("log-in"));
+});
+
+field("log-out").addEventListener("click", async () => {
+  try {
+    await window.goldbook.battlenetLogout();
+    drawSession(null);
+    const settings = document.querySelector('[data-view="settings"]');
+    await window.goldbook.showView("settings");
+    showPage("settings", settings);
+    notify("Logged out of Battle.net. Uploads continue for the game accounts already set up.");
+  } catch (message) {
+    notify(String(message));
+  }
+});
+
 field("battlenet-login").addEventListener("click", async () => {
   field("battlenet-login").disabled = true;
   field("battlenet-cancel").hidden = false;
@@ -12,6 +65,8 @@ field("battlenet-login").addEventListener("click", async () => {
     if (result.ok && result.settings) {
       field("token").value = result.settings.token;
       tokenEdited = false;
+      drawSession(result.settings.battlenetSession);
+      showPage("settings", document.querySelector('[data-view="settings"]'));
     }
   } catch {
     notify("Goldbook could not complete Battle.net sign-in. Try again.");
@@ -64,14 +119,6 @@ field("theme").addEventListener("click", () => {
 drawTheme();
 shareTheme();
 
-field("settings-toggle").addEventListener("click", () => {
-  const form = field("settings");
-  const open = form.hidden;
-  form.hidden = !open;
-  field("settings-toggle").setAttribute("aria-expanded", String(open));
-  field("settings-toggle").textContent = open ? "Hide" : "Show";
-});
-
 // The game account to open, null when there is one or none, undefined when
 // the player cancels the choice between several.
 async function pickAccount() {
@@ -96,7 +143,7 @@ for (const tab of document.querySelectorAll(".views button")) {
   tab.addEventListener("click", async () => {
     let result;
     try {
-      const accountId = "signIn" in tab.dataset ? await pickAccount() : null;
+      const accountId = "signIn" in tab.dataset && !signedIn ? await pickAccount() : null;
       if (accountId === undefined) {
         return;
       }
@@ -108,13 +155,7 @@ for (const tab of document.querySelectorAll(".views button")) {
       notify(result.message);
       return;
     }
-    for (const other of document.querySelectorAll(".views button")) {
-      if (other === tab) {
-        other.setAttribute("aria-current", "page");
-      } else {
-        other.removeAttribute("aria-current");
-      }
-    }
+    showPage("settings", tab);
   });
 }
 
@@ -151,6 +192,7 @@ field("settings").addEventListener("submit", async (event) => {
       field("api").value = result.settings.api;
       field("token").value = result.settings.token;
       tokenEdited = false;
+      drawSession(result.settings.battlenetSession);
     }
   } catch {
     notify("Goldbook could not save the settings. Try again.");
@@ -173,7 +215,7 @@ field("sync").addEventListener("click", async () => {
 field("site").addEventListener("click", async () => {
   field("site").disabled = true;
   try {
-    const accountId = await pickAccount();
+    const accountId = signedIn ? null : await pickAccount();
     if (accountId === undefined) {
       return;
     }
@@ -221,9 +263,7 @@ async function fill() {
   field("minutes").value = String(initial.settings.syncMinutes);
   field("minutes").disabled = !initial.settings.autoSync;
   showStatus(initial.status);
-  if (!initial.configured || initial.status.files === 0) {
-    field("settings-toggle").click();
-  }
+  drawSession(initial.settings.battlenetSession);
 }
 
 fill().catch(() => {
@@ -250,7 +290,7 @@ function showUpdates(status) {
   field("update-alert").hidden = update.phase !== "ready" && update.phase !== "failed";
   field("update-alert").textContent = update.phase === "ready" ? "Update ready" : "Update needs attention";
 }
-field("update-alert").onclick = () => document.querySelector('[data-view="sync"]').click();
+field("update-alert").onclick = () => document.querySelector('[data-view="settings"]').click();
 field("check-updates").onclick = async () => {
   field("check-updates").disabled = true;
   try { await window.goldbook.checkUpdates(); }

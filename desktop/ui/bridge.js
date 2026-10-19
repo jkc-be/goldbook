@@ -15,6 +15,7 @@ window.goldbook = {
   save: (input, tokenEdited) => invoke("save", { input, tokenEdited }),
   syncNow: () => invoke("sync_now"),
   battlenetLogin: () => invoke("battlenet_login"),
+  battlenetLogout: () => invoke("battlenet_logout"),
   onBattlenetCode: (listener) => window.__TAURI__.event.listen("battlenet-code", ({ payload }) => listener(payload)),
   cancelBattlenetLogin: () => invoke("cancel_battlenet_login"),
   getLogins: () => invoke("get_logins"),

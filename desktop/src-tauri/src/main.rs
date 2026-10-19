@@ -28,6 +28,9 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 const SITE: &str = "site";
+// The website's own Log out, which the view hides with its rail, then a new
+// page load of the public market, so nothing the session showed stays in memory.
+const LOGOUT: &str = "fetch(new URL('api/logout', document.baseURI), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).catch(() => {}).finally(() => location.replace(new URL('./?signed-out#prices', document.baseURI)));";
 
 // Under this mark web/style.css hides the website's rail and brand, which the
 // app's own rail replaces. WebView2 can run this before the document element exists.
@@ -56,22 +59,23 @@ impl Theme {
     }
 }
 
-// The pages of the app's rail: its own Sync page, and the hubs of the
-// website it shows in the window, each opened at its first tab.
+// The pages of the app's rail: its own Settings and Log in pages, and the
+// hubs of the website it shows in the window, each opened at its first tab.
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum View {
-    Sync,
+    Settings,
+    Login,
     Prices,
     Bags,
     Gold,
 }
 
 impl View {
-    // The website's route, none for Sync.
+    // The website's route, none for the app's own pages.
     fn route(self) -> Option<&'static str> {
         match self {
-            View::Sync => None,
+            View::Settings | View::Login => None,
             View::Prices => Some("prices"),
             View::Bags => Some("bags"),
             View::Gold => Some("gold"),
@@ -358,6 +362,8 @@ async fn battlenet_login(app: tauri::AppHandle) -> Reply {
             );
         }
         settings.battlenet_session = Some(session);
+        // The website view signs in again, now as the player.
+        state.site.lock().unwrap().1 = false;
         settings.upload_tokens.clear();
         // An explicit sign-in switches this server to verified account setup.
         settings.token.clear();
@@ -509,6 +515,22 @@ async fn sync_now(app: tauri::AppHandle) -> Result<(), String> {
     do_sync(&app).await
 }
 
+// Ends the Battle.net session in the app and the website view. Uploads keep
+// the credentials they have; a new game account needs a sign-in again.
+#[tauri::command]
+async fn battlenet_logout(app: tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let _operation = state.operation.lock().await;
+    let mut settings = settings::read(&state.config);
+    settings.battlenet_session = None;
+    settings::write(&state.config, &settings).map_err(|e| e.to_string())?;
+    state.site.lock().unwrap().1 = false;
+    if let Some(site) = app.get_webview(SITE) {
+        site.eval(LOGOUT).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn get_logins(state: State<'_, AppState>) -> Vec<website::GameLogin> {
     website::game_logins(Path::new(&settings::read(&state.config).wow_dir))
@@ -522,6 +544,21 @@ async fn open_site(app: tauri::AppHandle, account_id: Option<String>) -> Result<
         .prepare()
         .map_err(|e| e.to_string())?;
     do_sync(&app).await?;
+    if let Some(session) = settings.battlenet_session.clone() {
+        let page = website::handoff(
+            &settings.api,
+            website::Credential::Battlenet(session),
+            "gold",
+            Duration::from_secs(60),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        app.opener()
+            .open_url(&page.url, None::<&str>)
+            .map_err(|e| e.to_string())?;
+        *state.website.lock().unwrap() = Some(page);
+        return Ok(());
+    }
     let mut logins = website::game_logins(Path::new(&settings.wow_dir));
     if logins.is_empty() {
         app.opener()
@@ -543,7 +580,7 @@ async fn open_site(app: tauri::AppHandle, account_id: Option<String>) -> Result<
     };
     let page = website::handoff(
         &settings.api,
-        logins.remove(index),
+        website::Credential::Game(logins.remove(index)),
         "gold",
         Duration::from_secs(60),
     )
@@ -646,8 +683,9 @@ fn layout_site(
 }
 
 // Shows the website inside the window. The market is public. Inventory and
-// Ledger need the web login, which the game's saved data supplies the same
-// way Open website does; the website's tabs then share its session.
+// Ledger need the web login: the app's Battle.net session, or else the game's
+// saved ID and key, the same way Open website does; the website's tabs then
+// share its session.
 #[tauri::command]
 async fn show_view(
     app: tauri::AppHandle,
@@ -680,29 +718,29 @@ async fn show_view(
         site.1
     };
     if name.signs_in() && !signed_in {
-        let mut logins = website::game_logins(Path::new(&settings.wow_dir));
-        let index = match (account_id, logins.len()) {
-            (_, 0) => None,
-            (Some(id), _) => Some(
-                logins
-                    .iter()
-                    .position(|login| login.id == id)
-                    .ok_or("The selected game account is no longer saved.")?,
-            ),
-            (None, 1) => Some(0),
-            (None, _) => {
-                return Err("Choose the World of Warcraft account you want to open.".into());
-            }
+        let credential = if let Some(session) = settings.battlenet_session.clone() {
+            Some(website::Credential::Battlenet(session))
+        } else {
+            let mut logins = website::game_logins(Path::new(&settings.wow_dir));
+            let index = match (account_id, logins.len()) {
+                (_, 0) => None,
+                (Some(id), _) => Some(
+                    logins
+                        .iter()
+                        .position(|login| login.id == id)
+                        .ok_or("The selected game account is no longer saved.")?,
+                ),
+                (None, 1) => Some(0),
+                (None, _) => {
+                    return Err("Choose the World of Warcraft account you want to open.".into());
+                }
+            };
+            index.map(|index| website::Credential::Game(logins.remove(index)))
         };
-        if let Some(index) = index {
-            let page = website::handoff(
-                &settings.api,
-                logins.remove(index),
-                route,
-                Duration::from_secs(60),
-            )
-            .await
-            .map_err(|e| e.to_string())?;
+        if let Some(credential) = credential {
+            let page = website::handoff(&settings.api, credential, route, Duration::from_secs(60))
+                .await
+                .map_err(|e| e.to_string())?;
             target = page.url.clone();
             *state.website.lock().unwrap() = Some(page);
             state.site.lock().unwrap().1 = true;
@@ -814,6 +852,7 @@ fn main() {
             choose_folder,
             save,
             battlenet_login,
+            battlenet_logout,
             cancel_battlenet_login,
             sync_now,
             get_logins,
@@ -1066,11 +1105,18 @@ mod tests {
             let view: View = serde_json::from_str(&format!("\"{name}\"")).unwrap();
             (view.route(), view.signs_in())
         };
-        assert_eq!(open("sync"), (None, false));
+        assert_eq!(open("settings"), (None, false));
+        assert_eq!(open("login"), (None, false));
         assert_eq!(open("prices"), (Some("prices"), false));
         assert_eq!(open("bags"), (Some("bags"), true));
         assert_eq!(open("gold"), (Some("gold"), true));
-        for input in ["\"characters\"", "\"Gold\"", "\"gold/../x\"", "null"] {
+        for input in [
+            "\"sync\"",
+            "\"characters\"",
+            "\"Gold\"",
+            "\"gold/../x\"",
+            "null",
+        ] {
             assert!(serde_json::from_str::<View>(input).is_err(), "{input}");
         }
     }
