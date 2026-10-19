@@ -48,7 +48,7 @@ const WOWHEAD_ITEM = "https://www.wowhead.com/forever/item=";
 const WIDE = matchMedia("(min-width: 1240px)");
 
 const state = { realms: [], realm: null, q: "", profession: "", kind: "all", quality: "", sort: "name", order: "asc", offset: 0, selected: null, character: "" };
-const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0, session: 0, list: 0, listTrends: 0 };
+const latest = { prices: 0, trends: 0, history: 0, sellers: 0, view: 0, session: 0, list: 0, listTrends: 0, pane: 0 };
 // The account in the rail: null when signed out, undefined while that is not known.
 const session = { account: undefined };
 const STALE = Symbol("stale");
@@ -820,7 +820,7 @@ function drawBook(container, { scannedAt, summary, orderBook }, earlier) {
   }
 }
 
-function drawSellers(data) {
+function drawSellers(data, place) {
   const panel = $("sellers");
   const title = element("h3", { id: "sellers-title", textContent: "Order book" });
   if (!data.snapshot) {
@@ -828,7 +828,7 @@ function drawSellers(data) {
       "No order book has been uploaded for this item. With the updated addon, run /gb scan full at the auction house, then /reload with the desktop app open. A complete search for this item also records its book." }));
     return;
   }
-  const { realm, faction } = state.realm;
+  const { realm, faction } = place;
   const { itemKey, id } = data.snapshot;
   const history = data.history ?? [];
   const book = element("div");
@@ -859,7 +859,7 @@ function drawSellers(data) {
   show(data.snapshot);
 }
 
-async function loadHistory(itemKey, place = state.realm) {
+async function loadHistory(itemKey, place = state.realm, name = undefined) {
   const { realm, faction } = place;
   ++latest.sellers;
   const [data, sellers] = await latestOnly("history", Promise.all([
@@ -873,19 +873,29 @@ async function loadHistory(itemKey, place = state.realm) {
       row.setAttribute("aria-selected", String(row.dataset.itemKey === itemKey));
     }
   }
+  const named = { name, ...data };
   $("detail").hidden = false;
-  $("detail-title").textContent = itemName(data);
-  $("detail-title").className = `quality-${quality(data)}`;
+  $("detail-title").textContent = itemName(named);
+  $("detail-title").className = `quality-${quality(named)}`;
   $("detail-wowhead").href = `${WOWHEAD_ITEM}${itemKey.split(":")[0]}`;
-  const item = { itemKey, name: itemName(data), ...place };
+  const item = { itemKey, name: itemName(named), ...place };
   $("detail-compare").dataset.compareKey = itemKey;
   $("detail-compare").onclick = () => toggleComparison(item);
   updateCompareButtons();
-  $("detail-subtitle").textContent = `Price per scan on ${realm} · ${faction}`;
-  drawSummary(data.points);
-  drawSellers(sellers);
-  drawItemChart(itemName(data), data.points);
-  drawScans(data.points);
+  const seen = data.points.length > 0;
+  $("detail-subtitle").textContent = seen
+    ? `Price per scan on ${realm} · ${faction}`
+    : `No scan on ${realm} · ${faction} has listed this item.`;
+  for (const id of ["summary", "legend", "chart", "sellers", "history"]) {
+    $(id).hidden = !seen;
+  }
+  $("all-scans").hidden ||= !seen;
+  if (seen) {
+    drawSummary(data.points);
+    drawSellers(sellers, place);
+    drawItemChart(itemName(named), data.points);
+    drawScans(data.points);
+  }
   // Side by side the detail stays in view. Stacked, it sits below the list.
   if (!WIDE.matches && !inPane) {
     $("detail").scrollIntoView();
@@ -1137,6 +1147,8 @@ const detailHome = { parent: $("detail").parentElement, next: $("detail").nextEl
 let paneRow = null;
 
 function closePane() {
+  // A pane still looking up its realm stays shut.
+  latest.pane++;
   if ($("item-pane").hidden) {
     return;
   }
@@ -1160,8 +1172,12 @@ async function paneRealm(place) {
   return there.length === 1 ? there[0] : (state.realm ?? there[0] ?? realms[0] ?? null);
 }
 
-async function openPane(itemKey, place, row) {
+async function openPane(itemKey, place, row, name) {
+  const ticket = ++latest.pane;
   const realm = await paneRealm(place);
+  if (ticket !== latest.pane) {
+    return;
+  }
   if (realm === null) {
     showMessage("No scans have been uploaded yet, so there are no prices to show.");
     return;
@@ -1174,7 +1190,7 @@ async function openPane(itemKey, place, row) {
   $("detail-compare").hidden = true;
   $("item-pane").hidden = false;
   document.body.classList.add("pane-open");
-  await loadHistory(itemKey, realm);
+  await loadHistory(itemKey, realm, name);
 }
 
 $("detail-close").onclick = closePane;
@@ -1192,7 +1208,7 @@ function itemButton(name, qualityClass, itemKey, place) {
       className: qualityClass,
       textContent: name,
       title: "Show its prices",
-      onclick: (event) => run(() => openPane(itemKey, place, event.currentTarget.closest("tr"))),
+      onclick: (event) => run(() => openPane(itemKey, place, event.currentTarget.closest("tr"), name)),
     })
     : element("span", { className: qualityClass, textContent: name });
 }
