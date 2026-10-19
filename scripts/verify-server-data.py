@@ -114,9 +114,9 @@ def main():
                      scanner="Else", build="1.15.7", rows=[["7070", 250, 0, 9, 0]], items={"7070": ["Elemental Water", 1]}),
             ]
             for scan in scans:
-                answer = api.request("POST", "/api/scans", scan, token=helpers["TOKEN"])[0]
+                answer = api.request("POST", "/api/scans", scan, token=api.token)[0]
                 assert answer["status"] == 200, answer
-            command = [SYNC, "--wow", directory / "wow", "--api", url, "--token", helpers["TOKEN"],
+            command = [SYNC, "--wow", directory / "wow", "--api", url, "--token", api.token,
                        "--state", directory / "state.json", "--once"]
             output = helpers["run"](command)
             assert "server prices for Faramon-Horde, Mirage-Alliance written to" in output, output
