@@ -107,7 +107,8 @@ Open the auction house and click **Goldbook** above it, beside **Goldbook
 scan**, or type `/gb ah`. The panel uses the same dark/light theme and scale
 as the rest of Goldbook. Drag its bottom-right corner to resize it; Goldbook
 remembers the size. Closing the auction house closes the panel and clears
-its live results.
+its live results. Closing the Goldbook panel also closes Blizzard's auction
+window and ends the auction session.
 
 Command+click a bag item on macOS, or Ctrl+click on Windows, to open that
 item's live listings. This preserves the item's variant and works while
@@ -115,15 +116,34 @@ Blizzard's window is hidden. Finish any scan or trade review before using
 the shortcut.
 
 Blizzard's auction window is hidden by default while the Goldbook panel is
-open. Click **Show Blizzard AH**, or clear the checkbox in
-Options > AddOns > Goldbook, to keep it visible. Your choice is saved.
-Closing the Goldbook panel restores Blizzard's window without ending the
-auction session.
+open. Clear the checkbox in Options > AddOns > Goldbook to keep it visible.
+Your choice is saved. Theme changes follow the rest of Goldbook; this panel
+has no separate theme button.
 
-- **Browse** searches current listings. Select an item, then a listing, and
-  review the purchase. Commodities get a current total for the quantity you
+**Quick scan** updates lowest prices. **Full scan** also records market
+values and order books, with the same 15-minute cooldown as `/gb scan full`.
+The buttons show scan progress in the footer and are unavailable during
+another scan or trade review. Closing the auction session stops a scan.
+
+The filters match Market: profession, materials/recipes/crafted items, and
+quality. They apply to scan prices, Deals, Sell and My auctions. The category
+menu uses Classic's auction categories and submenus, including armor slots;
+it combines with the other filters. The stack icon groups
+variants of the same item, such as Battle Knife suffixes, into one row with
+their total quantity and lowest price. Click the group to choose the exact
+variant, or click the stack icon again to show all variants separately.
+
+- **Browse** searches saved scan prices immediately, without waiting for
+  auction queries. The panel shows the last scan time; run at least a
+  **Quick scan** for a fresh reference. Each item's tooltip shows when its
+  price was observed. Opening an item resolves its exact variant and loads
+  current listings. If several item levels match, choose one first. A cached
+  price never authorizes a purchase. Select a live listing and review it. Commodities get a current total for the quantity you
   enter, across the cheapest listings. That quote expires after ten seconds.
   Other items buy the entire selected listing. Bid-only auctions are omitted.
+- **Deals** uses Market's deal calculations and minimum-profit setting.
+  Select a deal to see its estimated return, then **Find live listings** to
+  check current prices before buying. A completed scan refreshes the view.
 - **Sell** lists auctionable bag stacks. Select one and enter a quantity, a
   unit price in gold and a duration. The initial price, when present, is
   Goldbook's last recorded minimum. Review the total and deposit before
@@ -137,7 +157,7 @@ auction session.
   action queue. Scans never buy, post or cancel on their own. Select a queued
   action and confirm it; shopping results open current listings for review.
 
-Under **Groups and rules**, name a group and enter its item IDs, separated by
+Under **Automation > Groups and rules**, name a group and enter its item IDs, separated by
 commas. Opening the editor with an item selected fills in its ID. Each item
 belongs to one group; its variants use that group's rule. **Load next group**
 cycles through saved groups. Saving replaces the group with that name.

@@ -118,25 +118,40 @@ end
 
 local function describe(key, link)
   local info = AH.GetItemKeyInfo(key) or {}
-  return info.itemName or (link and link:match("%[(.-)%]")) or ("Item " .. key.itemID), info.iconFileID, info.isCommodity
+  return info.itemName or (link and link:match("%[(.-)%]")) or ("Item " .. key.itemID), info.iconFileID, info.isCommodity, info.quality
+end
+
+function House.CachedItem(item)
+  local id, suffix = item.key:match("^(%d+):?(%-?%d*)$")
+  local lookup = C_Item.GetItemIconByID or GetItemIcon
+  return { key = item.key, itemKey = { itemID = tonumber(id), itemSuffix = tonumber(suffix) or 0 },
+    name = item.name, quality = item.quality, icon = lookup and lookup(tonumber(id)),
+    quantity = item.qty, price = item.min, seen = item.seen, cached = true }
 end
 
 function House.Search(text)
-  if not available() then return false end
+  if not available() or not House.Dismiss(true) then return false end
   House.mode, House.context, House.selected, House.more = "browse", "browse", nil, false
   House.rows, House.offers, House.text = {}, {}, text or ""
-  return send("browse", function()
-    AH.SendBrowseQuery({ searchString = House.text, sorts = { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } },
-      filters = {}, itemClassFilters = {} })
-  end, "Searching the auction house...")
+  for _, item in ipairs(ns.Database.Search(ns.db, ns.RealmKey(), House.text)) do
+    House.rows[#House.rows + 1] = House.CachedItem(item)
+  end
+  notify("Scan prices are a reference. Open an item for current listings.")
+  return true
 end
 
 function House.Select(row)
   if not available() or House.Busy() then return false end
+  if House.mode == "browse" and row.cached then
+    House.selected, House.offers, House.more, House.context = row, {}, false, "resolve"
+    return send("browse", function()
+      AH.SendBrowseQuery({ searchString = row.name, sorts = {}, filters = {}, itemClassFilters = {} })
+    end, "Finding current listings for " .. row.name .. "...")
+  end
   if House.mode == "browse" then
     local info = AH.GetItemKeyInfo(row.itemKey)
     if not info then return fail("Item details are still loading. Select the item again in a moment.") end
-    row.commodity, row.name, row.icon = info.isCommodity, info.itemName, info.iconFileID
+    row.commodity, row.name, row.icon, row.quality = info.isCommodity, info.itemName, info.iconFileID, info.quality
   end
   House.selected, House.offers, House.more = row, {}, false
   if House.mode ~= "browse" then notify(); return true end
@@ -153,15 +168,25 @@ function House.Find(item)
 end
 
 local function readBrowse()
-  local rows = {}
+  local target, rows = House.selected, {}
+  if not target or not target.cached then return end
   for _, result in ipairs(AH.GetBrowseResults()) do
-    local name, icon, commodity = describe(result.itemKey)
-    rows[#rows + 1] = { itemKey = result.itemKey, name = name, icon = icon, commodity = commodity,
-      quantity = result.totalQuantity or 0, price = result.minPrice or 0 }
+    local key = result.itemKey
+    if key.itemID == target.itemKey.itemID and (key.itemSuffix or 0) == target.itemKey.itemSuffix then
+      local name, icon, commodity, quality = describe(key)
+      rows[#rows + 1] = { itemKey = key, name = name, icon = icon, commodity = commodity,
+        quality = quality, quantity = result.totalQuantity or 0, price = result.minPrice or 0 }
+    end
   end
-  House.rows, House.more = rows, not AH.HasFullBrowseResults()
-  House.phase = "idle"
-  notify(#rows == 0 and "No matching items." or (#rows .. " items. Select one to see its listings."))
+  if not AH.HasFullBrowseResults() then
+    send("browse", AH.RequestMoreBrowseResults, "Finding current variants...")
+    return
+  end
+  House.phase, House.more = "idle", false
+  if #rows == 1 then House.Select(rows[1]); return end
+  House.rows, House.context = rows, "variants"
+  notify(#rows == 0 and "No current listings for this item. Scan prices may be out of date."
+    or "Select a current item variant to load its listings.")
 end
 
 local function readOffers()
@@ -178,7 +203,7 @@ local function readOffers()
         rows[#rows + 1] = { auctionID = info.auctionID, quantity = info.quantity, total = price,
           price = item.commodity and price or math.ceil(price / info.quantity), link = info.itemLink,
           owned = info.containsOwnerItem or info.containsAccountItem, ownQuantity = info.numOwnerItems or 0,
-          name = item.name, itemKey = item.itemKey, icon = item.icon, owners = table.concat(info.owners or {}, ", ") }
+          name = item.name, itemKey = item.itemKey, icon = item.icon, quality = item.quality, owners = table.concat(info.owners or {}, ", ") }
       end
     end
   end
@@ -197,9 +222,7 @@ end
 function House.More()
   if not House.more or House.Busy() then return false end
   local item = House.selected
-  if House.context == "browse" then
-    return send("browse", AH.RequestMoreBrowseResults, "Loading more items...")
-  elseif item and item.commodity then
+  if item and item.commodity then
     return send("offers", function() AH.RequestMoreCommoditySearchResults(item.itemKey.itemID) end, "Loading more listings...")
   elseif item then
     return send("offers", function() AH.RequestMoreItemSearchResults(item.itemKey) end, "Loading more listings...")
@@ -217,9 +240,9 @@ function House.Bags()
         local status = AH.GetItemCommodityStatus(location)
         if AH.IsSellItemValid(location, false) and (status == Enum.ItemCommodityStatus.Item or status == Enum.ItemCommodityStatus.Commodity) then
           local key = AH.GetItemKeyFromItem(location)
-          local name = describe(key, info.hyperlink)
+          local name, icon, _, quality = describe(key, info.hyperlink)
           rows[#rows + 1] = { bag = bag, slot = slot, location = location, itemKey = key,
-            name = name, link = info.hyperlink, icon = info.iconFileID, quantity = info.stackCount,
+            name = name, link = info.hyperlink, icon = info.iconFileID or icon, quality = info.quality or quality, quantity = info.stackCount,
             commodity = status == Enum.ItemCommodityStatus.Commodity }
         end
       end
@@ -238,8 +261,8 @@ local function readOwned()
   for index = 1, AH.GetNumOwnedAuctions() do
     local info = AH.GetOwnedAuctionInfo(index)
     if info then
-      local name, icon = describe(info.itemKey, info.itemLink)
-      rows[#rows + 1] = { auctionID = info.auctionID, itemKey = info.itemKey, name = name, icon = icon,
+      local name, icon, _, quality = describe(info.itemKey, info.itemLink)
+      rows[#rows + 1] = { auctionID = info.auctionID, itemKey = info.itemKey, name = name, icon = icon, quality = quality,
         quantity = info.quantity, total = info.buyoutAmount or 0, link = info.itemLink,
         price = math.ceil((info.buyoutAmount or 0) / math.max(1, info.quantity)),
         timeLeft = info.timeLeft, timeLeftSeconds = info.timeLeftSeconds, status = info.status }
@@ -260,7 +283,7 @@ function House.SetMode(mode)
     House.rows = House.Bags()
     notify("Select a bag stack. Each post uses at most that stack's quantity.")
   else
-    notify("Enter an item name and search the auction house.")
+    return House.Search(House.text or "")
   end
   return true
 end
@@ -407,7 +430,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
   if event == "AUCTION_HOUSE_SHOW" then
     House.open = true
     House.session = (House.session or 0) + 1
-    notify("Enter an item name and search the auction house.")
+    House.Search("")
   elseif event == "AUCTION_HOUSE_CLOSED" then
     House.open = false
     serial = serial + 1
@@ -454,7 +477,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
     House.selected, House.rows = nil, House.Bags()
     notify("Bags updated. Select a stack to sell.")
   elseif event == "PLAYER_MONEY" then notify()
-  elseif event == "ITEM_KEY_ITEM_INFO_RECEIVED" and House.phase == "idle" and House.context == "browse" then readBrowse() end
+  elseif event == "ITEM_KEY_ITEM_INFO_RECEIVED" and House.phase == "idle" and House.context == "variants" then readBrowse() end
 end)
 
 -- All addons share Blizzard's result cache. A query from another window

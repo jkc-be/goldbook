@@ -226,6 +226,8 @@ end
 function methods:GetHeight()
   return rawget(self, "height") or 0
 end
+function methods:SetFrameLevel(level) self.frameLevel = level end
+function methods:GetFrameLevel() return rawget(self, "frameLevel") or 0 end
 function methods:GetRight()
   return rawget(self, "right") or 0
 end

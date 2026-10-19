@@ -23,6 +23,18 @@ return function(Stub)
   local function record(name, ...)
     server.calls[#server.calls + 1] = { name = name, args = { ... } }
   end
+  function HideUIPanel(frame) frame:Hide() end
+  function AH.CloseAuctionHouse()
+    record("close")
+    Stub.fire("AUCTION_HOUSE_CLOSED")
+  end
+  AuctionHouseFrame:SetScript("OnHide", AH.CloseAuctionHouse)
+  local fire = Stub.fire
+  function Stub.fire(event, ...)
+    if event == "AUCTION_HOUSE_SHOW" then AuctionHouseFrame:Show()
+    elseif event == "AUCTION_HOUSE_CLOSED" then AuctionHouseFrame.shown = false end
+    fire(event, ...)
+  end
   local function query(event, key)
     if server.silent then return end
     Stub.ah.ready = false
@@ -67,6 +79,40 @@ return function(Stub)
     for _, call in ipairs(server.calls) do if call.name == name then count = count + 1 end end
     return count
   end
+  function C_Item.GetItemIconByID(id)
+    for key, item in pairs(Stub.ah.keyInfo) do if tonumber(key:match("^(%d+)")) == id then return item.iconFileID end end
+  end
+  function C_Item.GetItemInfoInstant(id)
+    local item = Stub.items[id]
+    if not item then return end
+    return id, nil, nil, nil, C_Item.GetItemIconByID(id), item.classID or 7, item.subClassID or 0
+  end
+  function C_Item.GetItemInventoryTypeByID(id) return Stub.items[id] and Stub.items[id].inventoryType end
+  AuctionCategories = {
+    { name = "Weapons", filters = { { classID = 2 } }, subCategories = {
+      { name = "Daggers", filters = { { classID = 2, subClassID = 15 } } },
+      { name = "One-Handed Swords", filters = { { classID = 2, subClassID = 7 } } },
+    } },
+    { name = "Armor", filters = { { classID = 4 } }, subCategories = {
+      { name = "Cloth", filters = { { classID = 4, subClassID = 1 } }, subCategories = {
+        { name = "Chest", filters = { { classID = 4, subClassID = 1, inventoryType = 5 }, { classID = 4, subClassID = 1, inventoryType = 20 } } },
+        { name = "Head", filters = { { classID = 4, subClassID = 1, inventoryType = 1 } } },
+      } },
+    } },
+    { name = "Trade Goods", filters = { { classID = 7 } } },
+  }
+  function server.cache(ns)
+    local rows, names = {}, {}
+    for _, item in ipairs(Stub.ah.browse) do
+      local key = ns.Codec.ItemKey(item.itemKey.itemID, item.itemKey.itemSuffix)
+      local info = AH.GetItemKeyInfo(item.itemKey) or {}
+      rows[#rows + 1] = { key = key, min = item.minPrice, mv = item.minPrice, qty = item.totalQuantity, n = 1 }
+      names[key] = { name = info.itemName or ("Item " .. item.itemKey.itemID), quality = info.quality or 1 }
+    end
+    ns.db.prices[ns.RealmKey()] = {}
+    ns.Database.ApplyScan(ns.db, { realm = "Faramon", faction = "Horde", region = "EU", by = "Test", build = "1", at = time(), mode = "browse",
+      rows = rows, names = names })
+  end
   function server.seed()
     for bag = 1, 4 do Stub.bags[bag] = nil end
     Stub.money = 5000000
@@ -91,6 +137,19 @@ return function(Stub)
       { itemID = 1206, hyperlink = "|Hitem:1206|h[Moss Agate]|h", stackCount = 2 },
       { itemID = 2771, hyperlink = "|Hitem:2771|h[Tin Ore]|h", stackCount = 8, commodity = true },
     }
+  end
+  function server.seedVariants()
+    server.seed()
+    Stub.items[15241] = { name = "Battle Knife", quality = 2, cached = true, classID = 2, subClassID = 15 }
+    Stub.ah.pageSize, Stub.ah.browse = 50, {}
+    for index = 1, 3 do
+      local key = { itemID = 15241, itemSuffix = 100 + index, itemLevel = 20 + index, battlePetSpeciesID = 0 }
+      Stub.ah.browse[index] = { itemKey = key, minPrice = index * 100, totalQuantity = index }
+      Stub.ah.keyInfo["15241:" .. key.itemSuffix] = { itemName = "Battle Knife of " .. ({ "Strength", "Agility", "Stamina" })[index],
+        quality = 2, iconFileID = 135641, isCommodity = false }
+    end
+    Stub.ah.browse[4] = { itemKey = { itemID = 2770 }, minPrice = 125, totalQuantity = 20 }
+    server.offers[15241] = { { auctionID = 555, quantity = 1, buyoutAmount = 200 } }
   end
   return server
 end

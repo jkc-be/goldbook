@@ -1239,7 +1239,7 @@ local function captureViews(suffix)
 end
 
 if flags.auctions then
-  auctionServer.seed()
+  auctionServer.seed(); auctionServer.cache(ns)
   local function click(widget) widget.scripts.OnClick(widget) end
   for _, theme in ipairs({ "dark", "light" }) do
     ns.UI.SetTheme(theme)
@@ -1249,8 +1249,16 @@ if flags.auctions then
     local panel = GoldbookAuctionHouse
     local function shot(name) capture("auction-" .. name .. "-" .. theme, { panel }, { panel }) end
     shot("browse")
+    click(panel.filters.controls.profession)
+    shot("filters")
+    panel.filterMenu:Hide()
+    click(panel.filters.category)
+    click(panel.categoryMenus[1].options[3])
+    click(panel.categoryMenus[2].options[2])
+    capture("auction-categories-" .. theme, { panel }, { panel, unpack(panel.categoryMenus) })
+    panel.categoryMenus[1]:Hide()
     click(panel.rows[1])
-    Stub.advance(0.3)
+    Stub.advance(1)
     shot("order-book")
     click(panel.rows[1])
     panel.quantity:SetText("4")
@@ -1261,11 +1269,11 @@ if flags.auctions then
     click(panel.tabs.sell)
     click(panel.rows[1])
     shot("sell")
-    panel:SetSize(940, 630)
+    panel:SetSize(940, 670)
     shot("sell-small")
     panel:SetSize(1300, 900)
     shot("sell-large")
-    panel:SetSize(1020, 650)
+    panel:SetSize(1020, 690)
     ns.AuctionRules.Save({ name = "Ore", items = "2770,2771", minimum = "1s", normal = "2s", maximum = "5s", shopping = "3s",
       undercut = "1", cap = "10", stack = "4", duration = "2", below = "skip", above = "normal" })
     click(panel.tabs.queue)
@@ -1276,8 +1284,25 @@ if flags.auctions then
     click(panel.groupButton)
     capture("auction-rules-" .. theme, { panel, GoldbookAuctionRules }, { GoldbookAuctionRules })
     GoldbookAuctionRules:Hide()
+    ns.db.settings.minProfit = 0
+    ns.Database.ApplyScan(ns.db, { realm = "Faramon", faction = "Horde", region = "EU", by = "Preview", build = "1", at = time(), mode = "replicate",
+      rows = { { key = "2770", min = 125, mv = 500, qty = 50, n = 2 }, { key = "1206", min = 100, mv = 500, qty = 2, n = 1 } },
+      names = { ["2770"] = { name = "Copper Ore", quality = 1 }, ["1206"] = { name = "Moss Agate", quality = 2 } } })
+    click(panel.tabs.deals)
+    panel.search:SetText("")
+    click(panel.rows[1])
+    shot("deals")
+    auctionServer.seedVariants(); auctionServer.cache(ns)
     click(panel.tabs.browse)
+    click(panel.searchButton)
+    Stub.advance(0.3)
+    click(panel.stack)
+    shot("grouped")
+    click(panel.rows[1])
+    shot("variants")
+    click(panel.stack)
     Stub.fire("AUCTION_HOUSE_CLOSED")
+    auctionServer.seed(); auctionServer.cache(ns)
   end
   return
 end

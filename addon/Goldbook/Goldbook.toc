@@ -13,6 +13,7 @@ Stats.lua
 Codec.lua
 ProfessionData.lua
 Professions.lua
+ItemFilters.lua
 Database.lua
 Advisor.lua
 Ledger.lua
