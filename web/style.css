@@ -48,19 +48,19 @@
   --sans: "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
   --top: 46px;
   --rail-width: 160px;
-  --class-warrior: #8a5f33;
-  --class-paladin: #c4135f;
-  --class-hunter: #4f6f22;
-  --class-rogue: #6e6600;
-  --class-priest: #6b6457;
+  --class-warrior: #80582f;
+  --class-paladin: #ba125a;
+  --class-hunter: #4b6920;
+  --class-rogue: #6a6200;
+  --class-priest: #665f53;
   --class-deathknight: #b81c36;
-  --class-shaman: #0065c8;
-  --class-mage: #0e6f88;
-  --class-warlock: #5557d6;
-  --class-monk: #007848;
-  --class-druid: #a64e00;
+  --class-shaman: #005eba;
+  --class-mage: #0d6981;
+  --class-warlock: #4f51c7;
+  --class-monk: #006e42;
+  --class-druid: #9a4900;
   --class-demonhunter: #942bb7;
-  --class-evoker: #277565;
+  --class-evoker: #236a5c;
 }
 
 :root[data-theme="dark"] {
