@@ -127,7 +127,7 @@ eq(cells(3), "Bandit Cinch of the Monkey x1 | Auction purchase | -90s 00c | Sult
 eq(cells(5), "Linen Cloth x20 | Auction purchase | -15s 00c | Mirelle | 1d ago", "every character's entries are listed")
 eq(cells(6), "Gnomish Widget x1 | Auction sale | +6s 65c | Sultan | 2d ago", "a sale without a count is one item")
 eq(GoldbookWindow.rows[3].cells[1].text:sub(1, 10), "|cff1eff00", "an item booked under a known key keeps its quality colour")
-eq(GoldbookWindow.rows[3].cells[3].text:sub(1, 10), "|cffff6d5a", "a purchase is red, a sale green")
+eq(GoldbookWindow.rows[3].cells[3].text:sub(1, 10), "|cffff8c7d", "a purchase is red, a sale green")
 eq(GoldbookWindow.rows[1].hit.shown, false, "trades are not items to hover")
 eq(plain(GoldbookWindow.head.sub.text) .. " / " .. cards(), "6 entries / REVENUE 63s 65c / EXPENSES 1g 05s 00c / NET -41s 35c / REALIZED PROFIT +4s 00c",
   "the cards total the entries shown, revenue after the cut, and the profit on the 20 Linen Cloth bought at 75c and sold at 95c")

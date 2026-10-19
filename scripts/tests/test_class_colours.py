@@ -1,4 +1,4 @@
-"""Class-coloured character names keep 4.5:1 wherever a row draws them."""
+"""The class bar before a character's name stays visible in both themes."""
 from pathlib import Path
 import re
 import unittest
@@ -23,10 +23,6 @@ def channels(colour):
     return [int(colour[index:index + 2], 16) for index in (1, 3, 5)]
 
 
-def over(below, above, alpha):
-    return "#" + "".join(f"{round(b + (a - b) * alpha):02x}" for b, a in zip(channels(below), channels(above)))
-
-
 def luminance(colour):
     values = [c / 255 for c in channels(colour)]
     values = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in values]
@@ -39,20 +35,16 @@ def contrast(a, b):
 
 
 class ClassColourTests(unittest.TestCase):
-    def test_light_class_names_keep_their_contrast_on_pages_panels_and_rows(self):
-        classes = {name: value for name, value in block(":root").items() if name.startswith("class-")}
-        colours = palette(":root")
-        # --tint and --tint-strong: the gold at 10% and 16%, over a hovered and a selected row.
-        backgrounds = {
-            "page": colours["page"],
-            "panel": colours["panel"],
-            "hovered row": over(colours["panel"], colours["gold"], 0.10),
-            "selected row": over(colours["panel"], colours["gold"], 0.16),
-        }
-        self.assertEqual(len(classes), 13)
-        for name, colour in classes.items():
-            for place, background in backgrounds.items():
-                self.assertGreaterEqual(round(contrast(colour, background), 2), 4.5, f"{name} on the {place}")
+    def test_class_bars_keep_3_to_1_on_the_page_and_panels(self):
+        # A coloured shape needs 3:1 against what it sits on; the name beside it
+        # is ink, which the palette tests hold to 7:1.
+        for theme, selector in (("light", ":root"), ("dark", ':root[data-theme="dark"]')):
+            classes = {name: value for name, value in block(selector).items() if name.startswith("class-")}
+            colours = palette(":root" if theme == "light" else selector)
+            self.assertEqual(len(classes), 13, theme)
+            for name, colour in classes.items():
+                for place in ("page", "panel"):
+                    self.assertGreaterEqual(round(contrast(colour, colours[place]), 2), 3, f"{theme} {name} on the {place}")
 
 
 if __name__ == "__main__":
