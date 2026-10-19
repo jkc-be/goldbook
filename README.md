@@ -370,9 +370,25 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | Local database | `data/goldbook.sqlite` |
 | Server code, database and upload token on your server | `/opt/goldbook/app`, `/opt/goldbook/data`, `/opt/goldbook/.env` |
 
-### Reset a local install
+### Command help
 
-Run `make` or `make help` to list available commands and their options.
+Run `make` or `make help` to list commands. For a command's arguments,
+examples, prerequisites and effects, use:
+
+```sh
+make help release
+make help prepare-release
+make help build install-addon
+```
+
+`make help-release`, `make release help` and `make release HELP=1` also show
+release guidance. Help mode skips all requested commands and their
+prerequisites, including when several commands are requested together.
+
+Make handles `--help` itself, so `make release --help` shows Make's own help.
+Use `make help release` for Goldbook's release instructions.
+
+### Reset a local install
 
 Quit Goldbook, the sync CLI, and WoW. Stop a running development server with
 `make dev-down`. On macOS or Linux, run:
