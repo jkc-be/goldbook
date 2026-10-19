@@ -1,1 +1,0 @@
-- **Market** shows a rising price chart and **Inventory** a chest in the rail.
