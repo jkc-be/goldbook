@@ -8,6 +8,24 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.4.0 - 2026-10-19
+
+### Addon
+
+- The website keeps showing a character's bags after you quit the game.
+  Quitting used to upload them empty, because the game empties the bags
+  before the addon saves; only `/reload` kept them.
+- Looted gold and other small amounts from an hour that has ended now reach
+  the website when you log out. They used to wait for your next login. The
+  hour you log out in still waits, as it may yet add up more.
+
+### Desktop app
+
+- Settings no longer has an **Upload token** field. The app sets up its own
+  upload token for each WoW account, on Goldbook's server after **Sign in
+  with Battle.net**. A token entered by hand in an earlier version is
+  dropped.
+
 ## 0.3.0 - 2026-10-19
 
 ### Addon
