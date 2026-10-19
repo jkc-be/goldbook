@@ -264,26 +264,29 @@
         <main id="login-view" hidden>
           <section id="login" class="panel login" aria-labelledby="login-title">
             <h1 id="login-title">Log in</h1>
-            <form id="login-form">
-              <label>
-                ID
-                <input id="login-id" class="code" autocomplete="username" autocapitalize="characters" spellcheck="false" required />
-              </label>
-              <div class="secret">
-                <label>
-                  Key
-                  <input id="login-key" class="code" type="password" autocomplete="current-password" spellcheck="false" required />
-                </label>
-                <button id="show-key" class="button" type="button" aria-pressed="false" aria-controls="login-key">Show</button>
-              </div>
-              <button id="log-in" class="button primary" type="submit">Log in</button>
-              <p id="login-error" class="alert" role="alert"></p>
-              <p class="muted">Type /gb web in game to see your ID and key.</p>
-            </form>
             <div id="battlenet" class="battlenet" hidden>
-              <a class="button" href="api/auth/battlenet/web/start">Sign in with Battle.net</a>
+              <a class="button primary" href="api/auth/battlenet/web/start">Sign in with Battle.net</a>
               <p class="muted">Shows the characters of every computer whose Goldbook app you signed in with Battle.net.</p>
             </div>
+            <details id="key-login" class="key-login" open>
+              <summary hidden>Log in with an ID and key instead</summary>
+              <form id="login-form">
+                <label>
+                  ID
+                  <input id="login-id" class="code" autocomplete="username" autocapitalize="characters" spellcheck="false" required />
+                </label>
+                <div class="secret">
+                  <label>
+                    Key
+                    <input id="login-key" class="code" type="password" autocomplete="current-password" spellcheck="false" required />
+                  </label>
+                  <button id="show-key" class="button" type="button" aria-pressed="false" aria-controls="login-key">Show</button>
+                </div>
+                <button id="log-in" class="button primary" type="submit">Log in</button>
+                <p id="login-error" class="alert" role="alert"></p>
+                <p class="muted">Type /gb web in game to see your ID and key.</p>
+              </form>
+            </details>
           </section>
         </main>
 

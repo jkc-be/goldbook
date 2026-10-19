@@ -2634,8 +2634,12 @@ api("/api/realms").then(({ realms }) => {
   realmList = realms;
   drawLastScan();
 }, () => {});
-// A server without Battle.net, or one from before website sign-in, offers only the ID and key.
+// A server without Battle.net, or one from before website sign-in, offers only
+// the ID and key. With Battle.net they fold away under it.
 api("/api/auth/battlenet/status").then(({ web }) => {
-  $("battlenet").hidden = web !== true;
+  const battlenet = web === true;
+  $("battlenet").hidden = !battlenet;
+  $("key-login").querySelector("summary").hidden = !battlenet;
+  $("key-login").open = !battlenet;
 }, () => {});
 render();

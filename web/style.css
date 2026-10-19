@@ -1514,13 +1514,30 @@ form label {
   font-size: 12px;
 }
 
-/* Under the ID and key: the other way in, for players of the Goldbook app. */
+/* Battle.net comes first; the ID and key fold away under it. */
 .battlenet {
   display: grid;
   gap: 8px;
+  text-align: center;
+}
+
+.battlenet:not([hidden]) + .key-login {
   padding-top: 12px;
   border-top: 1px solid var(--line);
-  text-align: center;
+}
+
+.key-login summary {
+  color: var(--gold-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.key-login summary:hover {
+  text-decoration: underline;
+}
+
+.key-login[open] summary {
+  margin-bottom: 12px;
 }
 
 .code {
