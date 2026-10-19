@@ -131,18 +131,13 @@
           <section class="panel settings" aria-labelledby="server-title">
             <h2 id="server-title">Server</h2>
             <form id="advanced">
-              <label>
+              <label class="wide">
                 Server
                 <span class="secret">
                   <input id="api" spellcheck="false" autocomplete="url" />
                   <button type="button" id="default-api" class="button">Use the default server</button>
                 </span>
                 <span class="hint">Goldbook's own server. Change it only for a server you run yourself.</span>
-              </label>
-              <label>
-                Upload token (optional)
-                <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Set up automatically when you save" />
-                <span class="hint">Only for a server you run with a fixed upload token. Players leave it empty.</span>
               </label>
               <div class="wide">
                 <button type="submit" class="button primary">Save</button>

@@ -12,7 +12,7 @@ window.goldbook = {
   onUpdates: (listener) => window.__TAURI__.event.listen("updates", ({ payload }) => listener(payload)),
   getState: () => invoke("get_state"),
   chooseFolder: () => invoke("choose_folder"),
-  save: (input, tokenEdited) => invoke("save", { input, tokenEdited }),
+  save: (input) => invoke("save", { input }),
   syncNow: () => invoke("sync_now"),
   battlenetLogin: () => invoke("battlenet_login"),
   battlenetLogout: () => invoke("battlenet_logout"),
@@ -36,5 +36,4 @@ window.goldbook = {
     }
   },
   onStatus: (listener) => window.__TAURI__.event.listen("status", ({ payload }) => listener(payload)),
-  onUploadReady: (listener) => window.__TAURI__.event.listen("upload-ready", listener),
 };
