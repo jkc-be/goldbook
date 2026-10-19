@@ -1326,7 +1326,7 @@ eq(ns.UI.Theme(), "dark", "the window starts dark")
 SlashCmdList.GOLDBOOK("theme light")
 eq(lastPrint() .. " " .. GoldbookDB.settings.theme, "Goldbook The window is light. Change it with /gb theme light or /gb theme dark. light",
   "/gb theme light switches the window and keeps the choice")
-eq(("%.2f %s"):format(GoldbookWindow.version.textColor[1], GoldbookWindow.head.tags[1].label.text:sub(1, 10)), "0.31 |cff4e412d",
+eq(("%.2f %s"):format(GoldbookWindow.version.textColor[1], GoldbookWindow.head.tags[1].label.text:sub(1, 10)), "0.26 |cff43382d",
   "the frames already drawn are painted again, and the view redrawn, in the light palette")
 SlashCmdList.GOLDBOOK("theme sepia")
 eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. lastPrint(),
@@ -1345,7 +1345,7 @@ eq(("%s %.2f %s / %s"):format(GoldbookDB.settings.theme, GoldbookWindow.version.
   "dark 0.67 false / Light window", "the theme button draws the window dark, the options follow, and its tooltip offers light again")
 options.checks.light.checked = true
 options.checks.light.scripts.OnClick(options.checks.light)
-eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.31", "the options switch to parchment")
+eq(("%s %.2f"):format(GoldbookDB.settings.theme, GoldbookWindow.version.textColor[1]), "light 0.26", "the options switch to parchment")
 SlashCmdList.GOLDBOOK("theme dark")
 eq(tostring(options.checks.light.checked), "false", "/gb theme dark unticks the options' light box")
 UIParent.width, UIParent.height = 1280, 768

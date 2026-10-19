@@ -56,14 +56,14 @@ local BACKDROP = { bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 }
 -- that transfer.
 local PALETTES = {
   light = {
-    bg = "f0e4c4", rail = "e2cc96", panel = "fcf7e8", line = "b19c70", edge = "a08a5c", field = "fffbf0",
-    text = "211a10", muted = "4e412d", railText = "3a2e1c", gold = "8a5a06", goldhi = "684202", brand = "80520a",
-    on = "e2cd92", gain = "0f5214", loss = "8e1a10", warn = "803100", info = "003ea1",
-    titleTop = "e4cf98", titleBottom = "d2b574",
-    buttonTop = "eed59a", buttonBottom = "d8b464", buttonEdge = "8a6a24", buttonText = "2a1e04",
-    hover = 0.14, area = 0.65, bar = 1, second = "464650",
-    coins = { gold = "674800", silver = "464650", copper = "843114" },
-    quality = { [0] = "4d4d4d", "211a10", "0e5208", "003ea1", "671da1", "803100", "57420c", "004a63" },
+    bg = "b0aaa0", rail = "aaa397", panel = "b8b4ac", line = "9b9281", edge = "877a64", field = "bcbab6",
+    text = "170f09", muted = "43382d", railText = "1f160e", gold = "673f00", goldhi = "4d2c00", brand = "5d3800",
+    on = "a69c87", gain = "0d4912", loss = "7a160e", warn = "6c2900", info = "003891",
+    titleTop = "aaa397", titleBottom = "a7a092",
+    buttonTop = "b8b4ac", buttonBottom = "b1aa9e", buttonEdge = "7f643a", buttonText = "170f09",
+    hover = 0.1, area = 0.65, bar = 1, second = "464650",
+    coins = { gold = "533a00", silver = "464650", copper = "6c2810" },
+    quality = { [0] = "3e3e3e", "170f09", "0e5208", "003891", "5a198c", "6c2900", "57420c", "004a63" },
   },
   dark = {
     bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
