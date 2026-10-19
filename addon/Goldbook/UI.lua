@@ -68,12 +68,12 @@ local PALETTES = {
   dark = {
     bg = "120f0b", rail = "191510", panel = "1d1914", line = "3a3123", edge = "54472f", field = "0d0b08",
     text = "f2ebdd", muted = "ab9f89", railText = "d8cdb6", gold = "e9b949", goldhi = "ffe08a", brand = "ecb94a",
-    on = "3a2d14", gain = "5fd35a", loss = "ff6d5a", warn = "ff8000", info = "3d9bff",
+    on = "3a2d14", gain = "5fd35a", loss = "ff8c7d", warn = "ff9121", info = "4da3ff",
     titleTop = "2c2418", titleBottom = "221c13",
     buttonTop = "3a2d14", buttonBottom = "261d0d", buttonEdge = "8a6a24", buttonText = "ffe08a",
     hover = 0.08, area = 0.42, bar = 0.6, second = "c7c7cf",
     coins = { gold = "ffd34d", silver = "c7c7cf", copper = "eda55f" },
-    quality = { [0] = "a3a3a3", "f3eee4", "1eff00", "3d9bff", "c27df8", "ff8000", "e6cc80", "00ccff" },
+    quality = { [0] = "a3a3a3", "f3eee4", "1eff00", "4da3ff", "c584f8", "ff9121", "e6cc80", "00ccff" },
   },
 }
 UI.Palettes = PALETTES
@@ -1185,20 +1185,39 @@ local function showSegments(labels, on, onClick)
 end
 
 local function placeChips(definition)
+  -- The gap from a chip's label to the one before it, and the narrowest
+  -- the search box gets to leave room for the chips.
+  local CHIP_GAP, SEARCH_MIN = 17, 120
+  -- How far a chip reaches past the one before it: the gap, its label and
+  -- caret, and its padding of 9.
+  local function chipWidth(chip)
+    local width = CHIP_GAP + (chip.label:GetStringWidth() or 0) + 9
+    if chip.caret then
+      width = width + 5 + (chip.caret:GetStringWidth() or 0)
+    end
+    return width
+  end
   local toolbar, previous = window.filters, window.search
   for _, chip in pairs(toolbar.controls) do
     chip:SetShown(false)
   end
+  local used = 0
   for _, name in ipairs(definition.chips or {}) do
     local chip = toolbar.controls[name]
     chip:SetShown(true)
-    chip.label:SetPoint("LEFT", previous, "RIGHT", 17, 0)
+    chip.label:SetPoint("LEFT", previous, "RIGHT", CHIP_GAP, 0)
+    used = used + chipWidth(chip)
     previous = chip
   end
   local clear = toolbar.clear
   -- Segments on the toolbar take its room.
   clear:SetShown(filtered() and not definition.segmentsOnToolbar)
-  clear.label:SetPoint("LEFT", previous, "RIGHT", 17, 0)
+  clear.label:SetPoint("LEFT", previous, "RIGHT", CHIP_GAP, 0)
+  if clear:IsShown() then
+    used = used + chipWidth(clear)
+  end
+  -- The search box gives up width so that the last chip ends inside the page.
+  window.search:SetSize(math.max(SEARCH_MIN, math.min(SEARCH_WIDTH, PAGE_WIDTH - used)), TOOLBAR_HEIGHT)
 end
 
 local function chipLabels()

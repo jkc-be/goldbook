@@ -140,7 +140,7 @@ local drawn = GoldbookWindow.rows
 eq(drawn[1].icon.texture .. " " .. drawn[2].icon.texture .. " " .. drawn[8].icon.texture,
   "Interface\\Icons\\INV_Misc_Coin_01 142808 Interface\\Icons\\INV_Letter_15", "a mail of gold shows a coin, one of items its first item, a letter its envelope")
 eq(drawn[1].cells[4].text:sub(1, 10) .. " " .. drawn[7].cells[4].text:sub(1, 10) .. " " .. drawn[5].cells[3].text:sub(1, 10) .. " "
-  .. drawn[4].cells[3].text, "|cff5fd35a |cffff6d5a |cffff8000 27d", "money is green, COD red, and 3 days or less in the warning colour")
+  .. drawn[4].cells[3].text, "|cff5fd35a |cffff8c7d |cffff9121 27d", "money is green, COD red, and 3 days or less in the warning colour")
 eq(drawn[2].tag.label.textColor[3] > 0.9 and drawn[4].tag.label.textColor[1] == 1, true, "Bought is tagged blue and Expired red")
 eq(head(), "Mail | 8 mails · 7 items | 28g 11s 00c to collect", "the title counts mails and items and says what gold waits")
 eq(segments(), "[All 8] Sold 1 Bought 1 Cancelled 1 Expired 1 Other 4", "each kind of mail is a segment with its count")
