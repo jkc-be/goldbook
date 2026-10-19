@@ -494,6 +494,8 @@ frame:SetScript("OnEvent", function(_, event, first, second)
     frame:UnregisterEvent("BAG_UPDATE")
     frame:UnregisterEvent("PLAYERBANKSLOTS_CHANGED")
   elseif event == "PLAYER_LOGOUT" then
+    -- Otherwise an ended hour of added-up gold waits for the next login to sync.
+    Trades.Close(ns.db, time())
     saveCharacter()
   elseif event == "GET_ITEM_INFO_RECEIVED" and awaiting[first] then
     local keys = awaiting[first]
