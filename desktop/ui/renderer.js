@@ -327,7 +327,11 @@ function showUpdates(status) {
   field("update-alert").hidden = update.phase !== "ready" && update.phase !== "failed";
   field("update-alert").textContent = update.phase === "ready" ? "Update ready" : "Update needs attention";
 }
-field("update-alert").onclick = () => document.querySelector('[data-view="settings"]').click();
+// Install and restart is on the General tab, whichever tab Settings last showed.
+field("update-alert").onclick = () => {
+  field("settings-tabs").querySelector('[data-tab="general"]').click();
+  document.querySelector('[data-view="settings"]').click();
+};
 field("check-updates").onclick = async () => {
   field("check-updates").disabled = true;
   try { await window.goldbook.checkUpdates(); }
