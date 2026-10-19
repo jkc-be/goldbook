@@ -8,6 +8,88 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.3.0 - 2026-10-19
+
+### Addon
+
+- In the dark theme, losses, warnings and rare, epic and legendary names are
+  a little lighter, so they stay readable on a selected row.
+- The light theme (`/gb theme light`) draws the window on a soft, modern
+  parchment with dark brown ink and a muted amber accent, in place of the
+  white and lemon yellow it showed in game.
+- The Prices title says how many items have been scanned on the realm, as
+  the website now does.
+- The quality filter offers Poor to Epic only. Legendaries are bound and
+  can't be listed, and Classic has no artifacts or heirlooms.
+- **Market** shows a rising price chart and **Inventory** a chest in the rail.
+- With a filter chosen on Ledger › By item, **Clear filters** no longer runs
+  past the window's edge; the search box narrows to make room.
+
+### Desktop app
+
+- After **Sign in with Battle.net**, the app sends each account once more,
+  even when nothing changed in game, so the website's **Sign in with
+  Battle.net** shows it right away.
+- In the dark theme, losses, warnings and rare, epic and legendary names are
+  a little lighter, so they stay readable on a selected row.
+- The light theme is a soft, modern parchment with dark brown ink and a muted
+  amber accent, in place of white and lemon yellow, and matches the addon.
+- **Market** shows a rising price chart and **Inventory** a chest in the rail.
+- **Settings** replaces **Sync** in the rail, with the settings always open,
+  and **Log in** at the bottom of the rail signs in with Battle.net. Signed
+  in, Inventory, Ledger and **Open website** show your Battle.net player's
+  characters without asking for a game account, and **Log out** ends it.
+- **Settings** has a **General** and an **Advanced** tab. The server and the
+  optional upload token move to **Advanced**, with **Use the default server**.
+  A sync icon beside the theme switch at the foot of the rail syncs from any
+  view, as **Sync now** in Auction scans does, and Auction scans and Updates
+  sit side by side at one height.
+
+### Website
+
+- Sign in on the website with **Sign in with Battle.net**, below the ID and
+  key. It shows the characters and trades of every computer whose Goldbook
+  app you signed in with Battle.net, and of the IDs linked with them, without
+  a key or **Link another computer**. The ID and key login works as before.
+- Character names on Gold are in the normal text colour, with a bar in the
+  class's game colour before each, so every class reads clearly in both
+  themes, also on a hovered or selected row.
+- Item names in Inventory, Ledger's Accounting entries and By item, and
+  Gold's best sale open the item's prices in a pane beside the page, on the
+  realm it was seen on, as the addon does. **×** or Esc closes it. The app's
+  views do the same. Item names in Inventory and Accounting have their
+  rarity colour back.
+- The light theme is a soft, modern parchment with dark brown ink and a muted
+  amber accent, in place of white and lemon yellow, and matches the addon.
+- On a server with Battle.net sign-in, the login puts **Sign in with
+  Battle.net** first and folds the ID and key away under **Log in with an ID
+  and key instead**.
+- Prices lists every item scanned on the realm, each at its newest price,
+  as the addon does, instead of only the items in the newest scan. The
+  title counts them all, and **Seen** shows when each item was last scanned.
+- The quality filter offers Poor to Epic only. Legendaries are bound and
+  can't be listed, and Classic has no artifacts or heirlooms.
+- **Market** shows a rising price chart and **Inventory** a chest in the rail.
+- Drag the border between a list and an item's prices to make either wider,
+  in Market's Prices and in the item pane beside other views. The arrow keys
+  move a focused border too, and a double click restores the default width.
+  The browser keeps the width you chose.
+
+### Server
+
+- **Sign in with Battle.net** in the app gets past the page where you enter
+  the app's code. That page stopped with "sign-in confirmation must come
+  from this Goldbook server" in every browser.
+- The pages of the app's **Sign in with Battle.net** wear the website's look
+  and theme: a large field for the app's code, which may be typed in
+  lowercase, and a clear page with the next step when sign-in fails.
+- `/api/prices` lists the newest price of every item scanned on a realm and
+  faction, with each item's scan time, and counts them all. An upgrade fills
+  this from the scans already stored.
+- The server no longer risks hanging under parallel requests: it bundles
+  SQLite 3.53.2, which includes the fix for a deadlock in 3.51.1 between a
+  connection closing and others opening.
+
 ## 0.2.5 - 2026-10-18
 
 ### Addon
