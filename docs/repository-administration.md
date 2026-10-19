@@ -211,7 +211,12 @@ and `WOWINTERFACE_API_TOKEN` only in its `wowinterface` environment. Both
 environments permit the `main` branch, require approval by `jkc-be`, and
 disable administrator bypass. The repository variable
 `WOWINTERFACE_PROJECT_ID` enables WoWInterface publishing after the first
-entry is created through its website. There are no repository-level secrets. The
+entry is created through its website. Wago Addons takes releases through a
+webhook on `release` events to `https://addons.wago.io/api/github/webhook`.
+The workflow's own Wago uploads are off until the repository variable
+`WAGO_UPLOAD` is `true`; then `WAGO_API_TOKEN` lives only in a `wago`
+environment with the same rules. Turn them on only after deleting the webhook,
+or each release reaches Wago twice. There are no repository-level secrets. The
 release workflow accepts only runs initiated and rerun by `jkc-be`; the
 existing mirror key's pushes are attributed to that account. Tests and GitHub
 packaging run before each publishing job can receive its token. WoWInterface

@@ -201,9 +201,17 @@ python3 package.py dist
 ```
 
 The packaging command checks that the TOC's files are present and produces
-`dist/Goldbook-<version>.zip`. The release workflow tests and packages each
-mirror update. Existing release assets are immutable; change the version in
-`Goldbook.toc` upstream before publishing different addon code.
+`dist/Goldbook-<version>.zip` and `dist/release.json`. The release workflow
+tests and packages each mirror update. Existing release assets are immutable;
+change the version in `Goldbook.toc` upstream before publishing different addon
+code.
+
+`release.json` uses the format of the
+[BigWigs packager](https://github.com/BigWigsMods/packager). It names the ZIP
+and the game flavor of each interface in `Goldbook.toc`, such as `forever` for
+16001. WowUp reads it to pick the right download when it installs or updates
+the addon from GitHub releases. The release workflow attaches it to every
+release that lacks it, and fails if a release already has a different one.
 
 ## Publish to CurseForge
 
@@ -267,6 +275,40 @@ project ID, version and ZIP's SHA-256. A matching receipt skips repeat uploads
 independently of CurseForge. Acceptance can still require moderator review.
 If the upload or receipt step fails, inspect the WoWInterface entry before
 retrying. A lost response can leave the file submitted without a receipt.
+
+## Publish to Wago
+
+[Goldbook on Wago Addons](https://addons.wago.io/addons/goldbook), project
+`aN0adQ6j`, the `X-Wago-ID` in `Goldbook.toc`, gets each release through a
+webhook. goldbook-addon sends its `release` events to
+`https://addons.wago.io/api/github/webhook`, and Wago takes the release from
+GitHub by itself. The webhook secret is set on the Wago project's GitHub
+settings and on the webhook, nowhere else.
+
+The release workflow can upload to Wago instead, through its `wago` job. Keep
+it off while the webhook is active, or each release reaches Wago twice. To
+switch from the webhook to the job, delete the webhook first.
+
+Wago Addons uploads are off until the repository variable `WAGO_UPLOAD` is
+`true`. Until then the `wago` job is skipped and changes nothing. When it is
+on, approve the `wago` job to upload the same tested ZIP to Wago. The
+supported patch is the Forever patch Wago lists for the TOC interface, or the
+newest one before it. Versions containing `alpha` or `beta` use that stability.
+
+To switch it on, once:
+
+1. Create a Wago Addons API key for the project.
+2. In goldbook-addon, create the `wago` environment. Allow only the `main`
+   branch, require approval by `jkc-be`, and disallow administrator bypass.
+3. Store the key there as the `WAGO_API_TOKEN` secret, not as a repository
+   secret.
+4. Set the repository variable `WAGO_UPLOAD` to `true`.
+
+The next mirror update uploads its release. The uploader has the same
+safeguards as the CurseForge one. A successful upload adds `wago.json` to the
+GitHub release, with the project ID, version and the ZIP's SHA-256 hash, and
+later runs skip a version already recorded. If an upload fails without a
+receipt, check the project's versions on Wago before retrying.
 
 ## Test
 

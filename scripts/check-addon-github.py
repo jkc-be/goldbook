@@ -41,8 +41,11 @@ def main():
     }
     assert api('actions/permissions/fork-pr-contributor-approval')['approval_policy'] == 'all_external_contributors'
     assert api('actions/secrets')['total_count'] == 0, 'Move repository secrets into protected environments'
-    for name, secret_name in [('curseforge', 'CURSEFORGE_API_TOKEN'),
-                              ('wowinterface', 'WOWINTERFACE_API_TOKEN')]:
+    variables = {variable['name']: variable['value'] for variable in api('actions/variables')['variables']}
+    uploads = {'curseforge': 'CURSEFORGE_API_TOKEN', 'wowinterface': 'WOWINTERFACE_API_TOKEN'}
+    if variables.get('WAGO_UPLOAD') == 'true':
+        uploads['wago'] = 'WAGO_API_TOKEN'
+    for name, token in uploads.items():
         environment = api(f'environments/{name}')
         assert environment['can_admins_bypass'] is False
         reviewers = next(rule for rule in environment['protection_rules'] if rule['type'] == 'required_reviewers')
@@ -51,13 +54,13 @@ def main():
         policies = api(f'environments/{name}/deployment-branch-policies')['branch_policies']
         assert [(policy['name'], policy['type']) for policy in policies] == [('main', 'branch')]
         secrets = api(f'environments/{name}/secrets')['secrets']
-        assert [secret['name'] for secret in secrets] == [secret_name]
+        assert [secret['name'] for secret in secrets] == [token], f'The {name} environment must hold only {token}'
     repo = api('')
     assert repo['visibility'] == 'public' and repo['allow_auto_merge'] is False
     for setting in ('secret_scanning', 'secret_scanning_push_protection'):
         assert repo['security_and_analysis'][setting]['status'] == 'enabled'
     print('Verified: sole owner, one mirror key, protected main history, read-only CI defaults,')
-    print('owner-approved main-only publishing secrets, no repository secrets, and secret scanning.')
+    print(f"owner-approved main-only secrets for {', '.join(uploads)}, no repository secrets, and secret scanning.")
 
 
 if __name__ == '__main__':
