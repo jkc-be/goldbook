@@ -51,6 +51,14 @@ end
 assert(table.concat(labels, ", ") == "All professions, Alchemy, Blacksmithing, Cooking, Enchanting, Engineering, "
   .. "First Aid, Herbalism, Leatherworking, Mining, Poisons, Skinning, Tailoring", "the profession menu offers the gathering professions")
 window.filters.controls.profession.menu:Hide()
+window.filters.controls.quality.scripts.OnClick()
+labels = {}
+for _, option in ipairs(window.filters.controls.quality.menu.options) do
+  if option.shown then labels[#labels + 1] = option.label.text end
+end
+assert(table.concat(labels, ", ") == "All qualities, Poor, Common, Uncommon, Rare, Epic",
+  "the quality menu offers only what the auction house lists")
+window.filters.controls.quality.menu:Hide()
 choose("profession", 8)
 assert(shown() == "2447", "choosing herbalism shows gathered herbs")
 choose("profession", 12)
