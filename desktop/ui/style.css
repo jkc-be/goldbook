@@ -268,10 +268,6 @@ input:disabled {
   box-shadow: inset -1px 0 0 var(--edge);
 }
 
-.rail .titlebar {
-  box-shadow: inset -1px 0 0 var(--edge);
-}
-
 .views {
   display: flex;
   flex-direction: column;
@@ -337,6 +333,25 @@ input:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* Sync now beside the theme switch, in reach over every view. */
+.rail-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+#sync path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .rail-version strong {
@@ -438,6 +453,47 @@ main {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
+}
+
+/* Settings' tabs, under its title as the website's are. */
+.tabs {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  margin-bottom: -1px;
+  padding: 4px 2px 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-soft);
+  font: 15px/1.2 var(--serif);
+  cursor: pointer;
+}
+
+.tabs button:hover,
+.tabs button[aria-current="page"] {
+  color: var(--gold-ink);
+}
+
+.tabs button[aria-current="page"] {
+  border-bottom-color: var(--gold);
+}
+
+/* Auction scans and Updates share a row at one height, their buttons along its foot. */
+#settings-page {
+  align-items: stretch;
+}
+
+#settings-page > .panel:not(.settings) {
+  display: flex;
+  flex-direction: column;
+}
+
+#settings-page > .panel:not(.settings) > .actions {
+  margin-top: auto;
 }
 
 /* A panel: the panel colour inside a line, under a heading across its top. */
@@ -563,6 +619,11 @@ form label {
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
+}
+
+form label .hint {
+  font-size: 12px;
+  text-transform: none;
 }
 
 form label :is(input, select, button) {

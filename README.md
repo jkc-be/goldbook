@@ -212,14 +212,15 @@ Battle.net sign-in, or else with the login the game saved. **Settings** holds
 the status and settings, and **Log in** at the bottom of the rail signs in
 with Battle.net.
 
-Open **Settings**, confirm the game folder, set the server to
-`http://localhost:8787`, and enter `dev-token` as the upload token for this
-local server. Click **Save** to install the addon and start uploading.
+Open **Settings** and confirm the game folder. Under **Advanced**, set the
+server to `http://localhost:8787` and enter `dev-token` as the upload token for
+this local server. Click **Save** to install the addon and start uploading.
 **Sync automatically** is on by default. It uploads after each game file write
 and checks again every 15 minutes, which you can change. With it off, nothing
 uploads until you click **Sync now**.
-The default server address is <https://app.jkc-be.com/goldbook>. For automatic
-setup, leave **Upload token** empty and click **Save**. The server must have
+The default server address is <https://app.jkc-be.com/goldbook>; **Use the
+default server** under **Advanced** puts it back. For automatic setup, leave
+**Upload token** empty and click **Save**. The server must have
 `SELF_REGISTRATION=true` enabled. The app saves a separate token for each
 WoW account and reuses it on later starts. If setup fails while offline,
 it retries every minute; **Sync now** retries immediately.
@@ -227,8 +228,10 @@ Leave Goldbook running. Closing the window leaves it in the menu
 bar on macOS, or the tray on Windows and Linux. Quit from that menu, or from
 the Goldbook menu.
 
-Change the game folder, server, or upload token from **Settings** in the
-window. **Sync now** checks for new scans immediately. **Open website** signs
+Change the game folder from **Settings** in the window, and the server or
+upload token under its **Advanced** tab. **Sync now** checks for new scans
+immediately; the sync icon beside the theme switch at the foot of the rail
+does the same from any view. **Open website** signs
 you in to the website's Gold as your Battle.net player when the app is signed
 in. Otherwise it uses the ID and key saved by the addon: after your first game
 login, type `/reload` once so they are available, and if several accounts are

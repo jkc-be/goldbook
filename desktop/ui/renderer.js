@@ -19,10 +19,15 @@ const PAGES = {
   login: ["Log in", "Sign in once to see your characters, inventory and ledger, and to set up uploads."],
 };
 
+// Settings opens on the tab it last showed.
+let settingsTab = "general";
+
 function showPage(name, current) {
   field("page-title").textContent = PAGES[name][0];
   field("page-sub").textContent = PAGES[name][1];
-  field("settings-page").hidden = name !== "settings";
+  field("settings-tabs").hidden = name !== "settings";
+  field("settings-page").hidden = name !== "settings" || settingsTab !== "general";
+  field("advanced-page").hidden = name !== "settings" || settingsTab !== "advanced";
   field("login-page").hidden = name !== "login";
   for (const other of document.querySelectorAll(".views button, #log-in")) {
     if (other === current) {
@@ -32,6 +37,26 @@ function showPage(name, current) {
     }
   }
 }
+
+for (const tab of field("settings-tabs").querySelectorAll("button")) {
+  tab.addEventListener("click", () => {
+    settingsTab = tab.dataset.tab;
+    for (const other of field("settings-tabs").querySelectorAll("button")) {
+      if (other === tab) {
+        other.setAttribute("aria-current", "page");
+      } else {
+        other.removeAttribute("aria-current");
+      }
+    }
+    showPage("settings", document.querySelector('[data-view="settings"]'));
+  });
+}
+
+// Filled in from the app, which owns the default.
+let defaultApi = "";
+field("default-api").addEventListener("click", () => {
+  field("api").value = defaultApi;
+});
 
 field("log-in").addEventListener("click", async () => {
   const result = await window.goldbook.showView("login").catch(() => ({ ok: false, message: "Goldbook could not open that view." }));
@@ -174,9 +199,10 @@ field("choose").addEventListener("click", async () => {
   }
 });
 
-field("settings").addEventListener("submit", async (event) => {
+// Both tabs save every setting.
+async function save(event) {
   event.preventDefault();
-  const button = field("save");
+  const button = event.submitter;
   button.disabled = true;
   try {
     const result = await window.goldbook.save({
@@ -199,18 +225,28 @@ field("settings").addEventListener("submit", async (event) => {
   } finally {
     button.disabled = false;
   }
-});
+}
+field("settings").addEventListener("submit", save);
+field("advanced").addEventListener("submit", save);
 
-field("sync").addEventListener("click", async () => {
-  field("sync").disabled = true;
-  try {
-    await window.goldbook.syncNow();
-  } catch (message) {
-    notify(String(message));
-  } finally {
-    field("sync").disabled = false;
-  }
-});
+// Sync now in Auction scans and the rail's sync icon, which run one sync.
+const syncButtons = document.querySelectorAll("[data-sync]");
+for (const button of syncButtons) {
+  button.addEventListener("click", async () => {
+    for (const other of syncButtons) {
+      other.disabled = true;
+    }
+    try {
+      await window.goldbook.syncNow();
+    } catch (message) {
+      notify(String(message));
+    } finally {
+      for (const other of syncButtons) {
+        other.disabled = false;
+      }
+    }
+  });
+}
 
 field("site").addEventListener("click", async () => {
   field("site").disabled = true;
@@ -264,6 +300,7 @@ async function fill() {
   field("minutes").disabled = !initial.settings.autoSync;
   showStatus(initial.status);
   drawSession(initial.settings.battlenetSession);
+  defaultApi = initial.defaultApi;
 }
 
 fill().catch(() => {
@@ -290,7 +327,11 @@ function showUpdates(status) {
   field("update-alert").hidden = update.phase !== "ready" && update.phase !== "failed";
   field("update-alert").textContent = update.phase === "ready" ? "Update ready" : "Update needs attention";
 }
-field("update-alert").onclick = () => document.querySelector('[data-view="settings"]').click();
+// Install and restart is on the General tab, whichever tab Settings last showed.
+field("update-alert").onclick = () => {
+  field("settings-tabs").querySelector('[data-tab="general"]').click();
+  document.querySelector('[data-view="settings"]').click();
+};
 field("check-updates").onclick = async () => {
   field("check-updates").disabled = true;
   try { await window.goldbook.checkUpdates(); }

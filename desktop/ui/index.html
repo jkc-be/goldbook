@@ -24,9 +24,14 @@
         <button type="button" id="log-out" class="button" hidden>Log out</button>
         <p class="rail-version">
           <span>Client <strong id="rail-version"></strong></span>
-          <button type="button" id="theme" class="icon-button">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
-          </button>
+          <span class="rail-buttons">
+            <button type="button" id="theme" class="icon-button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
+            </button>
+            <button type="button" id="sync" class="icon-button" title="Sync now" aria-label="Sync now" data-sync>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7a5.5 5.5 0 0 1 10-2.5M13.5 9a5.5 5.5 0 0 1-10 2.5M12.5 1.5v3h-3M3.5 14.5v-3h3" /></svg>
+            </button>
+          </span>
         </p>
         <button type="button" id="update-alert" class="button" hidden>Update ready</button>
       </div>
@@ -52,13 +57,17 @@
             </div>
           </section>
         </main>
+        <nav id="settings-tabs" class="tabs" aria-label="Settings">
+          <button type="button" data-tab="general" aria-current="page">General</button>
+          <button type="button" data-tab="advanced">Advanced</button>
+        </nav>
         <main id="settings-page">
           <section class="panel" aria-labelledby="sync-title">
             <h2 id="sync-title">Auction scans</h2>
             <p id="live" class="status" role="status"></p>
             <p class="muted">Uploads price scans and order books after you type /reload or log out.</p>
             <div class="actions">
-              <button type="button" id="sync" class="button primary">Sync now</button>
+              <button type="button" class="button primary" data-sync>Sync now</button>
               <button type="button" id="site" class="button">Open website</button>
             </div>
           </section>
@@ -98,14 +107,6 @@
                   <button type="button" id="choose" class="button">Choose</button>
                 </span>
               </label>
-              <label>
-                Server
-                <input id="api" spellcheck="false" autocomplete="url" />
-              </label>
-              <label>
-                Upload token (optional)
-                <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Set up automatically when you save" />
-              </label>
               <div class="schedule">
                 <label class="check">
                   <input id="auto" type="checkbox" />
@@ -121,7 +122,30 @@
                 Open Goldbook when you log in
               </label>
               <div class="wide">
-                <button type="submit" id="save" class="button primary">Save</button>
+                <button type="submit" class="button primary">Save</button>
+              </div>
+            </form>
+          </section>
+        </main>
+        <main id="advanced-page" hidden>
+          <section class="panel settings" aria-labelledby="server-title">
+            <h2 id="server-title">Server</h2>
+            <form id="advanced">
+              <label>
+                Server
+                <span class="secret">
+                  <input id="api" spellcheck="false" autocomplete="url" />
+                  <button type="button" id="default-api" class="button">Use the default server</button>
+                </span>
+                <span class="hint">Goldbook's own server. Change it only for a server you run yourself.</span>
+              </label>
+              <label>
+                Upload token (optional)
+                <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Set up automatically when you save" />
+                <span class="hint">Only for a server you run with a fixed upload token. Players leave it empty.</span>
+              </label>
+              <div class="wide">
+                <button type="submit" class="button primary">Save</button>
               </div>
             </form>
           </section>
