@@ -43,6 +43,9 @@ def jobs_for(path):
     # The sync crate embeds the addon. The server does not link that crate.
     if path.startswith(('addon/', 'crates/goldbook-sync/')):
         return {'desktop', 'test'}
+    # Desktop tests check embedding styles and colours against the website.
+    if path == 'web/style.css':
+        return set(JOBS)
     if (path.startswith('web/')
             or path.startswith('server/') and not path.startswith('server/migrations/')):
         return {'stack', 'test'}

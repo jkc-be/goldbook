@@ -33,6 +33,9 @@ class CiPathsTests(unittest.TestCase):
         self.assert_jobs(['server/Dockerfile', 'server/compose.yaml', 'web/app.js'], stack=True, test=True)
         self.assert_jobs(['.dockerignore'], stack=True)
 
+    def test_web_styles_run_desktop_embedding_and_colour_tests(self):
+        self.assert_jobs(['web/style.css'], desktop=True, stack=True, test=True)
+
     def test_migrations_and_shared_crates_run_every_job(self):
         for path in ('server/migrations/0001_init.sql', 'crates/goldbook-core/src/lib.rs',
                      'crates/goldbook-server/src/lib.rs', 'catalog/professions.json', 'Cargo.lock',
