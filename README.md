@@ -696,8 +696,9 @@ Linking a login that is already linked with others brings those along.
 Each computer keeps its own key, so **New key** on one logs out only the
 browsers that logged in with that computer's key.
 
-On a server with Battle.net sign-in, the login also offers **Sign in with
-Battle.net**. It needs no ID or key: it shows every ID that a Goldbook app
+On a server with Battle.net sign-in, the login offers **Sign in with
+Battle.net** first, and folds the ID and key away under **Log in with an ID
+and key instead**. It needs no ID or key: it shows every ID that a Goldbook app
 signed in with the same Battle.net account uploaded, and every ID linked with
 one of them. An ID counts once the app uploads it after signing in, so after
 signing in to the app, let it upload once before signing in on the web page.
