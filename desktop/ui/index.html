@@ -28,7 +28,7 @@
             <button type="button" id="theme" class="icon-button">
               <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
             </button>
-            <button type="button" id="sync" class="icon-button" title="Sync now" aria-label="Sync now">
+            <button type="button" id="sync" class="icon-button" title="Sync now" aria-label="Sync now" data-sync>
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7a5.5 5.5 0 0 1 10-2.5M13.5 9a5.5 5.5 0 0 1-10 2.5M12.5 1.5v3h-3M3.5 14.5v-3h3" /></svg>
             </button>
           </span>
@@ -67,6 +67,7 @@
             <p id="live" class="status" role="status"></p>
             <p class="muted">Uploads price scans and order books after you type /reload or log out.</p>
             <div class="actions">
+              <button type="button" class="button primary" data-sync>Sync now</button>
               <button type="button" id="site" class="button">Open website</button>
             </div>
           </section>

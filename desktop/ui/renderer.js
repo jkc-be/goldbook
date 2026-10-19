@@ -229,16 +229,24 @@ async function save(event) {
 field("settings").addEventListener("submit", save);
 field("advanced").addEventListener("submit", save);
 
-field("sync").addEventListener("click", async () => {
-  field("sync").disabled = true;
-  try {
-    await window.goldbook.syncNow();
-  } catch (message) {
-    notify(String(message));
-  } finally {
-    field("sync").disabled = false;
-  }
-});
+// Sync now in Auction scans and the rail's sync icon, which run one sync.
+const syncButtons = document.querySelectorAll("[data-sync]");
+for (const button of syncButtons) {
+  button.addEventListener("click", async () => {
+    for (const other of syncButtons) {
+      other.disabled = true;
+    }
+    try {
+      await window.goldbook.syncNow();
+    } catch (message) {
+      notify(String(message));
+    } finally {
+      for (const other of syncButtons) {
+        other.disabled = false;
+      }
+    }
+  });
+}
 
 field("site").addEventListener("click", async () => {
   field("site").disabled = true;

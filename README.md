@@ -229,9 +229,9 @@ bar on macOS, or the tray on Windows and Linux. Quit from that menu, or from
 the Goldbook menu.
 
 Change the game folder from **Settings** in the window, and the server or
-upload token under its **Advanced** tab. **Sync now**, the sync icon beside
-the theme switch at the foot of the rail, checks for new scans immediately,
-from any view. **Open website** signs
+upload token under its **Advanced** tab. **Sync now** checks for new scans
+immediately; the sync icon beside the theme switch at the foot of the rail
+does the same from any view. **Open website** signs
 you in to the website's Gold as your Battle.net player when the app is signed
 in. Otherwise it uses the ID and key saved by the addon: after your first game
 login, type `/reload` once so they are available, and if several accounts are
