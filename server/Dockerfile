@@ -1,9 +1,9 @@
-FROM rust:1.99.1-bookworm AS build
+FROM rust:1.99.1-trixie AS build
 WORKDIR /app
 COPY . .
 RUN cargo build --locked --release -p goldbook-server
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install --no-install-recommends -y ca-certificates curl \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 10001 goldbook \
