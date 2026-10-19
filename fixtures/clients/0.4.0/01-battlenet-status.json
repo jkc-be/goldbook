@@ -1,5 +1,5 @@
 {
-  "about": "Upload setup asks whether the server signs in with Battle.net. It must, since uploads need a Battle.net session.",
+  "about": "Upload setup asks whether the server signs in with Battle.net, which it then needs before registering.",
   "source": "desktop/src-tauri/src/battlenet.rs:33",
   "request": {
     "method": "GET",
