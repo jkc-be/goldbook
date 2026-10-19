@@ -207,10 +207,12 @@ npm run desktop
 
 The window's rail has the addon's hubs. **Market**, **Inventory** and
 **Ledger** show the website's Prices, Bags and Gold inside the app, with the
-website's tabs for the rest; Inventory and Ledger sign in with the login the
-game saved. **Sync** holds the status and settings.
+website's tabs for the rest. Inventory and Ledger sign in with the app's
+Battle.net sign-in, or else with the login the game saved. **Settings** holds
+the status and settings, and **Log in** at the bottom of the rail signs in
+with Battle.net.
 
-Open **Sync**, confirm the game folder, set the server to
+Open **Settings**, confirm the game folder, set the server to
 `http://localhost:8787`, and enter `dev-token` as the upload token for this
 local server. Click **Save** to install the addon and start uploading.
 **Sync automatically** is on by default. It uploads after each game file write
@@ -227,9 +229,10 @@ the Goldbook menu.
 
 Change the game folder, server, or upload token from **Settings** in the
 window. **Sync now** checks for new scans immediately. **Open website** signs
-you in to the website's Gold with the ID and key saved by the addon. After
-your first game login, type `/reload` once so they are available. If several
-accounts are saved, choose which one to open.
+you in to the website's Gold as your Battle.net player when the app is signed
+in. Otherwise it uses the ID and key saved by the addon: after your first game
+login, type `/reload` once so they are available, and if several accounts are
+saved, choose which one to open.
 
 After a sync pass whose uploads succeed, the app also downloads the server's
 prices and history for each realm your SavedVariables name, including other
@@ -976,11 +979,14 @@ restore new sign-ins. Existing Goldbook upload credentials remain independent.
 Copy the updated Compose configuration to the host before deploying through
 Actions. Deploy the server before publishing the client update.
 
-In the app, save the game folder and server, then click **Sign in with
-Battle.net** in Settings. Enter the eight-character code shown by Goldbook
+In the app, save the game folder and server, then click **Log in** at the
+bottom of the rail and **Sign in with Battle.net**. Enter the eight-character
+code shown by Goldbook
 in the browser page, and continue to Battle.net. Only enter a code from your
 own app. Return to Goldbook after signing in. **Cancel sign-in** stops waiting
-without changing existing credentials.
+without changing existing credentials. **Log out** in the rail ends the
+Battle.net session in the app and its website view; uploads keep the
+credentials they have.
 
 The app saves a server-scoped enrollment session for subsequent WoW account
 registrations. Enrollment sessions expire after 30 days; sign in again when
