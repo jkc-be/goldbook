@@ -21,7 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts/migration-baseline.json"
 KEY = "7KQ2M9PXABCDEFGHJKMN"
 NEW_KEY = "ABCDEFGHJKMNPQRSTVWX"
+# The original server's shared upload tokens; the current one takes only tokens registered with Battle.net.
 TOKEN = "dev-token"
+FRIEND_TOKEN = "friend-token"
 SECURITY = ("x-content-type-options", "referrer-policy", "content-security-policy")
 
 
@@ -40,6 +42,8 @@ class API:
     def __init__(self, port):
         self.port = port
         self.transcript = {}
+        self.token = TOKEN
+        self.friend_token = FRIEND_TOKEN
 
     def request(self, method, path, body=None, *, cookie=None, token=None, headers=None):
         data = body if isinstance(body, bytes) else None if body is None else json.dumps(body).encode()
@@ -83,6 +87,8 @@ def server(directory, old_repo, binary, settings=None):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     environment = local_environment(directory, port)
+    if old_repo:
+        environment["UPLOAD_TOKEN"] = f"{TOKEN},{FRIEND_TOKEN}"
     if settings:
         environment.update(settings(port))
     if old_repo:
@@ -116,6 +122,9 @@ make_server(os.environ['HOST'], int(os.environ['PORT']), create_app(os.environ['
                 time.sleep(.05)
             else:
                 raise RuntimeError("server did not start within 10 seconds")
+            if not old_repo:
+                api.token = register(api, environment["DATABASE"], "player")
+                api.friend_token = register(api, environment["DATABASE"], "friend")
             yield api
         finally:
             process.terminate()
@@ -130,11 +139,36 @@ def local_environment(directory, port):
     """Use only local data and test credentials, regardless of the caller's shell."""
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("GOLDBOOK_", "BNET_"))
-                   and key not in ("WEB_DIR", "TRUSTED_PROXY")}
+                   and key not in ("WEB_DIR", "TRUSTED_PROXY", "UPLOAD_TOKEN", "SELF_REGISTRATION")}
     environment.update(HOST="127.0.0.1", PORT=str(port),
                        DATABASE=str(directory / "goldbook.sqlite"),
-                       UPLOAD_TOKEN="dev-token,friend-token", SELF_REGISTRATION="false")
+                       BNET_CLIENT_ID="test-client", BNET_CLIENT_SECRET="test-secret",
+                       GOLDBOOK_PUBLIC_URL=f"http://127.0.0.1:{port}")
     return environment
+
+
+def sign_in(database, player):
+    """A Battle.net session for `player`, as the app holds after signing in.
+
+    Sign-in itself needs Battle.net, so the session is written straight into
+    the database; tests/oauth.rs covers sign-in against a fake provider."""
+    identity = hashlib.sha256(f"battlenet:{player}".encode()).hexdigest()
+    session = f"session-{player}"
+    with contextlib.closing(sqlite3.connect(database, timeout=30)) as db, db:
+        db.execute("INSERT OR IGNORE INTO battlenet_identities (identity_hash) VALUES (?)", (identity,))
+        db.execute("INSERT OR REPLACE INTO battlenet_sessions (token_hash, identity_hash, expires_at) VALUES (?, ?, ?)",
+                   (hashlib.sha256(session.encode()).hexdigest(), identity, int(time.time()) + 3600))
+    return session
+
+
+def register(api, database, player):
+    """An upload token for `player`, set up as the app does after Battle.net sign-in."""
+    session = sign_in(database, player)
+    fingerprint = hashlib.sha256(f"account:{player}".encode()).hexdigest()
+    answer = api.request("POST", "/api/installations", {"fingerprint": fingerprint, "fingerprintVersion": 1},
+                         token=session)[0]
+    assert answer["status"] == 200, f"registration for {player} failed: {answer}"
+    return answer["body"]["token"]
 
 
 def synchronize(api, directory, fixture, old_repo, binary, state_name="state.json"):
@@ -142,8 +176,8 @@ def synchronize(api, directory, fixture, old_repo, binary, state_name="state.jso
     url = f"http://127.0.0.1:{api.port}"
     if old_repo:
         expression = "import { syncFile } from './sync/sync.ts'; console.log(JSON.stringify(await syncFile({file:process.argv[1],api:process.argv[2],token:process.argv[3],statePath:process.argv[4],log:()=>{}})));"
-        return run(["node", "--input-type=module", "-e", expression, fixture, url, TOKEN, state], cwd=old_repo)
-    return run([binary, "--file", fixture, "--api", url, "--token", TOKEN, "--state", state, "--once"], cwd=ROOT)
+        return run(["node", "--input-type=module", "-e", expression, fixture, url, api.token, state], cwd=old_repo)
+    return run([binary, "--file", fixture, "--api", url, "--token", api.token, "--state", state, "--once"], cwd=ROOT)
 
 
 def exercise(api, directory, fixture, old_repo, sync_binary):
@@ -162,9 +196,9 @@ def exercise(api, directory, fixture, old_repo, sync_binary):
     scan = dict(realm="Parity", faction="Horde", region="EU", scannedAt=1760000000, mode="browse", scanner="Sultan", build="1.60.1", rows=[["2589", 110, 0, 42, 0]], items={"2589": ["Linen Cloth", 1]})
     check("wrong-upload-token", "POST", "/api/scans", scan, token="wrong")
     check("missing-upload-token", "POST", "/api/scans", scan)
-    check("malformed-json", "POST", "/api/scans", b"{not json", token=TOKEN)
-    check("invalid-price", "POST", "/api/scans", {**scan, "rows": [["2589", 0, 0, 1, 0]]}, token=TOKEN)
-    check("duplicate-row", "POST", "/api/scans", {**scan, "rows": scan["rows"] * 2}, token=TOKEN)
+    check("malformed-json", "POST", "/api/scans", b"{not json", token=api.token)
+    check("invalid-price", "POST", "/api/scans", {**scan, "rows": [["2589", 0, 0, 1, 0]]}, token=api.token)
+    check("duplicate-row", "POST", "/api/scans", {**scan, "rows": scan["rows"] * 2}, token=api.token)
     synchronize(api, directory, fixture, old_repo, sync_binary)
     synchronize(api, directory, fixture, old_repo, sync_binary)
     synchronize(api, directory, fixture, old_repo, sync_binary, "lost-state.json")
@@ -201,7 +235,7 @@ def exercise(api, directory, fixture, old_repo, sync_binary):
         ("full-scan", {**scan, "scannedAt": 1760086400, "mode": "replicate", "rows": [["2589", 100, 105, 100, 4], ["7070", 300, 320, 5, 2]], "items": {"7070": ["Elemental Water", 1]}}),
         ("quick-after-full", {**scan, "scannedAt": 1760172800, "rows": [["2589", 90, 0, 35, 0], ["7070", 290, 0, 4, 0]]}),
     ]:
-        check(label, "POST", "/api/scans", upload, token=TOKEN)
+        check(label, "POST", "/api/scans", upload, token=api.token)
     collision = directory / "Collision.lua"
     collision.write_text('GoldbookDB = { ["items"] = {}, ["scans"] = {'
         + ",".join('{ ["realm"] = "Collision", ["faction"] = "Horde", ["region"] = "EU", ["at"] = 1760000000, ["mode"] = "browse", ["by"] = "Sultan", ["build"] = "1.60.1", ["count"] = 1, ["data"] = "2589,%d,0,42,0" }' % price for price in (110, 120))
@@ -219,7 +253,7 @@ def exercise(api, directory, fixture, old_repo, sync_binary):
             price = math.floor((100 + item * 37) * (1 + .25 * math.sin(day / 4 + item)) + .5)
             rows.append([str(100000 + item), price, math.floor(price * 1.08 + .5) if full else 0, 1 + (item * 7 + day) % 400, 1 + item % 30 if full else 0])
             names[str(100000 + item)] = [f"Loadtest Item {item}", item % 5]
-        check(f"load-upload-{day}", "POST", "/api/scans", {**scan, "realm": "Loadtest", "scannedAt": 1757000000 + day * 86400, "mode": "replicate" if full else "browse", "rows": rows, "items": names}, token=TOKEN)
+        check(f"load-upload-{day}", "POST", "/api/scans", {**scan, "realm": "Loadtest", "scannedAt": 1757000000 + day * 86400, "mode": "replicate" if full else "browse", "rows": rows, "items": names}, token=api.token)
     check("load-pagination", "GET", "/api/prices?realm=Loadtest&faction=Horde&limit=200&offset=7900&sort=quantity")
     check("load-market-values", "GET", "/api/prices?realm=Loadtest&faction=Horde&limit=3&sort=market&order=desc")
     check("load-history", "GET", "/api/history?realm=Loadtest&faction=Horde&itemKey=104242")
@@ -256,15 +290,15 @@ def exercise(api, directory, fixture, old_repo, sync_binary):
     check("logged-out-account", "GET", "/api/account", cookie=cookie)
     character = dict(name="Owner", realm="Parity", faction=None, **{"class": None}, level=None, updatedAt=None, gold=[[1760000400, 100], [1759996800, 200], [1760000400, 300]], bags=None, bank=None)
     account = dict(id="E2E7TEST", keyHash=key_hash(KEY), characters=[character])
-    check("account-upload", "POST", "/api/account", account, token=TOKEN)
+    check("account-upload", "POST", "/api/account", account, token=api.token)
     _, headers = check("owner-login", "POST", "/api/login", {"id": account["id"], "key": KEY})
     owner_cookie = headers.get("set-cookie", "").split(";")[0]
     check("gold-latest-hour", "GET", "/api/account", cookie=owner_cookie)
     check("gold-hour-deduplication", "GET", "/api/character?name=Owner&realm=Parity", cookie=owner_cookie)
-    check("account-takeover", "POST", "/api/account", {**account, "keyHash": key_hash(NEW_KEY), "characters": []}, token="friend-token")
+    check("account-takeover", "POST", "/api/account", {**account, "keyHash": key_hash(NEW_KEY), "characters": []}, token=api.friend_token)
     check("owner-after-takeover", "GET", "/api/account", cookie=owner_cookie)
     rotated = {**account, "keyHash": key_hash(NEW_KEY), "previousKeyHash": key_hash(KEY)}
-    check("rotate-key", "POST", "/api/account", rotated, token=TOKEN)
+    check("rotate-key", "POST", "/api/account", rotated, token=api.token)
     check("rotation-revokes-session", "GET", "/api/account", cookie=owner_cookie)
     check("rotation-rejects-old-key", "POST", "/api/login", {"id": account["id"], "key": KEY})
     check("rotation-accepts-new-key", "POST", "/api/login", {"id": account["id"], "key": NEW_KEY})
@@ -298,7 +332,7 @@ def exercise_upgrade(directory, old_repo, server_binary):
     with server(directory, old_repo, server_binary) as api:
         api.check("upgrade-character", "GET", "/api/character?name=Legacy&realm=Legacy", cookie="goldbook_session=legacy-session")
         retry = dict(realm="Legacy", faction="Horde", region="EU", scannedAt=1760000000, mode="browse", scanner="Sültan", build="1.60.1", rows=[["2589", 110, 0, 42, 0], ["7070", 300, 0, 5, 0]], items={})
-        api.check("upgrade-scan-retry", "POST", "/api/scans", retry, token=TOKEN)
+        api.check("upgrade-scan-retry", "POST", "/api/scans", retry, token=api.token)
         api.check("upgrade-history", "GET", "/api/history?realm=Legacy&faction=Horde&itemKey=2589")
         api.check("upgrade-prices", "GET", "/api/prices?realm=Legacy&faction=Horde")
     with sqlite3.connect(database) as db:

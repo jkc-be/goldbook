@@ -4,7 +4,7 @@ use axum::{
     extract::ConnectInfo,
     http::{HeaderMap, Request},
 };
-use goldbook_server::{Config, db, router};
+use goldbook_server::{BattleNetConfig, Config, db, router};
 use serde_json::{Value, json};
 use std::{
     net::SocketAddr,
@@ -16,9 +16,14 @@ use tower::ServiceExt;
 struct Fixture {
     directory: PathBuf,
     app: Router,
+    // "Bearer <token>" of two players' installs, registered after Battle.net sign-in.
+    player: String,
+    friend: String,
+    // "Bearer <session>" of the first player's Battle.net sign-in.
+    session: String,
 }
 impl Fixture {
-    fn new() -> Self {
+    async fn new() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let directory = std::env::temp_dir().join(format!(
             "goldbook-server-test-{}-{}",
@@ -26,16 +31,75 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&directory).unwrap();
-        let app = router(Config::new(
-            directory.join("goldbook.sqlite"),
-            "dev-token,friend-token",
-        ))
-        .unwrap();
-        Self { directory, app }
+        let database = directory.join("goldbook.sqlite");
+        let app = router(battlenet(database.clone())).unwrap();
+        let player = register(&app, &database, "player").await;
+        let friend = register(&app, &database, "friend").await;
+        Self {
+            directory,
+            app,
+            player,
+            friend,
+            session: format!("Bearer {}", sign_in(&database, "player")),
+        }
     }
     fn database(&self) -> PathBuf {
         self.directory.join("goldbook.sqlite")
     }
+    fn auth(&self) -> [(&'static str, &str); 1] {
+        [("authorization", &self.player)]
+    }
+    fn friend_auth(&self) -> [(&'static str, &str); 1] {
+        [("authorization", &self.friend)]
+    }
+    fn session(&self) -> [(&'static str, &str); 1] {
+        [("authorization", &self.session)]
+    }
+}
+// A server that signs in with Battle.net. Sign-in never runs in these tests,
+// so the provider is never called; tests/oauth.rs covers it.
+fn battlenet(database: PathBuf) -> Config {
+    let mut config = Config::new(database);
+    config.battlenet = Some(BattleNetConfig::new(
+        "client".into(),
+        "test-secret".into(),
+        "https://gold.example/goldbook".into(),
+    ));
+    config
+}
+// The Battle.net session `player` holds after sign-in, written straight into the database.
+fn sign_in(database: &std::path::Path, player: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let identity = hex::encode(Sha256::digest(format!("battlenet:{player}")));
+    let session = format!("session-{player}");
+    let db = db::connect(database).unwrap();
+    db.execute(
+        "INSERT OR IGNORE INTO battlenet_identities (identity_hash) VALUES (?1)",
+        [&identity],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT OR REPLACE INTO battlenet_sessions (token_hash,identity_hash,expires_at) VALUES (?1,?2,unixepoch()+3600)",
+        [hex::encode(Sha256::digest(&session)), identity],
+    )
+    .unwrap();
+    session
+}
+// An upload token for `player`, as the app registers one after Battle.net sign-in.
+async fn register(app: &Router, database: &std::path::Path, player: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let session = sign_in(database, player);
+    let fingerprint = hex::encode(Sha256::digest(format!("account:{player}")));
+    let (status, _, body) = call(
+        app,
+        "POST",
+        "/api/installations",
+        json!({"fingerprint":fingerprint,"fingerprintVersion":1}),
+        &[("authorization", &format!("Bearer {session}"))],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    format!("Bearer {}", body["token"].as_str().unwrap())
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
@@ -100,35 +164,28 @@ fn scan() -> Value {
 fn account() -> Value {
     json!({"id":"K7Q2M9PX","keyHash":goldbook_core::key_hash("7KQ2M9PXABCDEFGHJKMN"),"characters":[{"name":"Sultan","realm":"Faramon","faction":"Horde","class":"MAGE","level":60,"updatedAt":1791970261_u64,"gold":[[1791932400_u64,1],[1791846000_u64,50],[1791932400_u64,2]],"bags":{"at":null,"rows":[]},"bank":null}]})
 }
-const AUTH: [(&str, &str); 1] = [("authorization", "Bearer dev-token")];
 #[tokio::test]
 async fn scans_preserve_identity_late_names_market_borrowing_and_queries() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let mut first = scan();
     first["items"] = json!({});
     assert_eq!(
-        call(&f.app, "POST", "/api/scans", first, &AUTH).await.2,
+        call(&f.app, "POST", "/api/scans", first, &f.auth()).await.2,
         json!({"stored":true,"items":2})
     );
     let mut retry = scan();
     retry["rows"].as_array_mut().unwrap().reverse();
     assert_eq!(
-        call(&f.app, "POST", "/api/scans", retry, &AUTH).await.2,
+        call(&f.app, "POST", "/api/scans", retry, &f.auth()).await.2,
         json!({"stored":false,"items":2})
     );
     let mut quick = scan();
     quick["mode"] = json!("browse");
     quick["rows"] = json!([["2589", 100, 0, 10, 0]]);
     assert_eq!(
-        call(
-            &f.app,
-            "POST",
-            "/api/scans",
-            quick,
-            &[("authorization", "Bearer friend-token")]
-        )
-        .await
-        .0,
+        call(&f.app, "POST", "/api/scans", quick, &f.friend_auth())
+            .await
+            .0,
         200
     );
     let (_, _, prices) = call(
@@ -176,7 +233,7 @@ async fn scans_preserve_identity_late_names_market_borrowing_and_queries() {
 }
 #[tokio::test]
 async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let scans = [
         (
             "Faramon",
@@ -261,7 +318,10 @@ async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
     ];
     for (realm, faction, at, mode, rows, items) in scans {
         let scan = json!({"realm":realm,"faction":faction,"region":"EU","scannedAt":at,"mode":mode,"scanner":"Sultan","build":"1.60.1.70338","rows":rows,"items":items});
-        assert_eq!(call(&f.app, "POST", "/api/scans", scan, &AUTH).await.0, 200);
+        assert_eq!(
+            call(&f.app, "POST", "/api/scans", scan, &f.auth()).await.0,
+            200
+        );
     }
     let (status, _, export) = call(
         &f.app,
@@ -370,7 +430,7 @@ async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
 // Faramon-Horde's scans on the three days before day 20371 and on that day,
 // one the day before the export's window, and one of the Alliance.
 async fn market() -> Fixture {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let names = json!({
         "2589": ["Linen Cloth", 1], "2592": ["Wool Cloth", 1], "2318": ["Light Leather", 1],
         "2319": ["Medium Leather", 1], "4306": ["Silk Cloth", 1], "2320": ["Coarse Thread", 1],
@@ -458,7 +518,10 @@ async fn market() -> Fixture {
     ];
     for (faction, at, mode, rows) in scans {
         let scan = json!({"realm":"Faramon","faction":faction,"region":"EU","scannedAt":at,"mode":mode,"scanner":"Sultan","build":"1.60.1.70338","rows":rows,"items":names});
-        assert_eq!(call(&f.app, "POST", "/api/scans", scan, &AUTH).await.0, 200);
+        assert_eq!(
+            call(&f.app, "POST", "/api/scans", scan, &f.auth()).await.0,
+            200
+        );
     }
     f
 }
@@ -574,9 +637,9 @@ async fn movers_compare_the_newest_scan_with_the_day_before() {
 }
 #[tokio::test]
 async fn account_ownership_rotation_and_sessions_remain_atomic() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     assert_eq!(
-        call(&f.app, "POST", "/api/account", account(), &AUTH)
+        call(&f.app, "POST", "/api/account", account(), &f.auth())
             .await
             .0,
         200
@@ -620,7 +683,7 @@ async fn account_ownership_rotation_and_sessions_remain_atomic() {
     let old = rotated["keyHash"].clone();
     rotated["keyHash"] = json!(goldbook_core::key_hash("ABCDEFGHJKMNPQRSTVWX"));
     assert_eq!(
-        call(&f.app, "POST", "/api/account", rotated.clone(), &AUTH)
+        call(&f.app, "POST", "/api/account", rotated.clone(), &f.auth())
             .await
             .0,
         409
@@ -639,7 +702,9 @@ async fn account_ownership_rotation_and_sessions_remain_atomic() {
     );
     rotated["previousKeyHash"] = old;
     assert_eq!(
-        call(&f.app, "POST", "/api/account", rotated, &AUTH).await.0,
+        call(&f.app, "POST", "/api/account", rotated, &f.auth())
+            .await
+            .0,
         200
     );
     assert_eq!(
@@ -682,8 +747,8 @@ async fn log_in(app: &Router, id: &str, key: &str) -> String {
 }
 #[tokio::test]
 async fn trades_accumulate_once_each_and_stay_with_their_account() {
-    let f = Fixture::new();
-    call(&f.app, "POST", "/api/scans", scan(), &AUTH).await;
+    let f = Fixture::new().await;
+    call(&f.app, "POST", "/api/scans", scan(), &f.auth()).await;
     let sale = trade(
         "Sultan",
         1760000100,
@@ -717,7 +782,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
         ),
     ]);
     assert_eq!(
-        call(&f.app, "POST", "/api/account", upload.clone(), &AUTH)
+        call(&f.app, "POST", "/api/account", upload.clone(), &f.auth())
             .await
             .2,
         json!({"stored":true,"characters":1})
@@ -747,7 +812,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
         "newest first, with the quality of a known item"
     );
     assert_eq!(first[3]["quality"], Value::Null);
-    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
     upload["trades"] = json!([
         sale,
         trade(
@@ -760,7 +825,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
             0
         ),
     ]);
-    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
     let after = all().await;
     assert_eq!(
         after.as_array().unwrap().len(),
@@ -805,7 +870,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
         100,
         101
     )]);
-    let (status, _, error) = call(&f.app, "POST", "/api/account", upload, &AUTH).await;
+    let (status, _, error) = call(&f.app, "POST", "/api/account", upload, &f.auth()).await;
     assert_eq!(
         (status, error["error"].clone()),
         (
@@ -816,7 +881,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
     let mut other = account();
     other["id"] = json!("ABCDEFGH");
     other["keyHash"] = json!(goldbook_core::key_hash("ABCDEFGHJKMNPQRSTVWX"));
-    call(&f.app, "POST", "/api/account", other, &AUTH).await;
+    call(&f.app, "POST", "/api/account", other, &f.auth()).await;
     let stranger = log_in(&f.app, "ABCDEFGH", "ABCDEFGHJKMNPQRSTVWX").await;
     let (_, _, theirs) = call(
         &f.app,
@@ -834,7 +899,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
 }
 #[tokio::test]
 async fn vendor_sales_are_trades_without_a_cut() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let mut upload = account();
     upload["trades"] = json!([
         trade(
@@ -857,7 +922,7 @@ async fn vendor_sales_are_trades_without_a_cut() {
         ),
     ]);
     assert_eq!(
-        call(&f.app, "POST", "/api/account", upload.clone(), &AUTH)
+        call(&f.app, "POST", "/api/account", upload.clone(), &f.auth())
             .await
             .0,
         200
@@ -889,7 +954,7 @@ async fn vendor_sales_are_trades_without_a_cut() {
         85,
         4
     )]);
-    let (status, _, error) = call(&f.app, "POST", "/api/account", upload, &AUTH).await;
+    let (status, _, error) = call(&f.app, "POST", "/api/account", upload, &f.auth()).await;
     assert_eq!(
         (status, error["error"].clone()),
         (
@@ -903,7 +968,7 @@ fn entry(at: u64, side: &str, item: &str, count: u64, price: u64, party: Option<
 }
 #[tokio::test]
 async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let mut upload = account();
     let mut sale = entry(
         1760000900,
@@ -940,7 +1005,7 @@ async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
     ];
     upload["trades"] = json!(entries);
     assert_eq!(
-        call(&f.app, "POST", "/api/account", upload.clone(), &AUTH)
+        call(&f.app, "POST", "/api/account", upload.clone(), &f.auth())
             .await
             .0,
         200
@@ -963,7 +1028,7 @@ async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
     for t in upload["trades"].as_array_mut().unwrap() {
         t.as_object_mut().unwrap().remove("party");
     }
-    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
     assert_eq!(
         get(&f.app, "/api/trades", &cookie).await["trades"],
         expected,
@@ -984,7 +1049,8 @@ async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
         ),
     ] {
         upload["trades"] = json!([bad]);
-        let (status, _, error) = call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+        let (status, _, error) =
+            call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
         assert_eq!((status, error["error"].clone()), (400, json!(message)));
     }
     assert_eq!(
@@ -998,7 +1064,9 @@ async fn accounting_books_goods_and_gold_alone_with_the_other_player() {
         .map(|side| entry(1760002000, side, "Gold", 1, 100, None))
         .collect();
     assert_eq!(
-        call(&f.app, "POST", "/api/account", upload, &AUTH).await.0,
+        call(&f.app, "POST", "/api/account", upload, &f.auth())
+            .await
+            .0,
         200
     );
     assert_eq!(
@@ -1028,7 +1096,7 @@ async fn link(app: &Router, cookie: Option<&str>, id: &str, key: &str) -> (u16, 
 }
 #[tokio::test]
 async fn linked_ids_share_their_characters_and_trades() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let sale = trade(
         "Sultan",
         1760000100,
@@ -1040,7 +1108,7 @@ async fn linked_ids_share_their_characters_and_trades() {
     );
     let mut mac = account();
     mac["trades"] = json!([sale]);
-    call(&f.app, "POST", "/api/account", mac, &AUTH).await;
+    call(&f.app, "POST", "/api/account", mac, &f.auth()).await;
     let mut fedora = account();
     fedora["id"] = json!("ABCDEFGH");
     fedora["keyHash"] = json!(goldbook_core::key_hash("ABCDEFGHJKMNPQRSTVWX"));
@@ -1062,7 +1130,7 @@ async fn linked_ids_share_their_characters_and_trades() {
             0
         )
     ]);
-    call(&f.app, "POST", "/api/account", fedora.clone(), &AUTH).await;
+    call(&f.app, "POST", "/api/account", fedora.clone(), &f.auth()).await;
     let mac = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
     assert_eq!(
         get(&f.app, "/api/account", &mac).await,
@@ -1136,7 +1204,7 @@ async fn linked_ids_share_their_characters_and_trades() {
     );
 
     fedora["characters"].as_array_mut().unwrap().pop();
-    call(&f.app, "POST", "/api/account", fedora, &AUTH).await;
+    call(&f.app, "POST", "/api/account", fedora, &f.auth()).await;
     assert_eq!(
         get(&f.app, "/api/account", &mac).await["characters"]
             .as_array()
@@ -1150,7 +1218,7 @@ async fn linked_ids_share_their_characters_and_trades() {
     third["id"] = json!("PQRSTVWX");
     third["keyHash"] = json!(goldbook_core::key_hash("PQRSTVWXABCDEFGHJKMN"));
     third["characters"][0]["name"] = json!("Thorn");
-    call(&f.app, "POST", "/api/account", third, &AUTH).await;
+    call(&f.app, "POST", "/api/account", third, &f.auth()).await;
     let third = log_in(&f.app, "PQRSTVWX", "PQRSTVWXABCDEFGHJKMN").await;
     assert_eq!(
         link(&f.app, Some(&third), "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN")
@@ -1182,12 +1250,13 @@ async fn linked_ids_share_their_characters_and_trades() {
 }
 #[tokio::test]
 async fn concurrent_claims_cannot_replace_another_owners_account() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let mut other = account();
     other["keyHash"] = json!(goldbook_core::key_hash("ABCDEFGHJKMNPQRSTVWX"));
+    let auth = f.auth();
     let (a, b) = tokio::join!(
-        call(&f.app, "POST", "/api/account", account(), &AUTH),
-        call(&f.app, "POST", "/api/account", other, &AUTH)
+        call(&f.app, "POST", "/api/account", account(), &auth),
+        call(&f.app, "POST", "/api/account", other, &auth)
     );
     let mut statuses = [a.0, b.0];
     statuses.sort();
@@ -1207,8 +1276,8 @@ async fn concurrent_claims_cannot_replace_another_owners_account() {
 }
 #[tokio::test]
 async fn desktop_handoff_csrf_body_limits_and_login_limits_are_enforced() {
-    let f = Fixture::new();
-    call(&f.app, "POST", "/api/account", account(), &AUTH).await;
+    let f = Fixture::new().await;
+    call(&f.app, "POST", "/api/account", account(), &f.auth()).await;
     let form = b"id=K7Q2M9PX&key=7KQ2M9PXABCDEFGHJKMN".to_vec();
     let headers = [
         ("content-type", "application/x-www-form-urlencoded"),
@@ -1304,7 +1373,7 @@ async fn desktop_handoff_csrf_body_limits_and_login_limits_are_enforced() {
 }
 #[tokio::test]
 async fn static_head_and_error_contracts_are_preserved() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let (status, headers, body) = raw(&f.app, "HEAD", "/", vec![], &[]).await;
     assert_eq!(status, 200);
     assert!(body.is_empty());
@@ -1330,25 +1399,31 @@ async fn static_head_and_error_contracts_are_preserved() {
         json!({"error":"limit must be an integer from 0 to 200"})
     );
     assert_eq!(
-        raw(&f.app, "POST", "/api/scans", b"{bad json".to_vec(), &AUTH)
-            .await
-            .0,
+        raw(
+            &f.app,
+            "POST",
+            "/api/scans",
+            b"{bad json".to_vec(),
+            &f.auth()
+        )
+        .await
+        .0,
         400
     );
     assert_eq!(raw(&f.app, "POST", "/api/scans", vec![], &[]).await.0, 401);
 }
 #[tokio::test]
 async fn upgrading_a_python_database_preserves_ids_prices_and_retry_identity() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     // Recreate the schema immediately before Python's fingerprint migration.
     let mut db = db::connect(&f.database()).unwrap();
     db.execute_batch("DROP TABLE prices; DROP TABLE scans; DELETE FROM migrations WHERE name='0005_scan_fingerprints.sql';").unwrap();
     db.execute_batch("CREATE TABLE scans (id INTEGER PRIMARY KEY,realm TEXT NOT NULL,faction TEXT NOT NULL,region TEXT NOT NULL,scanned_at INTEGER NOT NULL,mode TEXT NOT NULL,scanner TEXT NOT NULL,build TEXT NOT NULL,item_count INTEGER NOT NULL,uploaded_at INTEGER NOT NULL,UNIQUE(realm,faction,scanned_at)); CREATE TABLE prices(scan_id INTEGER NOT NULL REFERENCES scans(id),item_key TEXT NOT NULL,min_buyout INTEGER NOT NULL,market_value INTEGER NOT NULL,quantity INTEGER NOT NULL,num_auctions INTEGER NOT NULL,PRIMARY KEY(scan_id,item_key)) WITHOUT ROWID;").unwrap();
     db.execute_batch("INSERT INTO scans VALUES (7,'Faramon','Horde','EU',1760000000,'replicate','Sultan','1.60.1.70338',2,1760000010); INSERT INTO prices VALUES (7,'2589',110,125,42,3),(7,'7070',300,320,5,2);").unwrap();
     db::migrate(&mut db).unwrap();
-    let app = router(Config::new(f.database(), "dev-token")).unwrap();
+    let app = router(Config::new(f.database())).unwrap();
     assert_eq!(
-        call(&app, "POST", "/api/scans", scan(), &AUTH).await.2,
+        call(&app, "POST", "/api/scans", scan(), &f.auth()).await.2,
         json!({"stored":false,"items":2})
     );
     assert_eq!(
@@ -1370,7 +1445,7 @@ async fn upgrading_a_python_database_preserves_ids_prices_and_retry_identity() {
 
 #[tokio::test]
 async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let mut upload = account();
     upload["trades"] = json!([trade(
         "Sultan",
@@ -1381,7 +1456,7 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
         85,
         0
     )]);
-    call(&f.app, "POST", "/api/account", upload.clone(), &AUTH).await;
+    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
     // Rebuilding with the vendor migration again leaves the table as it was before accounting.
     let mut db = db::connect(&f.database()).unwrap();
     db.execute_batch(include_str!(
@@ -1395,7 +1470,7 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
             .is_err()
     );
     db::migrate(&mut db).unwrap();
-    let app = router(Config::new(f.database(), "dev-token")).unwrap();
+    let app = router(Config::new(f.database())).unwrap();
     upload["trades"] = json!([entry(
         1760000700,
         "quest",
@@ -1405,7 +1480,9 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
         None
     )]);
     assert_eq!(
-        call(&app, "POST", "/api/account", upload, &AUTH).await.0,
+        call(&app, "POST", "/api/account", upload, &f.auth())
+            .await
+            .0,
         200
     );
     let cookie = log_in(&app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
@@ -1428,7 +1505,7 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
 }
 #[tokio::test]
 async fn json_surrogates_validate_at_original_length_then_match_python_storage() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let body = serde_json::to_string(&scan())
         .unwrap()
         .replace("\"Faramon\"", &format!("\"{}\\ud800\"", "a".repeat(63)));
@@ -1437,7 +1514,7 @@ async fn json_surrogates_validate_at_original_length_then_match_python_storage()
         "POST",
         "/api/scans",
         body.as_bytes().to_vec(),
-        &AUTH,
+        &f.auth(),
     )
     .await;
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&response));
@@ -1447,7 +1524,7 @@ async fn json_surrogates_validate_at_original_length_then_match_python_storage()
             "POST",
             "/api/scans",
             body.as_bytes().to_vec(),
-            &AUTH
+            &f.auth()
         )
         .await
         .0,
@@ -1467,11 +1544,11 @@ async fn json_surrogates_validate_at_original_length_then_match_python_storage()
 
 #[tokio::test]
 async fn explicit_web_directory_confines_files_and_overrides_embedded_assets() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let web = f.directory.join("web");
     std::fs::create_dir(&web).unwrap();
     std::fs::write(web.join("index.html"), b"custom index").unwrap();
-    let mut config = Config::new(f.database(), "dev-token");
+    let mut config = Config::new(f.database());
     config.web_dir = Some(web);
     let app = router(config).unwrap();
     let (status, headers, body) = raw(&app, "GET", "/", vec![], &[]).await;
@@ -1491,7 +1568,7 @@ async fn explicit_web_directory_confines_files_and_overrides_embedded_assets() {
 
 #[tokio::test]
 async fn embedded_fonts_are_served_as_woff2() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let fonts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/fonts");
     let mut served = 0;
     for entry in std::fs::read_dir(fonts).unwrap() {
@@ -1512,7 +1589,7 @@ async fn embedded_fonts_are_served_as_woff2() {
 
 #[tokio::test]
 async fn embedded_index_references_assets_by_content_version() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let (status, _, index) = raw(&f.app, "GET", "/", vec![], &[]).await;
     assert_eq!(status, 200);
     let index = String::from_utf8(index).unwrap();
@@ -1554,7 +1631,7 @@ async fn embedded_index_references_assets_by_content_version() {
 
 #[tokio::test]
 async fn update_feed_serves_public_files_and_ranges_without_exposing_the_database() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::new().await;
     let directory = fixture.directory.join("updates/revision");
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("client.exe"), b"signed-client-package").unwrap();
@@ -1584,12 +1661,16 @@ async fn update_feed_serves_public_files_and_ranges_without_exposing_the_databas
 
 #[tokio::test]
 async fn installation_tokens_are_hashed_persistent_revocable_and_only_allow_uploads() {
-    let f = Fixture::new();
-    let mut config = Config::new(f.database(), "");
-    config.self_registration = true;
-    let app = router(config).unwrap();
-    let (status, headers, body) =
-        call(&app, "POST", "/api/installations", registration("a"), &[]).await;
+    let f = Fixture::new().await;
+    let session = f.session();
+    let (status, headers, body) = call(
+        &f.app,
+        "POST",
+        "/api/installations",
+        registration("a"),
+        &session,
+    )
+    .await;
     assert_eq!(status, 200);
     assert_eq!(headers["cache-control"], "no-store");
     let token = body["token"].as_str().unwrap();
@@ -1599,25 +1680,34 @@ async fn installation_tokens_are_hashed_persistent_revocable_and_only_allow_uplo
     let auth = [("authorization", authorization.as_str())];
     let db = db::connect(&f.database()).unwrap();
     let stored: String = db
-        .query_row("SELECT token_hash FROM upload_tokens", [], |row| row.get(0))
+        .query_row(
+            "SELECT token_hash FROM upload_tokens WHERE fingerprint=?1",
+            ["a".repeat(64)],
+            |row| row.get(0),
+        )
         .unwrap();
     use sha2::{Digest, Sha256};
     assert_eq!(stored, hex::encode(Sha256::digest(token.as_bytes())));
     assert_ne!(stored, token);
-    assert_eq!(call(&app, "POST", "/api/scans", scan(), &auth).await.0, 200);
     assert_eq!(
-        call(&app, "POST", "/api/account", account(), &auth).await.0,
+        call(&f.app, "POST", "/api/scans", scan(), &auth).await.0,
+        200
+    );
+    assert_eq!(
+        call(&f.app, "POST", "/api/account", account(), &auth)
+            .await
+            .0,
         200
     );
     let mut other = account();
     other["keyHash"] = json!(goldbook_core::key_hash("OTHERKEYABCDEFGHJKMN"));
     assert_eq!(
-        call(&app, "POST", "/api/account", other, &auth).await.0,
+        call(&f.app, "POST", "/api/account", other, &auth).await.0,
         409
     );
     assert_eq!(
         call(
-            &app,
+            &f.app,
             "POST",
             "/api/login",
             json!({"id":"K7Q2M9PX","key":token}),
@@ -1628,7 +1718,7 @@ async fn installation_tokens_are_hashed_persistent_revocable_and_only_allow_uplo
         401
     );
     assert_eq!(
-        call(&app, "GET", "/api/account", Value::Null, &auth)
+        call(&f.app, "GET", "/api/account", Value::Null, &auth)
             .await
             .0,
         401
@@ -1639,21 +1729,48 @@ async fn installation_tokens_are_hashed_persistent_revocable_and_only_allow_uplo
             "authorization",
             "Bearer gb_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )][..],
+        &[("authorization", "Bearer dev-token")][..],
+        &session[..],
     ] {
         assert_eq!(
-            call(&app, "POST", "/api/scans", scan(), headers).await.0,
-            401
+            call(&f.app, "POST", "/api/scans", scan(), headers).await.2,
+            json!({"error":"invalid upload token"})
         );
     }
-    // Existing credentials survive a restart and disabling new issuance.
-    let restarted = router(Config::new(f.database(), "")).unwrap();
+    // A token registered before uploads needed Battle.net no longer uploads.
+    let unbound = format!("gb_{}", "b".repeat(43));
+    db.execute(
+        "INSERT INTO upload_identities (fingerprint) VALUES (?1)",
+        ["b".repeat(64)],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO upload_tokens (token_hash,fingerprint,created_at) VALUES (?1,?2,0)",
+        [
+            hex::encode(Sha256::digest(unbound.as_bytes())),
+            "b".repeat(64),
+        ],
+    )
+    .unwrap();
+    let refused = call(
+        &f.app,
+        "POST",
+        "/api/scans",
+        scan(),
+        &[("authorization", &format!("Bearer {unbound}"))],
+    )
+    .await;
+    assert_eq!(refused.0, 401);
+    assert_eq!(refused.2, json!({"error":"Battle.net sign-in required"}));
+    // Existing credentials survive a restart, also without Battle.net.
+    let restarted = router(Config::new(f.database())).unwrap();
     assert_eq!(
         call(
             &restarted,
             "POST",
             "/api/installations",
             registration("a"),
-            &[]
+            &session
         )
         .await
         .0,
@@ -1667,7 +1784,10 @@ async fn installation_tokens_are_hashed_persistent_revocable_and_only_allow_uplo
     );
     db.execute("UPDATE upload_tokens SET revoked_at=unixepoch()", [])
         .unwrap();
-    assert_eq!(call(&app, "POST", "/api/scans", scan(), &auth).await.0, 401);
+    assert_eq!(
+        call(&f.app, "POST", "/api/scans", scan(), &auth).await.0,
+        401
+    );
     assert_eq!(
         call(&restarted, "POST", "/api/scans", scan(), &auth)
             .await
@@ -1681,35 +1801,52 @@ fn registration(digit: &str) -> Value {
 }
 
 #[tokio::test]
-async fn registration_is_opt_in_validates_bodies_and_limits_issuance() {
-    let f = Fixture::new();
+async fn registration_needs_battlenet_validates_bodies_and_limits_issuance() {
+    let f = Fixture::new().await;
+    let session = f.session();
+    // Without Battle.net nobody registers, but registered tokens still upload.
+    let plain = router(Config::new(f.database())).unwrap();
     assert_eq!(
-        call(&f.app, "POST", "/api/installations", registration("a"), &[])
-            .await
-            .0,
+        call(
+            &plain,
+            "POST",
+            "/api/installations",
+            registration("a"),
+            &session
+        )
+        .await
+        .0,
         403
     );
-    // Administrator-provisioned tokens continue to work.
     assert_eq!(
-        call(&f.app, "POST", "/api/scans", scan(), &AUTH).await.0,
+        call(&plain, "POST", "/api/scans", scan(), &f.auth())
+            .await
+            .0,
         200
     );
-    let mut config = Config::new(f.database(), "dev-token");
-    config.self_registration = true;
-    let app = router(config).unwrap();
+    let app = router(battlenet(f.database())).unwrap();
+    assert_eq!(
+        call(&app, "POST", "/api/installations", registration("a"), &[])
+            .await
+            .0,
+        401
+    );
     for body in [json!(null), json!([]), json!({"token":"provided"})] {
         assert_eq!(
-            call(&app, "POST", "/api/installations", body, &[]).await.0,
+            call(&app, "POST", "/api/installations", body, &session)
+                .await
+                .0,
             400
         );
     }
+    let json_session = [session[0], ("content-type", "application/json")];
     assert_eq!(
         raw(
             &app,
             "POST",
             "/api/installations",
             b"{".to_vec(),
-            &[("content-type", "application/json")]
+            &json_session
         )
         .await
         .0,
@@ -1721,14 +1858,14 @@ async fn registration_is_opt_in_validates_bodies_and_limits_issuance() {
             "POST",
             "/api/installations",
             b"{}".to_vec(),
-            &[("content-type", "text/plain")]
+            &[session[0], ("content-type", "text/plain")]
         )
         .await
         .0,
         415
     );
     assert_eq!(
-        raw(&app, "POST", "/api/installations", b"{}".to_vec(), &[])
+        raw(&app, "POST", "/api/installations", b"{}".to_vec(), &session)
             .await
             .0,
         415
@@ -1739,49 +1876,74 @@ async fn registration_is_opt_in_validates_bodies_and_limits_issuance() {
             "POST",
             "/api/installations",
             vec![b' '; 4097],
-            &[("content-type", "application/json")]
+            &json_session
         )
         .await
         .0,
         413
     );
-    // Invalid JSON consumes attempts too: four previous handler calls plus sixteen successes.
-    for _ in 0..16 {
+    // Refused and invalid requests consume attempts too: five handler calls plus fifteen successes.
+    for _ in 0..15 {
         assert_eq!(
-            call(&app, "POST", "/api/installations", registration("a"), &[])
-                .await
-                .0,
+            call(
+                &app,
+                "POST",
+                "/api/installations",
+                registration("a"),
+                &session
+            )
+            .await
+            .0,
             200
         );
     }
     assert_eq!(
-        call(&app, "POST", "/api/installations", registration("a"), &[])
-            .await
-            .0,
+        call(
+            &app,
+            "POST",
+            "/api/installations",
+            registration("a"),
+            &session
+        )
+        .await
+        .0,
         429
     );
     let count: i64 = db::connect(&f.database())
         .unwrap()
-        .query_row("SELECT count(*) FROM upload_tokens", [], |row| row.get(0))
+        .query_row(
+            "SELECT count(*) FROM upload_tokens WHERE fingerprint=?1",
+            ["a".repeat(64)],
+            |row| row.get(0),
+        )
         .unwrap();
-    assert_eq!(count, 16);
+    assert_eq!(count, 15);
     // Registration limits are independent from login failures.
     assert_eq!(
         call(&app, "POST", "/api/login", json!({}), &[]).await.0,
         401
     );
-    assert_eq!(call(&app, "POST", "/api/scans", scan(), &AUTH).await.0, 200);
+    assert_eq!(
+        call(&app, "POST", "/api/scans", scan(), &f.auth()).await.0,
+        200
+    );
 }
 
 #[tokio::test]
 async fn fingerprint_blocks_cover_every_credential_and_future_registrations() {
-    let f = Fixture::new();
-    let mut config = Config::new(f.database(), "dev-token");
-    config.self_registration = true;
-    let app = router(config).unwrap();
+    let f = Fixture::new().await;
+    let session = f.session();
+    let app = f.app.clone();
     let mut tokens = Vec::new();
     for digit in ["a", "a", "b"] {
-        let reply = call(&app, "POST", "/api/installations", registration(digit), &[]).await;
+        let reply = call(
+            &app,
+            "POST",
+            "/api/installations",
+            registration(digit),
+            &session,
+        )
+        .await;
         assert_eq!(reply.0, 200);
         tokens.push(format!("Bearer {}", reply.2["token"].as_str().unwrap()));
     }
@@ -1797,13 +1959,14 @@ async fn fingerprint_blocks_cover_every_credential_and_future_registrations() {
     .unwrap();
     // Issuance racing an administrator's write must observe the block after commit.
     let issuing_app = app.clone();
+    let issuing_session = f.session.clone();
     let issuance = tokio::spawn(async move {
         call(
             &issuing_app,
             "POST",
             "/api/installations",
             registration("a"),
-            &[],
+            &[("authorization", &issuing_session)],
         )
         .await
     });
@@ -1836,9 +1999,16 @@ async fn fingerprint_blocks_cover_every_credential_and_future_registrations() {
         .0,
         200
     );
-    assert_eq!(call(&app, "POST", "/api/scans", scan(), &AUTH).await.0, 200);
+    assert_eq!(
+        call(&app, "POST", "/api/scans", scan(), &f.auth()).await.0,
+        200
+    );
     let count: i64 = db
-        .query_row("SELECT count(*) FROM upload_tokens", [], |row| row.get(0))
+        .query_row(
+            "SELECT count(*) FROM upload_tokens WHERE fingerprint IN (?1,?2)",
+            ["a".repeat(64), "b".repeat(64)],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(count, 3);
     db.execute(
@@ -1861,19 +2031,31 @@ async fn fingerprint_blocks_cover_every_credential_and_future_registrations() {
         );
     }
     assert_eq!(
-        call(&app, "POST", "/api/installations", registration("a"), &[])
-            .await
-            .0,
+        call(
+            &app,
+            "POST",
+            "/api/installations",
+            registration("a"),
+            &session
+        )
+        .await
+        .0,
         200
     );
 }
 
 #[tokio::test]
 async fn registration_requires_only_versioned_lowercase_account_fingerprints() {
-    let f = Fixture::new();
-    let mut config = Config::new(f.database(), "");
-    config.self_registration = true;
-    let app = router(config).unwrap();
+    let f = Fixture::new().await;
+    let session = f.session();
+    let db = db::connect(&f.database()).unwrap();
+    let identities = || -> i64 {
+        db.query_row("SELECT count(*) FROM upload_identities", [], |row| {
+            row.get(0)
+        })
+        .unwrap()
+    };
+    let before = identities();
     for invalid in [
         json!({}),
         json!({"fingerprint":"a".repeat(64)}),
@@ -1888,30 +2070,30 @@ async fn registration_requires_only_versioned_lowercase_account_fingerprints() {
         json!({"fingerprint":"a".repeat(64),"fingerprintVersion":1,"accountPath":"private/path"}),
     ] {
         assert_eq!(
-            call(&app, "POST", "/api/installations", invalid, &[])
+            call(&f.app, "POST", "/api/installations", invalid, &session)
                 .await
                 .0,
             400
         );
     }
-    let db = db::connect(&f.database()).unwrap();
-    let count: i64 = db
-        .query_row("SELECT count(*) FROM upload_identities", [], |row| {
-            row.get(0)
-        })
-        .unwrap();
-    assert_eq!(count, 0);
+    assert_eq!(identities(), before);
     assert_eq!(
-        call(&app, "POST", "/api/installations", registration("f"), &[])
-            .await
-            .0,
+        call(
+            &f.app,
+            "POST",
+            "/api/installations",
+            registration("f"),
+            &session
+        )
+        .await
+        .0,
         200
     );
 }
 
 #[tokio::test]
 async fn seller_batches_require_auth_validate_atomically_and_deduplicate() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let first = json!({"realm":"Faramon","faction":"Horde","itemKey":"2770","scannedAt":1760000000,"offers":[]});
     let mut second = first.clone();
     second["itemKey"] = json!("2840");
@@ -1925,7 +2107,7 @@ async fn seller_batches_require_auth_validate_atomically_and_deduplicate() {
     let mut invalid = batch.clone();
     invalid[1]["scannedAt"] = json!(0);
     assert_eq!(
-        call(&f.app, "POST", "/api/sellers/batch", invalid, &AUTH)
+        call(&f.app, "POST", "/api/sellers/batch", invalid, &f.auth())
             .await
             .0,
         400
@@ -1939,9 +2121,15 @@ async fn seller_batches_require_auth_validate_atomically_and_deduplicate() {
     );
     db.execute_batch("CREATE TRIGGER reject_bar BEFORE INSERT ON seller_snapshots WHEN NEW.item_key='2840' BEGIN SELECT RAISE(ABORT,'test failure'); END;").unwrap();
     assert_eq!(
-        call(&f.app, "POST", "/api/sellers/batch", batch.clone(), &AUTH)
-            .await
-            .0,
+        call(
+            &f.app,
+            "POST",
+            "/api/sellers/batch",
+            batch.clone(),
+            &f.auth()
+        )
+        .await
+        .0,
         500
     );
     assert_eq!(
@@ -1952,26 +2140,38 @@ async fn seller_batches_require_auth_validate_atomically_and_deduplicate() {
     );
     db.execute_batch("DROP TRIGGER reject_bar").unwrap();
     assert_eq!(
-        call(&f.app, "POST", "/api/sellers/batch", batch.clone(), &AUTH)
-            .await
-            .2,
+        call(
+            &f.app,
+            "POST",
+            "/api/sellers/batch",
+            batch.clone(),
+            &f.auth()
+        )
+        .await
+        .2,
         json!({"stored":2,"received":2})
     );
     assert_eq!(
-        call(&f.app, "POST", "/api/sellers/batch", batch.clone(), &AUTH)
-            .await
-            .2,
+        call(
+            &f.app,
+            "POST",
+            "/api/sellers/batch",
+            batch.clone(),
+            &f.auth()
+        )
+        .await
+        .2,
         json!({"stored":0,"received":2})
     );
     assert_eq!(
-        call(&f.app, "POST", "/api/sellers", batch[0].clone(), &AUTH)
+        call(&f.app, "POST", "/api/sellers", batch[0].clone(), &f.auth())
             .await
             .2,
         json!({"stored":false})
     );
     for body in [json!([]), json!(vec![batch[0].clone(); 101])] {
         assert_eq!(
-            call(&f.app, "POST", "/api/sellers/batch", body, &AUTH)
+            call(&f.app, "POST", "/api/sellers/batch", body, &f.auth())
                 .await
                 .0,
             400
@@ -1980,7 +2180,7 @@ async fn seller_batches_require_auth_validate_atomically_and_deduplicate() {
 }
 #[tokio::test]
 async fn prices_list_every_scanned_item_at_its_newest_price() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let names = json!({"2589":["Linen Cloth",1],"7070":["Elemental Water",1],"14047":["Runecloth",1],"2592":["Wool Cloth",1]});
     for (at, rows) in [
         (
@@ -2003,7 +2203,9 @@ async fn prices_list_every_scanned_item_at_its_newest_price() {
         upload["rows"] = rows;
         upload["items"] = names.clone();
         assert_eq!(
-            call(&f.app, "POST", "/api/scans", upload, &AUTH).await.0,
+            call(&f.app, "POST", "/api/scans", upload, &f.auth())
+                .await
+                .0,
             200
         );
     }
@@ -2068,7 +2270,7 @@ async fn prices_list_every_scanned_item_at_its_newest_price() {
 }
 #[tokio::test]
 async fn upgrading_fills_the_newest_price_of_every_scanned_item() {
-    let f = Fixture::new();
+    let f = Fixture::new().await;
     let mut db = db::connect(&f.database()).unwrap();
     // Scans stored before the migration, the newer one first by id.
     db.execute_batch(
@@ -2077,7 +2279,7 @@ async fn upgrading_fills_the_newest_price_of_every_scanned_item() {
     .unwrap();
     db.execute_batch("INSERT INTO scans (id,realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint) VALUES (1,'Faramon','Horde','EU',1760100000,'browse','Sultan','1.60.1.70338',1,1760100010,'a'),(2,'Faramon','Horde','EU',1760000000,'browse','Sultan','1.60.1.70338',2,1760100020,'b'); INSERT INTO prices VALUES (1,'2589',150,0,40,3),(2,'2589',110,0,42,3),(2,'7070',300,0,5,2);").unwrap();
     db::migrate(&mut db).unwrap();
-    let app = router(Config::new(f.database(), "dev-token")).unwrap();
+    let app = router(Config::new(f.database())).unwrap();
     let (_, _, prices) = call(
         &app,
         "GET",

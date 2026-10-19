@@ -1,11 +1,11 @@
 {
   "about": "A full (replicate) scan from GoldbookDB.scans, which also carries market values and auction counts.",
-  "source": "crates/goldbook-sync/src/sync.rs:228",
+  "source": "crates/goldbook-sync/src/sync.rs:233",
   "request": {
     "method": "POST",
     "path": "/api/scans",
     "headers": {
-      "Authorization": "Bearer dev-token",
+      "Authorization": "Bearer {{registered_token}}",
       "Content-Type": "application/json"
     },
     "json": {

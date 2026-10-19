@@ -1,6 +1,6 @@
 {
   "about": "After uploading, the app downloads each realm's prices and writes them to ServerData.lua.",
-  "source": "crates/goldbook-sync/src/serverdata.rs:198",
+  "source": "crates/goldbook-sync/src/serverdata.rs:199",
   "request": {
     "method": "GET",
     "path": "/api/export?realm=Faramon&faction=Horde",

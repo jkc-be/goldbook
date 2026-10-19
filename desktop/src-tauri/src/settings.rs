@@ -13,7 +13,6 @@ use url::Url;
 pub struct Settings {
     pub wow_dir: String,
     pub api: String,
-    pub token: String,
     pub battlenet_session: Option<String>,
     pub upload_tokens: BTreeMap<String, String>,
     pub open_at_login: bool,
@@ -31,7 +30,6 @@ impl Default for Settings {
                 .to_string_lossy()
                 .into_owned(),
             api: DEFAULT_API.into(),
-            token: String::new(),
             battlenet_session: None,
             upload_tokens: BTreeMap::new(),
             open_at_login: true,
@@ -81,26 +79,21 @@ pub fn normalize_api(input: &str) -> Result<String> {
 }
 
 impl Settings {
-    pub fn reconcile_token(&mut self, previous: &Self, edited: bool) {
+    // The form carries no credentials: saved for the same server, it keeps
+    // the ones the app holds; for another server, it starts without them.
+    pub fn keep_credentials(&mut self, previous: &Self) {
         if normalize_api(&previous.api).ok().as_deref() == Some(self.api.as_str()) {
             self.upload_tokens.clone_from(&previous.upload_tokens);
             self.battlenet_session
                 .clone_from(&previous.battlenet_session);
-            if !edited {
-                self.token.clone_from(&previous.token);
-            }
         } else {
             self.upload_tokens.clear();
             self.battlenet_session = None;
-            if self.token == previous.token {
-                self.token.clear();
-            }
         }
     }
 
     pub fn prepare(mut self) -> Result<Self> {
         self.wow_dir = self.wow_dir.trim().into();
-        self.token = self.token.trim().into();
         if self.wow_dir.is_empty() {
             bail!("Choose your World of Warcraft folder.");
         }
@@ -201,46 +194,46 @@ mod tests {
         );
     }
     #[test]
-    fn saving_a_stale_form_reuses_credentials_but_explicit_edits_win() {
+    fn saving_the_form_keeps_credentials_only_for_the_same_server() {
         let previous = Settings {
-            token: "gb_saved".into(),
             battlenet_session: Some("saved-session".into()),
             upload_tokens: BTreeMap::from([("fingerprint".into(), "account-token".into())]),
             ..Settings::default()
         };
-        let mut stale = Settings::default();
-        stale.reconcile_token(&previous, false);
-        assert_eq!(stale.token, "gb_saved");
-        assert_eq!(stale.battlenet_session.as_deref(), Some("saved-session"));
-        assert_eq!(stale.upload_tokens["fingerprint"], "account-token");
-        let mut reset = Settings::default();
-        reset.reconcile_token(&previous, true);
-        assert_eq!(reset.token, "");
+        let mut same_server = Settings::default();
+        same_server.keep_credentials(&previous);
+        assert_eq!(
+            same_server.battlenet_session.as_deref(),
+            Some("saved-session")
+        );
+        assert_eq!(same_server.upload_tokens["fingerprint"], "account-token");
         let mut changed_server = previous.clone();
         changed_server.api = "https://custom.example".into();
-        changed_server.reconcile_token(&previous, false);
-        assert_eq!(changed_server.token, "");
+        changed_server.keep_credentials(&previous);
         assert!(changed_server.upload_tokens.is_empty());
         assert!(changed_server.battlenet_session.is_none());
-        changed_server.token = "custom-token".into();
-        changed_server.reconcile_token(&previous, true);
-        assert_eq!(changed_server.token, "custom-token");
     }
     #[test]
-    fn fresh_install_leaves_the_token_for_automatic_setup() {
+    fn a_fresh_install_uses_the_default_server() {
         let settings = Settings {
             wow_dir: "/game".into(),
             ..Settings::default()
         };
         let settings = settings.prepare().unwrap();
         assert_eq!(settings.api, DEFAULT_API);
-        assert_eq!(settings.token, "");
+    }
+    #[test]
+    fn a_manual_token_saved_by_an_older_version_is_dropped() {
+        let old: Settings =
+            serde_json::from_str(r#"{"wowDir":"/game","token":"manual-token"}"#).unwrap();
+        let saved = serde_json::to_value(&old).unwrap();
+        assert!(saved.get("token").is_none());
+        assert_eq!(saved["wowDir"], "/game");
     }
     #[test]
     fn syncs_automatically_every_15_minutes_and_clamps_the_interval() {
         let base = || Settings {
             wow_dir: "/game".into(),
-            token: "t".into(),
             ..Settings::default()
         };
         let old: Settings = serde_json::from_str(r#"{"wowDir":"/game","token":"t"}"#).unwrap();
@@ -266,7 +259,6 @@ mod tests {
         let saved = Settings {
             wow_dir: "/game".into(),
             api: "http://localhost:8787".into(),
-            token: "test-token".into(),
             battlenet_session: Some("enrollment-session".into()),
             upload_tokens: BTreeMap::new(),
             open_at_login: false,
@@ -274,7 +266,6 @@ mod tests {
             sync_minutes: 30,
         };
         write(&file, &saved).unwrap();
-        assert_eq!(read(&file).token, "test-token");
         assert_eq!(
             read(&file).battlenet_session.as_deref(),
             Some("enrollment-session")

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Replay the requests of every supported client version against the current server."""
 import argparse
-import contextlib
 import gzip
 import http.client
 import json
@@ -13,13 +12,6 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 helpers = runpy.run_path(str(ROOT / "scripts/verify-migration.py"))
-# Both upload setups the released app supports. The README sets up production with Battle.net.
-SERVERS = {
-    "default": lambda port: {"SELF_REGISTRATION": "true"},
-    "battlenet": lambda port: {"SELF_REGISTRATION": "true", "BNET_CLIENT_ID": "compatibility-client",
-                               "BNET_CLIENT_SECRET": "compatibility-secret",
-                               "GOLDBOOK_PUBLIC_URL": f"http://127.0.0.1:{port}"},
-}
 TYPES = {
     "string": lambda v: isinstance(v, str),
     "boolean": lambda v: isinstance(v, bool),
@@ -121,20 +113,17 @@ def check(fixture, response, raw):
 
 
 def replay(version, directory):
-    servers, variables, failures = {}, {}, []
+    failures = []
     files = sorted(version.glob("*.json"))
-    with contextlib.ExitStack() as stack:
+    data = directory / version.name
+    data.mkdir(parents=True)
+    # The test server signs in with Battle.net, as production does.
+    with helpers["server"](data, None, ROOT / "target/debug/goldbook-server") as api:
+        variables = {"base": f"http://127.0.0.1:{api.port}",
+                     "battlenet_session": helpers["sign_in"](data / "goldbook.sqlite", "client")}
         for file in files:
             label = f"{version.name}/{file.name}"
             fixture = json.loads(file.read_text())
-            profile = fixture.get("server", "default")
-            if profile not in servers:
-                data = directory / version.name / profile
-                data.mkdir(parents=True)
-                servers[profile] = (data, stack.enter_context(helpers["server"](
-                    data, None, ROOT / "target/debug/goldbook-server", SERVERS[profile])))
-            data, api = servers[profile]
-            variables["base"] = f"http://127.0.0.1:{api.port}"
             for name, content in fixture.get("files", {}).items():
                 path = data / name
                 path.parent.mkdir(parents=True, exist_ok=True)

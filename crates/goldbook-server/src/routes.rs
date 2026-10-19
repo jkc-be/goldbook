@@ -172,7 +172,8 @@ fn integer(input: &Input, name: &str, fallback: i64, maximum: i64) -> Result<i64
     ))
 }
 fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Result<Reply> {
-    if !app.config.self_registration {
+    // Every upload token belongs to a Battle.net player.
+    if app.config.battlenet.is_none() {
         return Err(Error::new(403, "installation registration is disabled"));
     }
     let wait = app.registrations.lock().unwrap().begin(
@@ -199,7 +200,7 @@ fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Resul
     }
     let token = format!("gb_{}", URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>()));
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let identity = crate::oauth::enrollment_identity(input, app, &tx)?;
+    let identity = crate::oauth::enrollment_identity(input, &tx)?;
     tx.execute(
         "INSERT INTO upload_identities (fingerprint) VALUES (?1) ON CONFLICT(fingerprint) DO NOTHING",
         [fingerprint],
@@ -212,32 +213,31 @@ fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Resul
     if blocked {
         return Err(Error::new(403, "this account is blocked"));
     }
-    if let Some(identity) = identity {
-        let existing: Option<String> = tx.query_row(
-            "SELECT battlenet_identity FROM upload_identities WHERE fingerprint=?1",
-            [fingerprint],
-            |row| row.get(0),
-        )?;
-        if existing
-            .as_deref()
-            .is_some_and(|previous| previous != identity)
-        {
-            return Err(Error::new(
-                409,
-                "this account is linked to another Battle.net player",
-            ));
-        }
-        if existing.is_none() {
-            tx.execute(
-                "UPDATE upload_tokens SET revoked_at=?1 WHERE fingerprint=?2",
-                params![now(), fingerprint],
-            )?;
-        }
+    let existing: Option<String> = tx.query_row(
+        "SELECT battlenet_identity FROM upload_identities WHERE fingerprint=?1",
+        [fingerprint],
+        |row| row.get(0),
+    )?;
+    if existing
+        .as_deref()
+        .is_some_and(|previous| previous != identity)
+    {
+        return Err(Error::new(
+            409,
+            "this account is linked to another Battle.net player",
+        ));
+    }
+    // Tokens registered before Battle.net sign-in no longer upload.
+    if existing.is_none() {
         tx.execute(
-            "UPDATE upload_identities SET battlenet_identity=?1 WHERE fingerprint=?2",
-            params![identity, fingerprint],
+            "UPDATE upload_tokens SET revoked_at=?1 WHERE fingerprint=?2",
+            params![now(), fingerprint],
         )?;
     }
+    tx.execute(
+        "UPDATE upload_identities SET battlenet_identity=?1 WHERE fingerprint=?2",
+        params![identity, fingerprint],
+    )?;
     tx.execute(
         "INSERT INTO upload_tokens (token_hash,fingerprint,created_at) VALUES (?1,?2,?3)",
         params![hash(&token), fingerprint, now()],

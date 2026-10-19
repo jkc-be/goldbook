@@ -203,6 +203,25 @@ class StageMatrix(unittest.TestCase):
                 jobs = json.loads(world.get(f"{ADDON}/actions/runs/7/jobs?filter=all"))["jobs"]
                 self.assertEqual(STATE.downstream_verdict(runs, lambda run_id: jobs)[0], state)
 
+    def test_secondary_wowinterface_runs_do_not_hold_up_a_successful_release(self):
+        for status, conclusion in [('waiting', None), ('completed', 'failure'), ('completed', 'cancelled')]:
+            with self.subTest(status=status, conclusion=conclusion):
+                world = world_at('downstream succeeded')
+                secondary_url = (f'{ADDON}/actions/workflows/wowinterface.yml/runs'
+                                 f'?head_sha={MIRROR_R1}&per_page=100')
+                world.urls[secondary_url] = {'workflow_runs': [
+                    {'id': 8, 'status': status, 'conclusion': conclusion}]}
+                with mock.patch.object(world, 'get', wraps=world.get) as get, \
+                        contextlib.redirect_stdout(io.StringIO()), mock.patch.object(STATE.time, 'sleep') as sleep:
+                    message = STATE.wait_for_addon_release(world, MIRROR_R1, 180, 7200, sleep=sleep)
+                self.assertEqual(message, 'Package addon release succeeded: '
+                                         'https://github.com/jkc-be/goldbook-addon/actions/runs/7')
+                sleep.assert_not_called()
+                self.assertEqual([call.args[0] for call in get.call_args_list], [
+                    f'{ADDON}/actions/workflows/release.yml/runs?head_sha={MIRROR_R1}&per_page=100',
+                    f'{ADDON}/actions/runs/7/jobs?filter=all',
+                ])
+
 
 class Reasons(unittest.TestCase):
     def verdicts(self, world, build):

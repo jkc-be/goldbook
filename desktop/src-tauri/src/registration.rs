@@ -1,4 +1,4 @@
-use crate::settings::{self, DEFAULT_API, Settings, normalize_api};
+use crate::settings::{self, Settings};
 use anyhow::{Result, bail};
 use goldbook_sync::{WatchFile, account_fingerprint, saved_variables_files};
 use serde::Deserialize;
@@ -7,12 +7,6 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-
-pub fn needs_registration(settings: &Settings) -> bool {
-    settings.token.trim().is_empty()
-        || (settings.token.trim() == "dev-token"
-            && normalize_api(&settings.api).is_ok_and(|api| api == DEFAULT_API))
-}
 
 pub struct UploadSetup {
     pub known_files: Vec<PathBuf>,
@@ -60,14 +54,12 @@ async fn register(api: &str, fingerprint: &str, session: Option<&str>) -> Result
             return Ok(None);
         }
         403 | 404 => bail!(
-            "This server does not support automatic upload setup. Ask its administrator to enable automatic setup or update the server, or enter an upload token in Settings."
+            "This server does not set up uploads. Ask its administrator to enable Battle.net sign-in or update the server."
         ),
         429 => bail!(
             "This server has received too many setup requests. Wait 15 minutes, then try again."
         ),
-        code => bail!(
-            "The server answered {code} during upload setup. Try again later, or enter an upload token in Settings."
-        ),
+        code => bail!("The server answered {code} during upload setup. Try again later."),
     }
     let registration: Registration = serde_json::from_slice(&body)
         .map_err(|_| anyhow::anyhow!("The server returned an invalid upload setup response."))?;
@@ -90,60 +82,49 @@ pub async fn prepare_uploads(settings: &mut Settings, config: &Path) -> Result<U
     let known_files = saved_variables_files(Some(Path::new(&settings.wow_dir)));
     let mut files = Vec::new();
     let mut blocked = HashSet::new();
-    if !needs_registration(settings) {
-        for file in &known_files {
-            files.push(WatchFile {
-                file: file.clone(),
-                token: settings.token.clone(),
-            });
-        }
-    } else {
-        if settings.battlenet_session.is_none() && !known_files.is_empty() {
-            match crate::battlenet::enabled(&settings.api).await {
-                Ok(true) => bail!("Log in with Battle.net in Goldbook to set up uploads."),
-                Ok(false) => {}
-                Err(error) => {
-                    let all_cached = known_files.iter().all(|file| {
-                        account_fingerprint(file).is_ok_and(|fingerprint| {
-                            settings.upload_tokens.contains_key(&fingerprint)
-                        })
-                    });
-                    if !all_cached {
-                        return Err(error);
-                    }
+    if settings.battlenet_session.is_none() && !known_files.is_empty() {
+        match crate::battlenet::enabled(&settings.api).await {
+            Ok(true) => bail!("Log in with Battle.net in Goldbook to set up uploads."),
+            Ok(false) => {}
+            Err(error) => {
+                let all_cached = known_files.iter().all(|file| {
+                    account_fingerprint(file)
+                        .is_ok_and(|fingerprint| settings.upload_tokens.contains_key(&fingerprint))
+                });
+                if !all_cached {
+                    return Err(error);
                 }
             }
         }
-        settings.token.clear();
-        for file in &known_files {
-            let fingerprint = account_fingerprint(file)?;
-            if blocked.contains(&fingerprint) {
-                continue;
-            }
-            if !settings.upload_tokens.contains_key(&fingerprint) {
-                match register(
-                    &settings.api,
-                    &fingerprint,
-                    settings.battlenet_session.as_deref(),
-                )
-                .await?
-                {
-                    Some(token) => {
-                        settings.upload_tokens.insert(fingerprint.clone(), token);
-                        // Persist each credential before another account can fail setup.
-                        settings::write(config, settings)?;
-                    }
-                    None => {
-                        blocked.insert(fingerprint);
-                        continue;
-                    }
+    }
+    for file in &known_files {
+        let fingerprint = account_fingerprint(file)?;
+        if blocked.contains(&fingerprint) {
+            continue;
+        }
+        if !settings.upload_tokens.contains_key(&fingerprint) {
+            match register(
+                &settings.api,
+                &fingerprint,
+                settings.battlenet_session.as_deref(),
+            )
+            .await?
+            {
+                Some(token) => {
+                    settings.upload_tokens.insert(fingerprint.clone(), token);
+                    // Persist each credential before another account can fail setup.
+                    settings::write(config, settings)?;
+                }
+                None => {
+                    blocked.insert(fingerprint);
+                    continue;
                 }
             }
-            files.push(WatchFile {
-                file: file.clone(),
-                token: settings.upload_tokens[&fingerprint].clone(),
-            });
         }
+        files.push(WatchFile {
+            file: file.clone(),
+            token: settings.upload_tokens[&fingerprint].clone(),
+        });
     }
     settings::write(config, settings)?;
     Ok(UploadSetup {
@@ -157,7 +138,7 @@ pub async fn prepare_uploads(settings: &mut Settings, config: &Path) -> Result<U
 mod tests {
     use super::*;
     use axum::Router;
-    use goldbook_server::{Config, router};
+    use goldbook_server::{BattleNetConfig, Config, router};
 
     fn account_files(root: &Path, account: &str) {
         for flavor in ["_retail_", "_classic_"] {
@@ -168,23 +149,6 @@ mod tests {
                     .join("SavedVariables"),
             )
             .unwrap();
-        }
-    }
-
-    #[test]
-    fn only_empty_tokens_and_the_official_legacy_default_register() {
-        let mut settings = Settings::default();
-        assert!(needs_registration(&settings));
-        settings.token = "dev-token".into();
-        settings.api = format!("{DEFAULT_API}/");
-        assert!(needs_registration(&settings));
-        settings.api = "https://custom.example/goldbook".into();
-        assert!(!needs_registration(&settings));
-        settings.token.clear();
-        assert!(needs_registration(&settings));
-        for token in ["manual-token", "gb_revoked"] {
-            settings.token = token.into();
-            assert!(!needs_registration(&settings));
         }
     }
 
@@ -246,9 +210,30 @@ mod tests {
         account_files(&game, "ACCOUNT_A");
         account_files(&game, "ACCOUNT_B");
         let database = temp.path().join("server.sqlite");
-        let mut config = Config::new(&database, "");
-        config.self_registration = true;
+        let mut config = Config::new(&database);
+        config.battlenet = Some(BattleNetConfig::new(
+            "client".into(),
+            "test-secret".into(),
+            "https://gold.example/goldbook".into(),
+        ));
         let app = Router::new().nest("/goldbook", router(config).unwrap());
+        // The session sign-in leaves, written straight into the server's database.
+        let session = "bne_test-session";
+        {
+            use sha2::{Digest, Sha256};
+            let db = goldbook_server::db::connect(&database).unwrap();
+            let identity = hex::encode(Sha256::digest(b"battlenet:123"));
+            db.execute(
+                "INSERT INTO battlenet_identities (identity_hash) VALUES (?1)",
+                [&identity],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO battlenet_sessions (token_hash,identity_hash,expires_at) VALUES (?1,?2,unixepoch()+3600)",
+                [hex::encode(Sha256::digest(session)), identity],
+            )
+            .unwrap();
+        }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let api = format!("http://{}/goldbook", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
@@ -263,6 +248,7 @@ mod tests {
         let mut settings = Settings {
             api: api.clone(),
             wow_dir: game.to_string_lossy().into(),
+            battlenet_session: Some(session.into()),
             ..Settings::default()
         };
         let setup = prepare_uploads(&mut settings, &file).await.unwrap();
@@ -312,6 +298,7 @@ mod tests {
         let mut reset = Settings {
             api: api.clone(),
             wow_dir: game.to_string_lossy().into(),
+            battlenet_session: Some(session.into()),
             ..Settings::default()
         };
         let next = prepare_uploads(&mut reset, &file).await.unwrap();
@@ -335,23 +322,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn manual_token_and_missing_account_folders_need_no_registration() {
+    async fn missing_account_folders_need_no_registration() {
         let temp = tempfile::tempdir().unwrap();
-        let game = temp.path().join("game");
-        account_files(&game, "ACCOUNT");
         let mut settings = Settings {
             api: "http://127.0.0.1:1".into(),
-            wow_dir: game.to_string_lossy().into(),
-            token: "manual-token".into(),
+            wow_dir: temp.path().join("empty").to_string_lossy().into(),
             ..Settings::default()
         };
-        let setup = prepare_uploads(&mut settings, &temp.path().join("settings.json"))
-            .await
-            .unwrap();
-        assert_eq!(setup.files.len(), 2);
-        assert!(setup.files.iter().all(|s| s.token == "manual-token"));
-        settings.token.clear();
-        settings.wow_dir = temp.path().join("empty").to_string_lossy().into();
         let setup = prepare_uploads(&mut settings, &temp.path().join("settings.json"))
             .await
             .unwrap();

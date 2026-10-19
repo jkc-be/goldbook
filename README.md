@@ -89,8 +89,7 @@ and the production routing, buffering and rate-limit middleware.
 Goldbook has no directly published port; requests go through Traefik.
 
 Use **http://localhost:8080/goldbook** in desktop Settings and for the web UI.
-Automatic upload setup is enabled locally; no manual token is needed. These
-HTTP routes are derived from the production labels and bind only to loopback.
+Uploading needs Battle.net sign-in, as described below. These HTTP routes are derived from the production labels and bind only to loopback.
 
 HTTPS remains available at **https://localhost:8443/goldbook/**. Its dedicated-host equivalent is
 **https://goldbook.localhost:8443/**. Local TLS uses Traefik's self-signed
@@ -99,7 +98,7 @@ and production upload credentials are not used locally. The proxy
 ports bind only to loopback. The existing desktop app settings are unchanged.
 
 Battle.net sign-in is off locally unless the ignored `server/.env.local`
-configures a client. Add `http://localhost:8080/goldbook/api/auth/battlenet/callback`
+configures a client, and without it the app cannot upload to the local stack. Add `http://localhost:8080/goldbook/api/auth/battlenet/callback`
 as a redirect URL of the client in the Battle.net developer portal, then
 create the file:
 
@@ -109,8 +108,9 @@ BNET_CLIENT_SECRET=<client secret>
 GOLDBOOK_PUBLIC_URL=http://localhost:8080/goldbook
 ```
 
-`make dev` refuses any other setting in it, so it never loads upload tokens.
-Then, as on the server, uploads need **Sign in with Battle.net** in the app.
+`make dev` refuses any other setting in it, so a copied production `.env`
+loads nothing else. Then, as on the server, click **Sign in with Battle.net**
+in the app to start uploading.
 Delete the file and run `make dev` again to turn it off.
 
 Data persists in ignored `data/dev/`. For real market data, copy an existing
@@ -121,14 +121,17 @@ python3 scripts/dev.py up --database ~/Downloads/goldbook.sqlite
 ```
 
 This uses SQLite's backup API with the source opened read-only and refuses to
-replace an existing local database. No production `.env` or upload credentials
-are loaded. The local upload token is `goldbook-local-development`.
+replace an existing local database. No production `.env` is loaded.
 
 Web files are mounted read-only from the checkout, so refresh the browser after
 an edit. Run `make dev` again to rebuild and restart after Rust changes.
 `make dev-check` verifies both host layouts, HTTPS, authentication and upload
-buffering. It creates disposable upload identities to test automatic setup,
-but adds no market or account snapshots. `make dev-logs` follows container logs;
+buffering. It checks that upload setup refuses a request without Battle.net
+sign-in, and adds nothing to the local database. With Battle.net configured,
+`python3 scripts/dev.py check --signed-in` also registers and uploads through
+every route as a throwaway Battle.net player. It writes that player into the
+local database and removes it, with what it registered, afterwards. The Check
+workflow runs the stack this way, with a test Battle.net client. `make dev-logs` follows container logs;
 `make dev-down` stops the stack and keeps local data. The network and Compose
 project are separate from production. The container uses your local UID/GID
 so it can write the development bind mount.
@@ -189,13 +192,20 @@ list (Esc, AddOns) under **Auctions**, and under Options, AddOns.
 
 ### 3. Start the API and the web UI
 
+Uploads need Battle.net sign-in. Register a client in the Battle.net developer
+portal with the redirect URL
+`http://localhost:8787/api/auth/battlenet/callback`, then start the server with
+it:
+
 ```sh
-UPLOAD_TOKEN=dev-token,friend-token cargo run -p goldbook-server
+BNET_CLIENT_ID=<client ID> BNET_CLIENT_SECRET=<client secret> \
+GOLDBOOK_PUBLIC_URL=http://localhost:8787 cargo run -p goldbook-server
 ```
 
-The server creates `data/goldbook.sqlite` on its first start and accepts
-uploads with the token `dev-token`. Leave it running and open
-<http://localhost:8787>. It says that no scans have been uploaded yet.
+The server creates `data/goldbook.sqlite` on its first start. Leave it running
+and open <http://localhost:8787>. It says that no scans have been uploaded yet.
+Without the three Battle.net settings the server still serves the website, but
+nothing can upload to it.
 
 ### 4. Sync
 
@@ -213,23 +223,22 @@ the status and settings, and **Log in** at the bottom of the rail signs in
 with Battle.net.
 
 Open **Settings** and confirm the game folder. Under **Advanced**, set the
-server to `http://localhost:8787` and enter `dev-token` as the upload token for
-this local server. Click **Save** to install the addon and start uploading.
-**Sync automatically** is on by default. It uploads after each game file write
+server to `http://localhost:8787`, and click **Save** to install the addon.
+Then click **Log in** at the bottom of the rail and **Sign in with Battle.net**.
+Once you are signed in, the app registers each WoW account with the server,
+saves a separate upload token for it, reuses it on later starts, and starts
+uploading. **Sync automatically** is on by default. It uploads after each game file write
 and checks again every 15 minutes, which you can change. With it off, nothing
 uploads until you click **Sync now**.
 The default server address is <https://app.jkc-be.com/goldbook>; **Use the
-default server** under **Advanced** puts it back. For automatic setup, leave
-**Upload token** empty and click **Save**. The server must have
-`SELF_REGISTRATION=true` enabled. The app saves a separate token for each
-WoW account and reuses it on later starts. If setup fails while offline,
+default server** under **Advanced** puts it back. If setup fails while offline,
 it retries every minute; **Sync now** retries immediately.
 Leave Goldbook running. Closing the window leaves it in the menu
 bar on macOS, or the tray on Windows and Linux. Quit from that menu, or from
 the Goldbook menu.
 
-Change the game folder from **Settings** in the window, and the server or
-upload token under its **Advanced** tab. **Sync now** checks for new scans
+Change the game folder from **Settings** in the window, and the server under
+its **Advanced** tab. **Sync now** checks for new scans
 immediately; the sync icon beside the theme switch at the foot of the rail
 does the same from any view. **Open website** signs
 you in to the website's Gold as your Battle.net player when the app is signed
@@ -256,17 +265,7 @@ World of Warcraft after changing the server address.
 After a scan, type `/reload` or log out. The game writes the scan to disk only
 then.
 
-The same upload from a terminal:
-
-```sh
-cargo run -p goldbook-sync -- --token dev-token
-```
-
-It prints `watching …/SavedVariables/Goldbook.lua` for each game account it
-finds and keeps running. If your game is somewhere else, add
-`--wow "/path/to/World of Warcraft"`.
-
-Either one uploads the game account's login code and each character's gold,
+The app uploads the game account's login code and each character's gold,
 bags and bank, each time they change. It sends only a hash of the key, never
 the key itself. The first upload of a login ID claims that ID for its key, and
 the server refuses uploads of the ID with any other key. Right after **New
@@ -276,9 +275,6 @@ The desktop app remembers uploads separately for each server in
 `~/.config/goldbook/desktop-<server hash>.json`. Switching servers sends the
 queued scans and account data to the new server automatically. Switching back
 keeps the previous server's history.
-
-The terminal agent uses `~/.config/goldbook/state.json`. When switching its
-server, pass `--state` with a new path or move the old file away.
 
 Scan identities include the scan's metadata and prices, so different scans
 in the same second stay separate. Retrying the same snapshot does not add
@@ -350,9 +346,9 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | The agent prints nothing after a scan | The game has not written the file yet. Type `/reload` |
 | `No World of Warcraft account folder found.` | Pass `--wow` with the game folder |
 | `cargo` is not found | Install Rust with rustup and open a new terminal |
-| `upload of … failed: 401 {"error":"invalid upload token"}` | `--token` differs from the server's token: `dev-token` for `UPLOAD_TOKEN=dev-token,friend-token cargo run -p goldbook-server`, `UPLOAD_TOKEN` in `/opt/goldbook/.env` on your server |
-| `upload of … failed: 503 {"error":"the upload token is not configured"}` | The server was started without `UPLOAD_TOKEN`. Start it with `UPLOAD_TOKEN=dev-token,friend-token cargo run -p goldbook-server` |
-| `upload of … failed: …` | The server is not running, or not at the `--api` address. The agent retries every 15 seconds |
+| `upload of … failed: 401 {"error":"Battle.net sign-in required"}` | The upload token was registered before the server needed Battle.net sign-in. Click **Log in** in the app and **Sign in with Battle.net** |
+| `upload of … failed: 401 {"error":"invalid upload token"}` | The server does not know the token, or it was revoked. Sign in with Battle.net again in the app |
+| `upload of … failed: …` | The server is not running, or not at the server address in **Settings**. The app retries every 15 seconds |
 | `… gold[0] must be [time, copper]: …` | The addon, the sync agent and the server keep gold per hour since this version, and one of them is older. Deploy the server again first, then restart the agent, then install the addon again and `/reload` |
 | `skipped <realm>|<faction>|<time>: …` | That one scan is damaged in the file. The others still upload |
 | `… state.json is unreadable, starting again from an empty one` | The agent recovered by itself. It uploads everything again and the server ignores what it already has |
@@ -367,7 +363,7 @@ See [migration verification](docs/rust-migration.md) for the full procedure.
 | Scans the agent has sent | `~/.config/goldbook/state.json` |
 | Scans the desktop app has sent | `~/.config/goldbook/desktop-<server hash>.json` |
 | Local database | `data/goldbook.sqlite` |
-| Server code, database and upload token on your server | `/opt/goldbook/app`, `/opt/goldbook/data`, `/opt/goldbook/.env` |
+| Server code, database and settings on your server | `/opt/goldbook/app`, `/opt/goldbook/data`, `/opt/goldbook/.env` |
 
 ### Reset a local install
 
@@ -772,8 +768,8 @@ are not rolled back, then runs the deploy above for `fedora_ovh`. Set
 changes, or a `main` that differs from `origin/main`, because the deploy ships
 the files as they are in your checkout; `FORCE=1` skips that check.
 
-The first deploy writes `/opt/goldbook/.env` with a random upload token. To
-read it:
+The first deploy writes `/opt/goldbook/.env` with the address and the data
+folder. To read it:
 
 ```sh
 ssh <ssh-host> cat /opt/goldbook/.env
@@ -785,17 +781,12 @@ internet. To change the address or the port, set `GOLDBOOK_BIND` or
 `GOLDBOOK_PORT` in `/opt/goldbook/.env` and deploy again. To reach it from the
 internet, see [Make it public](#make-it-public).
 
-Then run the agent against it, with the address the deploy printed:
+Uploading needs Battle.net sign-in, so configure it as in
+[Battle.net sign-in](#battlenet-sign-in). Then set the address the deploy
+printed as the server in the app's **Settings**, and sign in with Battle.net.
 
-```sh
-export GOLDBOOK_TOKEN=$(ssh <ssh-host> "sed -n 's/^UPLOAD_TOKEN=//p' /opt/goldbook/.env | cut -d, -f1")
-cargo run -p goldbook-sync -- --api <address>
-```
-
-`GOLDBOOK_API` in the environment works too. `--token` also works, but puts
-the token in your shell history.
-
-Reading prices needs no token. Uploading needs a token.
+Reading prices needs no sign-in. Uploading needs the token the app registers
+after Battle.net sign-in.
 
 The signed-in views of the web page ask for the ID and key that `/gb web`
 shows in game. The server stores only a hash of the key. A login lasts 30 days.
@@ -870,7 +861,7 @@ be told apart from the others, and the server limits their wrong logins per ID
 only, at 200 in 15 minutes.
 
 Deploy again. The deploy then prints `Goldbook: https://gold.example.com`. Use
-that address for `--api`.
+that address as the server in the app's **Settings**.
 
 Traefik limits each visitor to 20 requests a second on average, with bursts of
 up to 60. It counts an IPv6 visitor per /64, as the server's login limit does.
@@ -880,21 +871,17 @@ year.
 
 ### Let a friend upload
 
-For verified player identities, enable Battle.net sign-in as described below.
-Without it, fingerprints remain client claims that can be spoofed.
+Uploads need Battle.net sign-in, so enable it as described below. Your friend
+installs the desktop app, chooses their World of Warcraft folder and your
+server's address in **Settings**, and clicks **Save**. Then they click **Log
+in** and **Sign in with Battle.net**. The app registers each of their WoW
+accounts and starts syncing. Their scans go into the same price history as
+yours. On the website they sign in with Battle.net, or with the ID and key
+from their own `/gb web`, and see only their own characters.
 
-For automatic desktop setup, set `SELF_REGISTRATION=true` in
-`/opt/goldbook/.env` and deploy the server before publishing the client.
-Update the remote Compose file too: Actions deployments reuse the Compose
-files on the host. This setting allows anyone to register for upload access.
+Anyone with a Battle.net account can register for upload access.
 Registration allows 20 attempts per source address every 15 minutes, grouping
 IPv6 addresses by /64. Keep the public proxy rate limits enabled.
-
-Users choose their game folder and click **Save** with **Upload token** empty.
-The app registers each WoW account, saves its private token, and starts syncing.
-Updating an installation that saved `dev-token` for the official server also
-registers it automatically. Custom tokens are preserved. Revoked account
-tokens are not replaced automatically.
 
 The account fingerprint is SHA-256 of `goldbook:wow-account:v1:` followed by
 the account-folder identifier in ASCII uppercase. The identifier comes from
@@ -917,46 +904,13 @@ python3 /opt/goldbook/app/scripts/upload-access.py --database /opt/goldbook/data
 Copy this script to the host if Actions deployed only the container image.
 Blocking takes effect for all tokens belonging to the fingerprint and rejects
 new registrations. Other accounts remain active. After unblocking an account
-that never obtained a token, click **Sync now** to retry setup. Administrator
-tokens in `UPLOAD_TOKEN` are exempt from fingerprint blocks.
+that never obtained a token, click **Sync now** to retry setup.
 
 To revoke just one credential, set its `revoked_at` to the current Unix
-timestamp. Disabling `SELF_REGISTRATION` stops new registrations; existing
-account tokens keep working unless revoked or their fingerprint is blocked.
-Registration grants upload access only. Character
-pages still require the addon's web login, and existing account ownership
-checks still apply.
-
-For a private server with registration disabled, provision tokens manually.
-Give each friend who uploads a token of their own, so that you can revoke one
-without the others. Make one:
-
-```sh
-openssl rand -hex 32
-```
-
-Add it to `UPLOAD_TOKEN` in `/opt/goldbook/.env`, after a comma, and deploy
-again:
-
-```sh
-UPLOAD_TOKEN=<your token>,<friend's token>
-```
-
-The server accepts any token in the list. Keep your own token first, because
-the `export GOLDBOOK_TOKEN` command above takes the first one. To revoke a
-token, remove it from the line and deploy again.
-
-Your friend can use the desktop installer, or, with access to this private
-repository, build it with Rust and the Tauri prerequisites. To build, run `npm ci` and `npm run desktop`,
-then open **Settings** and choose
-their World of Warcraft folder, your server's address, and their upload token.
-**Save** installs the addon and starts uploading.
-
-From a terminal, the same step is `cargo run -p goldbook-sync -- --api https://gold.example.com --token <their token>`.
-Setting `GOLDBOOK_TOKEN` instead of `--token` keeps the token out of their
-shell history. Their scans go into the same price history as yours. On the
-web page they log in with the ID and key from their own `/gb web`, and see
-only their own characters.
+timestamp. Removing the Battle.net settings stops new registrations; existing
+tokens keep working unless revoked, or their fingerprint or player is blocked.
+Registration grants upload access only. Character pages still need a website
+sign-in, and existing account ownership checks still apply.
 
 ### Battle.net sign-in
 
@@ -971,7 +925,6 @@ Configure all three values in the server's private `/opt/goldbook/.env`:
 BNET_CLIENT_ID=<client ID>
 BNET_CLIENT_SECRET=<client secret>
 GOLDBOOK_PUBLIC_URL=https://app.jkc-be.com/goldbook
-SELF_REGISTRATION=true
 ```
 
 Keep the client secret on the server. The desktop app receives a Goldbook
@@ -1003,8 +956,7 @@ character. Each account upload from a linked fingerprint records the player
 against the uploaded ID, and the website's **Sign in with Battle.net** shows
 the player those IDs and the IDs linked with them, beside the addon's ID and
 key login. Website sign-in uses the same redirect URL, so the portal needs no
-change. Manual administrator tokens remain exempt from the self-service login
-gate, and their uploads record no player.
+change.
 
 Fingerprint listings include `player_hash` for the linked Battle.net identity.
 To manage player blocks on the server:
@@ -1017,9 +969,8 @@ python3 /opt/goldbook/app/scripts/upload-access.py --database /opt/goldbook/data
 
 A player block rejects uploads from all linked fingerprints and new enrollment
 or token requests for the same verified player. It also remains effective if
-the client changes its claimed fingerprint. Disabling OAuth configuration
-restores anonymous enrollment, so retain it while relying on verified-player
-blocks. Block checks for already linked identities remain effective.
+the client changes its claimed fingerprint. Block checks for already linked
+identities remain effective without the Battle.net settings.
 
 ## Develop
 
@@ -1059,9 +1010,14 @@ read `rust-toolchain.toml`. When upgrading Rust, update that pin, the workspace
 minimum, and the builder image in `server/Dockerfile` together. Commit any
 dependency resolution changes in the shared `Cargo.lock`.
 
-The CLI supports `--file`, `--wow`, `--api`, `--token`, `--state`, and `--once`.
-Run `cargo run -p goldbook-sync -- --help` for details. It reads `GOLDBOOK_API`
-and `GOLDBOOK_TOKEN` when the corresponding option is absent.
+The terminal sync, `goldbook-sync`, is a development tool. The verification
+scripts run it against disposable servers, with upload tokens they register
+there. It supports `--file`, `--wow`, `--api`, `--token`, `--state`, and
+`--once`, and reads `GOLDBOOK_API` and `GOLDBOOK_TOKEN` when the corresponding
+option is absent. Run `cargo run -p goldbook-sync -- --help` for details. It
+remembers uploads in `~/.config/goldbook/state.json`; pass `--state` with
+another path when switching servers. `goldbook-sync install` installs the
+addon, as `make install-addon` does.
 
 `npm run desktop:pack` writes installers under `target/release/bundle`. Build
 on the target operating system. The macOS build is ad-hoc signed, not
@@ -1244,13 +1200,11 @@ stock at its observation time. Use repeated searches to compare order books.
 `npm run preview` draws the simulated addon views as HTML and PNG. It needs
 `google-chrome` and ImageMagick's `magick`.
 
-The server reads `HOST`, `PORT`, `DATABASE`, `UPLOAD_TOKEN`, `SELF_REGISTRATION`,
-and `TRUSTED_PROXY`. Optional Battle.net sign-in reads `BNET_CLIENT_ID`,
-`BNET_CLIENT_SECRET`, and `GOLDBOOK_PUBLIC_URL`. `SELF_REGISTRATION` defaults to
-`false`.
-Its defaults are `127.0.0.1`, `8787`, and `data/goldbook.sqlite`; there is no
-default upload token. On PowerShell, set `$env:UPLOAD_TOKEN = "dev-token"`
-before `cargo run -p goldbook-server`. The server embeds the web assets.
+The server reads `HOST`, `PORT`, `DATABASE`, and `TRUSTED_PROXY`. Battle.net
+sign-in reads `BNET_CLIENT_ID`, `BNET_CLIENT_SECRET`, and `GOLDBOOK_PUBLIC_URL`;
+without them the server registers no upload tokens, so nothing new can upload.
+Its defaults are `127.0.0.1`, `8787`, and `data/goldbook.sqlite`. The server
+embeds the web assets.
 Set `WEB_DIR` to a folder to override them during development.
 
 The server applies `server/migrations` once, in name order, on startup. The
@@ -1329,9 +1283,12 @@ through the **Mirror addon** workflow, which requires approval of the
 The mirror records its source commit in `upstream.json` and publishes a
 `Goldbook-<version>.zip` release asset with `Goldbook/Goldbook.toc` at its root.
 The mirror's release workflow uploads that exact ZIP to CurseForge project
-`1747971` after approval of its protected `curseforge` environment. The API
-token is an environment secret, and a release receipt prevents repeat uploads
-of an already recorded ZIP. See [addon publishing](addon/README.md#publish-to-curseforge).
+`1747971`. After it succeeds, a separate workflow publishes to WoWInterface
+when `WOWINTERFACE_PROJECT_ID` is set. WoWInterface approval or failure never
+blocks the release. Each destination has its own protected environment, API
+token and receipt to prevent repeat uploads of an already recorded ZIP. See
+[CurseForge publishing](addon/README.md#publish-to-curseforge) and
+[WoWInterface publishing](addon/README.md#publish-to-wowinterface).
 Use the release asset for manual installs. GitHub's automatic
 **Source code** archives contain an extra repository folder and cannot be
 uploaded as an addon. Build the same archive locally with:
