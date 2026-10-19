@@ -24,6 +24,9 @@ Core.lua
 Accounting.lua
 Tooltip.lua
 UI.lua
+AuctionHouse.lua
+AuctionRules.lua
+AuctionUI.lua
 Clicks.lua
 WebLogin.lua
 Minimap.lua

@@ -428,6 +428,8 @@ function Scanner.Start(mode)
   local refusal
   if Scanner.state ~= "idle" then
     refusal = "a scan is already running"
+  elseif (ns.AuctionHouse and ns.AuctionHouse.Busy()) or (ns.AuctionRules and ns.AuctionRules.running) then
+    refusal = "the auction panel is busy"
   elseif not Scanner.open then
     refusal = "open the auction house first"
   elseif definition.refuse then
