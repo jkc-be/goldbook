@@ -1283,11 +1283,15 @@ through the **Mirror addon** workflow, which requires approval of the
 The mirror records its source commit in `upstream.json` and publishes a
 `Goldbook-<version>.zip` release asset with `Goldbook/Goldbook.toc` at its root.
 The mirror's release workflow uploads that exact ZIP to CurseForge project
-`1747971` after approval of its protected `curseforge` environment. The API
-token is an environment secret, and a release receipt prevents repeat uploads
-of an already recorded ZIP. Each release also carries a `release.json` that
-tells WowUp the ZIP is for WoW Forever. Wago Addons takes each release through
-a GitHub webhook. See [addon publishing](addon/README.md#publish-to-curseforge).
+`1747971`. After it succeeds, a separate workflow publishes to WoWInterface
+when `WOWINTERFACE_PROJECT_ID` is set. WoWInterface approval or failure never
+blocks the release. Each destination has its own protected environment, API
+token and receipt to prevent repeat uploads of an already recorded ZIP. Each
+release also carries a `release.json` that tells WowUp the ZIP is for WoW
+Forever, and Wago Addons takes each release through a GitHub webhook. See
+[CurseForge publishing](addon/README.md#publish-to-curseforge),
+[WoWInterface publishing](addon/README.md#publish-to-wowinterface) and
+[Wago publishing](addon/README.md#publish-to-wago).
 Use the release asset for manual installs. GitHub's automatic
 **Source code** archives contain an extra repository folder and cannot be
 uploaded as an addon. Build the same archive locally with:

@@ -8,6 +8,7 @@ ignore:
   - package.py
   - upload-curseforge.py
   - upload-wago.py
+  - upload-wowinterface.py
   - tests
   - upstream.json
   - dist

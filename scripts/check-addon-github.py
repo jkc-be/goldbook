@@ -42,7 +42,7 @@ def main():
     assert api('actions/permissions/fork-pr-contributor-approval')['approval_policy'] == 'all_external_contributors'
     assert api('actions/secrets')['total_count'] == 0, 'Move repository secrets into protected environments'
     variables = {variable['name']: variable['value'] for variable in api('actions/variables')['variables']}
-    uploads = {'curseforge': 'CURSEFORGE_API_TOKEN'}
+    uploads = {'curseforge': 'CURSEFORGE_API_TOKEN', 'wowinterface': 'WOWINTERFACE_API_TOKEN'}
     if variables.get('WAGO_UPLOAD') == 'true':
         uploads['wago'] = 'WAGO_API_TOKEN'
     for name, token in uploads.items():

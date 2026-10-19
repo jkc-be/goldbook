@@ -189,6 +189,12 @@ days.
    **Package addon release** run in `jkc-be/goldbook-addon`.
 6. The `tag` job creates `v<version>` on the built commit.
 
+After **Package addon release** succeeds, the separate **Publish to
+WoWInterface** workflow offers its `wowinterface` approval. It is secondary to
+CurseForge: promotion and tagging never wait for its approval, upload or
+moderation, and its failure does not fail the release. Inspect and retry that
+workflow separately if needed.
+
 The jobs, in order:
 
 | Job | Does |

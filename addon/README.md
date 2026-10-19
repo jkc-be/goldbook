@@ -147,6 +147,40 @@ It puts `Goldbook.toc` directly in `Goldbook/` and excludes development files.
 The workflow uploads the existing tested ZIP, so no packaging webhook is
 needed. Enabling both publishing methods can produce duplicate uploads.
 
+## Publish to WoWInterface
+
+[Goldbook on WoWInterface](https://www.wowinterface.com/downloads/info27272-Goldbook.html)
+is project `27272`; its initial version was uploaded through the website. The
+addon mirror's repository variable `WOWINTERFACE_PROJECT_ID` selects this
+project. Without that variable the workflow stays disabled.
+
+The separate **Publish to WoWInterface** workflow starts after **Package addon
+release** succeeds, including its CurseForge upload or verified receipt. It
+has its own `wowinterface` approval and concurrency group. Approval delays,
+failed uploads and moderation cannot block promotion, tagging or the next
+release. Retry this workflow separately after checking the project page.
+
+It checks out the successful run's exact commit and downloads its GitHub
+release ZIP. Before uploading, it compares the ZIP with that commit's package
+and verifies its CurseForge receipt. It publishes those same bytes through
+the [WoWInterface update API](https://www.wowinterface.com/forums/showthread.php?t=51835).
+Store `WOWINTERFACE_API_TOKEN` only in the protected `wowinterface` environment,
+restricted to `main`, with approval by `jkc-be` and administrator bypass off.
+The token is passed only to the upload step, in an HTTPS header. Redirects
+are refused and response bodies and network error details are withheld.
+
+The uploader updates the file, version and changelog. It preserves the title,
+description, images and game compatibility selected on the project page.
+WoWInterface currently has no compatibility option for the 1.60 Forever
+client, so the description states the requirement and the uploader does not
+substitute a different game version.
+
+An accepted upload adds `wowinterface.json` to the GitHub release with the
+project ID, version and ZIP's SHA-256. A matching receipt skips repeat uploads
+independently of CurseForge. Acceptance can still require moderator review.
+If the upload or receipt step fails, inspect the WoWInterface entry before
+retrying. A lost response can leave the file submitted without a receipt.
+
 ## Publish to Wago
 
 [Goldbook on Wago Addons](https://addons.wago.io/addons/goldbook), project
@@ -162,9 +196,9 @@ switch from the webhook to the job, delete the webhook first.
 
 Wago Addons uploads are off until the repository variable `WAGO_UPLOAD` is
 `true`. Until then the `wago` job is skipped and changes nothing. When it is
-on, approve the `wago` job to upload the same tested ZIP to Wago. The supported patch is
-the Forever patch Wago lists for the TOC interface, or the newest one before
-it. Versions containing `alpha` or `beta` use that stability.
+on, approve the `wago` job to upload the same tested ZIP to Wago. The
+supported patch is the Forever patch Wago lists for the TOC interface, or the
+newest one before it. Versions containing `alpha` or `beta` use that stability.
 
 To switch it on, once:
 
