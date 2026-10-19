@@ -268,10 +268,6 @@ input:disabled {
   box-shadow: inset -1px 0 0 var(--edge);
 }
 
-.rail .titlebar {
-  box-shadow: inset -1px 0 0 var(--edge);
-}
-
 .views {
   display: flex;
   flex-direction: column;
@@ -318,10 +314,15 @@ input:disabled {
   outline-offset: -2px;
 }
 
+/* Sync now, above the foot's line, in reach over every view. */
+.rail-sync {
+  margin-top: auto;
+  padding: 0 14px 10px;
+}
+
 .rail-foot {
   display: grid;
   gap: 10px;
-  margin-top: auto;
   padding: 12px 14px 13px;
   border-top: 1px solid var(--line);
   color: var(--muted);
@@ -332,10 +333,8 @@ input:disabled {
   text-align: center;
 }
 
-/* Sync now stays in reach over every view, small at the rail's foot. */
-.rail-foot .sync-now {
+.rail-sync .sync-now {
   display: inline-flex;
-  justify-self: start;
   align-items: center;
   gap: 6px;
   min-height: 22px;
