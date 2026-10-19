@@ -2,6 +2,7 @@
 """Upload the tested release ZIP to Goldbook's WoWInterface project."""
 import argparse
 import hashlib
+from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -30,11 +31,12 @@ def upload(token, body, content_type):
     })
     try:
         with build_opener(NoRedirect).open(request, timeout=60) as response:
-            if response.status != 202:
+            # The API documents 202, but successful uploads have been reported as 200.
+            if response.status not in (200, 202):
                 raise UploadError('WoWInterface did not accept the update. Check the project before retrying.')
     except HTTPError as error:
         raise UploadError(f'WoWInterface returned HTTP {error.code}. Response details are withheld.') from None
-    except (URLError, TimeoutError, OSError, ValueError):
+    except (URLError, TimeoutError, OSError, ValueError, HTTPException):
         raise UploadError('No valid WoWInterface response. Check the project before retrying an upload.') from None
 
 

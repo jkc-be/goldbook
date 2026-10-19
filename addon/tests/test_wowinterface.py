@@ -2,6 +2,7 @@
 from email.parser import BytesParser
 from email.policy import default
 import hashlib
+from http.client import BadStatusLine
 import importlib.util
 import io
 import json
@@ -51,6 +52,12 @@ class WoWInterfaceTests(unittest.TestCase):
             UPLOAD.publish(self.archive, 'Retry.', self.receipt, '', 12345)
             opener.assert_not_called()
 
+    def test_a_200_response_also_records_an_accepted_upload(self):
+        with patch.object(UPLOAD, 'build_opener') as opener:
+            opener.return_value.open.return_value.__enter__.return_value.status = 200
+            UPLOAD.publish(self.archive, '', self.receipt, 'synthetic-token', 12345)
+        self.assertEqual(json.loads(self.receipt.read_text())['status'], 'accepted')
+
     def test_invalid_receipts_never_suppress_an_upload_silently(self):
         receipt = {'project_id': 12345, 'version': '1.2.3', 'status': 'accepted',
                    'sha256': hashlib.sha256(self.archive.read_bytes()).hexdigest()}
@@ -79,7 +86,7 @@ class WoWInterfaceTests(unittest.TestCase):
             UPLOAD.publish(renamed, '', self.receipt, 'synthetic-token', 12345)
 
     def test_failed_or_ambiguous_responses_never_create_a_receipt_or_retry(self):
-        for status in [200, 204, 302]:
+        for status in [201, 204, 302]:
             with self.subTest(status=status), patch.object(UPLOAD, 'build_opener') as opener:
                 opener.return_value.open.return_value.__enter__.return_value.status = status
                 with self.assertRaises(UPLOAD.UploadError):
@@ -88,7 +95,7 @@ class WoWInterfaceTests(unittest.TestCase):
                 opener.return_value.open.assert_called_once()
         failures = [
             HTTPError('https://example.invalid/synthetic-token', 401, 'synthetic-token', {}, io.BytesIO(b'synthetic-token')),
-            URLError('synthetic-token'), TimeoutError('synthetic-token'),
+            URLError('synthetic-token'), TimeoutError('synthetic-token'), BadStatusLine('00000 synthetic-token'),
         ]
         for failure in failures:
             with self.subTest(failure=type(failure)), patch.object(UPLOAD, 'build_opener') as opener:
