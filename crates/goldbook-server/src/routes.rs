@@ -270,6 +270,11 @@ fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
                     *auctions as i64
                 ])?;
             }
+            // A scan uploaded late does not replace a newer price.
+            tx.execute(
+                "INSERT INTO latest_prices (realm,faction,item_key,scan_id) SELECT ?2,?3,item_key,scan_id FROM prices WHERE scan_id=?1 ON CONFLICT(realm,faction,item_key) DO UPDATE SET scan_id=excluded.scan_id WHERE (SELECT scanned_at,id FROM scans WHERE id=excluded.scan_id) > (SELECT scanned_at,id FROM scans WHERE id=latest_prices.scan_id)",
+                params![id, scan.realm, scan.faction],
+            )?;
         }
     }
     tx.commit()?;
@@ -452,9 +457,11 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
     let order = format!("ORDER BY {sort} {order} NULLS LAST,p.item_key");
     let page = format!("{order} LIMIT ?2 OFFSET ?3");
     let columns = format!(
-        "p.item_key AS itemKey,i.name,i.quality,p.min_buyout AS minBuyout,{MARKET} AS marketValue,p.quantity,p.num_auctions AS numAuctions"
+        "p.item_key AS itemKey,i.name,i.quality,p.min_buyout AS minBuyout,{MARKET} AS marketValue,p.quantity,p.num_auctions AS numAuctions,p.scanned_at AS scannedAt"
     );
-    let bindings: [&dyn rusqlite::ToSql; 7] = [
+    // Every item scanned on the realm and faction, at its newest price.
+    let latest = "SELECT p.*,ps.scanned_at FROM latest_prices l JOIN prices p ON p.scan_id=l.scan_id AND p.item_key=l.item_key JOIN scans ps ON ps.id=l.scan_id";
+    let bindings: [&dyn rusqlite::ToSql; 9] = [
         &id,
         &limit,
         &offset,
@@ -462,16 +469,25 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         &borrowed,
         &filter.selected,
         &filter.quality,
+        &realm,
+        &faction,
     ];
     if filter.is_empty() {
         let sql = format!(
-            "SELECT {columns} FROM (SELECT p.* FROM prices p {sort_join} WHERE p.scan_id=?1 {page}) p {NAMED} {MARKET_JOIN} {order}"
+            "SELECT {columns} FROM ({latest} {sort_join} WHERE l.realm=?8 AND l.faction=?9 {page}) p {NAMED} {MARKET_JOIN} {order}"
         );
+        let total: i64 = db.query_row(
+            "SELECT COUNT(*) FROM latest_prices WHERE realm=?1 AND faction=?2",
+            params![realm, faction],
+            |row| row.get(0),
+        )?;
         return Ok(Reply::json(
-            json!({"scan":scan,"marketScan":full,"total":scan["itemCount"],"items":db::query(db,&sql,&bindings[..5])?}),
+            json!({"scan":scan,"marketScan":full,"total":total,"items":db::query(db,&sql,&bindings)?}),
         ));
     }
-    let matching = format!("FROM prices p {NAMED} {MARKET_JOIN} WHERE p.scan_id=?1 AND {MATCHING}");
+    let matching = format!(
+        "FROM ({latest} WHERE l.realm=?8 AND l.faction=?9) p {NAMED} {MARKET_JOIN} WHERE {MATCHING}"
+    );
     let mut items = db::query(
         db,
         &format!("SELECT {columns},COUNT(*) OVER() AS total {matching} {page}"),

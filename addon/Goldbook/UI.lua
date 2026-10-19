@@ -623,7 +623,7 @@ local VIEWS = {
         tint("muted", Codec.Age(time() - row.seen))
     end,
     head = function(rows)
-      return { sub = plural(#rows, "item") .. " on " .. ns.RealmKey() }
+      return { sub = plural(#rows, "item") .. " scanned on " .. ns.RealmKey() }
     end,
     status = function(rows, visible)
       return joinedStatus(scrollRange(rows, visible), "Click an item to search the auction house", itemHint())
