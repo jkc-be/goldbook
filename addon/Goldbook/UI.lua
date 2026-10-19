@@ -250,8 +250,8 @@ end
 -- client leaves out lines much shorter than 4, so curves are a few long
 -- strokes rather than many short ones.
 local GLYPHS = {
-  tag = { { 2, 8, 8, 2, 14, 2, 14, 8, 8, 14, 2, 8 } },
-  bag = { { 3, 5, 13, 5, 12, 14, 4, 14, 3, 5 }, { 4.5, 5, 5.5, 0.8, 10.5, 0.8, 11.5, 5 } },
+  chart = { { 2, 2, 2, 14, 14, 14 }, { 4, 11, 7, 6, 10, 9, 14, 3 } },
+  chest = { { 2, 7, 14, 7, 14, 14, 2, 14, 2, 7 }, { 2, 7, 4, 2.5, 12, 2.5, 14, 7 }, { 8, 7, 8, 11 } },
   scales = { { 8, 2, 8, 14 }, { 3, 5, 13, 5 }, { 3, 5, 1, 10, 5, 10, 3, 5 }, { 13, 5, 11, 10, 15, 10, 13, 5 } },
 }
 
@@ -948,8 +948,8 @@ local VIEWS = {
 -- The rail's hubs, top to bottom, each with the views its tabs open, in
 -- order. Each view listed gets its `hub`; the item view has none.
 local HUBS = {
-  { key = "market", label = "Market", icon = "tag", views = { "prices", "deals", "movers" } },
-  { key = "inventory", label = "Inventory", icon = "bag", views = { "bags", "mail" } },
+  { key = "market", label = "Market", icon = "chart", views = { "prices", "deals", "movers" } },
+  { key = "inventory", label = "Inventory", icon = "chest", views = { "bags", "mail" } },
   { key = "ledger", label = "Ledger", icon = "scales", views = { "gold", "accounting", "items" } },
 }
 for _, hub in ipairs(HUBS) do

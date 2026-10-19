@@ -2498,7 +2498,7 @@ const MARKET = ["realm-picker", "market-tools"];
 const NAV = [
   {
     hub: "Market",
-    icon: ["M2 8L8 2H14V8L8 14Z"],
+    icon: ["M2 2V14H14", "M4 11L7 6L10 9L14 3"],
     tabs: [
       { route: "prices", tab: "Prices", shows: [...MARKET, "prices-view"], load: openPrices },
       { route: "deals", tab: "Deals", shows: [...MARKET, "min-profit", "deals-view"], load: () => loadList("deals") },
@@ -2507,7 +2507,7 @@ const NAV = [
   },
   {
     hub: "Inventory",
-    icon: ["M3 5H13L12 14H4Z", "M4.5 5L5.5 .8H10.5L11.5 5"],
+    icon: ["M2 7H14V14H2Z", "M2 7L4 2.5H12L14 7", "M8 7V11"],
     tabs: [{ route: "bags", tab: "Bags", signIn: true, shows: ["bags-view"], load: loadBags }],
   },
   {
