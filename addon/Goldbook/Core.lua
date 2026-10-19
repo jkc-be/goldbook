@@ -396,11 +396,17 @@ local function recordBank()
   ns.db.bank[characterKey()] = { at = time(), items = heldItems(BANK) }
 end
 
+-- Quitting the game empties the bags before PLAYER_LOGOUT, so they are
+-- followed while playing rather than read at logout.
+local function recordBags()
+  ns.db.bags[characterKey()] = ns.BagItems()
+end
+
 -- For the sync agent, rebuilt when the client is about to write the file.
--- The bank is priced here too, with the newest prices, not when it was read.
+-- The bags and bank are priced here, with the newest prices, not when they were read.
 local function saveCharacter()
   local identity, character, now, realmKey = loginIdentity or Scanner.Identity(), characterKey(), time(), ns.RealmKey()
-  local bank = ns.db.bank[character]
+  local bags, bank = ns.db.bags[character], ns.db.bank[character]
   ns.db.characters[character] = {
     name = identity.by,
     realm = identity.realm,
@@ -408,7 +414,7 @@ local function saveCharacter()
     class = select(2, UnitClass("player")),
     level = UnitLevel("player"),
     at = now,
-    bags = { at = now, rows = Advisor.Sell(ns.db, realmKey, ns.BagItems()) },
+    bags = bags and { at = now, rows = Advisor.Sell(ns.db, realmKey, bags) },
     bank = bank and { at = bank.at, rows = Advisor.Sell(ns.db, realmKey, bank.items) },
   }
 end
@@ -451,6 +457,8 @@ frame:SetScript("OnEvent", function(_, event, first, second)
     frame:RegisterEvent("MERCHANT_SHOW")
     frame:RegisterEvent("MERCHANT_UPDATE")
     frame:RegisterEvent("MERCHANT_CLOSED")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:RegisterEvent("BAG_UPDATE_DELAYED")
     recordGold()
     ns.Print(ns.VERSION .. " loaded. Type /gb for commands.")
   elseif event == "PLAYER_MONEY" then
@@ -471,6 +479,8 @@ frame:SetScript("OnEvent", function(_, event, first, second)
       ns.Print("Booked " .. plural(vendorSales, "vendor sale") .. ". Type /gb accounting.")
     end
     vendorSales = 0
+  elseif event == "PLAYER_ENTERING_WORLD" or event == "BAG_UPDATE_DELAYED" then
+    recordBags()
   elseif event == "AUCTION_HOUSE_SHOW" then
     autoScan()
   elseif event == "BANKFRAME_OPENED" then

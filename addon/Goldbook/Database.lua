@@ -28,6 +28,7 @@ local PARK_MILLER = 2147483647
 --   characters[character]      = { name, realm, faction, class, level, at, bags = { at, rows }, bank = { at, rows } }
 --                                  saved at logout for the sync agent, rows as Advisor.Sell gives them, no bank
 --                                  until the bank was seen open
+--   bags[character]            = { { key, count }, ... }, the unbound items in the bags as last seen in play
 --   bank[character]            = { at, items = { { key, count }, ... } }, the unbound items in the bank when last open
 --   trades[character][]        = { at, side, item, key, count, price, fee, party }, revenue and expenses,
 --                                  oldest first, see Trades
@@ -149,6 +150,7 @@ function Database.Init(saved)
   db.sellerScans = db.sellerScans or {}
   db.settings = db.settings or {}
   db.characters = db.characters or {}
+  db.bags = db.bags or {}
   db.bank = db.bank or {}
   db.trades = db.trades or {}
   db.accruing = db.accruing or {}
