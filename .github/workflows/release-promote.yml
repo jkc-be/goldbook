@@ -177,7 +177,7 @@ jobs:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
     needs: mirror
     runs-on: ubuntu-24.04
-    # Waits up to 120 minutes for the CurseForge approval in goldbook-addon.
+    # Waits up to 120 minutes for the publishing approvals in goldbook-addon.
     timeout-minutes: 130
     permissions:
       contents: read

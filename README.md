@@ -1325,9 +1325,11 @@ through the **Mirror addon** workflow, which requires approval of the
 The mirror records its source commit in `upstream.json` and publishes a
 `Goldbook-<version>.zip` release asset with `Goldbook/Goldbook.toc` at its root.
 The mirror's release workflow uploads that exact ZIP to CurseForge project
-`1747971` after approval of its protected `curseforge` environment. The API
-token is an environment secret, and a release receipt prevents repeat uploads
-of an already recorded ZIP. See [addon publishing](addon/README.md#publish-to-curseforge).
+`1747971` and, when `WOWINTERFACE_PROJECT_ID` is set, to WoWInterface. Each
+destination has its own protected environment approval, API token and release
+receipt to prevent repeat uploads of an already recorded ZIP. See
+[CurseForge publishing](addon/README.md#publish-to-curseforge) and
+[WoWInterface publishing](addon/README.md#publish-to-wowinterface).
 Use the release asset for manual installs. GitHub's automatic
 **Source code** archives contain an extra repository folder and cannot be
 uploaded as an addon. Build the same archive locally with:

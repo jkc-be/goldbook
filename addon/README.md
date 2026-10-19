@@ -139,6 +139,34 @@ It puts `Goldbook.toc` directly in `Goldbook/` and excludes development files.
 The workflow uploads the existing tested ZIP, so no packaging webhook is
 needed. Enabling both publishing methods can produce duplicate uploads.
 
+## Publish to WoWInterface
+
+Create the first Goldbook entry through WoWInterface's
+[upload form](https://www.wowinterface.com/downloads/upload-update.php), using
+the existing GitHub release ZIP. Set the addon mirror's repository variable
+`WOWINTERFACE_PROJECT_ID` to the numeric ID from its download page. Without
+that variable the WoWInterface job stays disabled.
+
+Later mirror releases offer a separate `wowinterface` approval in **Package
+addon release**. It uploads the same tested ZIP as GitHub and CurseForge using
+the [WoWInterface update API](https://www.wowinterface.com/forums/showthread.php?t=51835).
+Store `WOWINTERFACE_API_TOKEN` only in the protected `wowinterface` environment,
+restricted to `main`, with approval by `jkc-be` and administrator bypass off.
+The token is passed only to the upload step, in an HTTPS header. Redirects
+are refused and response bodies and network error details are withheld.
+
+The uploader updates the file, version and changelog. It preserves the title,
+description, images and game compatibility selected on the project page.
+WoWInterface currently has no compatibility option for the 1.60 Forever
+client, so the description states the requirement and the uploader does not
+substitute a different game version.
+
+An accepted upload adds `wowinterface.json` to the GitHub release with the
+project ID, version and ZIP's SHA-256. A matching receipt skips repeat uploads
+independently of CurseForge. Acceptance can still require moderator review.
+If the upload or receipt step fails, inspect the WoWInterface entry before
+retrying. A lost response can leave the file submitted without a receipt.
+
 ## Test
 
 The tests run the addon against a simulated client with

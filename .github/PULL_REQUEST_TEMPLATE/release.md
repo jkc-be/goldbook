@@ -31,6 +31,6 @@ Merging ships nothing. The maintainer releases the merge commit, as
 3. Answer `y` to promote. In **Release promote**, approve `production` for
    `server`, check https://app.jkc-be.com/goldbook, then approve `production`
    for `publish` and `addon-mirror` for the mirror.
-4. Approve `curseforge` in the **Package addon release** run in
-   `jkc-be/goldbook-addon`.
+4. Approve `curseforge` and, when enabled, `wowinterface` in the **Package addon
+   release** run in `jkc-be/goldbook-addon`.
 5. The `tag` job creates `v<version>`.
