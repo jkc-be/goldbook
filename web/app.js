@@ -1102,18 +1102,59 @@ function drawLastScan() {
 
 // The realms load on the first visit to a market view, so that a page opened
 // on another view neither waits for them nor shows their messages.
+// An item another view asked for, which Prices opens once it has its realms.
+let askedItem = null;
+
 async function openPrices() {
   if (await ensureRealms()) {
+    const asked = askedItem;
+    askedItem = null;
+    const realm = asked && realmOf(asked.place);
+    if (realm && realm !== state.realm) {
+      state.realm = realm;
+      $("realm").value = String(state.realms.indexOf(realm));
+      drawLastScan();
+    }
     await loadPrices();
+    if (asked) {
+      await loadHistory(asked.itemKey);
+    }
   }
 }
 
 const plural = (count, word) => `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
 
-// An item of Deals or Movers opens in Prices, where its history is.
-function openItem(itemKey) {
-  location.hash = "#prices";
+// The realm with scans that `place` names. A trade knows its realm but not
+// the faction, which settles it only when one faction has scans there.
+function realmOf(place) {
+  const there = place === null ? [] : (state.realms ?? []).filter(
+    (entry) => entry.realm === place.realm && (place.faction ?? entry.faction) === entry.faction,
+  );
+  return there.length === 1 ? there[0] : null;
+}
+
+// An item opens in Prices, where its history is: on the realm it was seen
+// on when that realm has scans, else on the realm chosen.
+function openItem(itemKey, place = null) {
+  if (location.hash !== "#prices") {
+    askedItem = { itemKey, place };
+    location.hash = "#prices";
+    return;
+  }
+  const realm = realmOf(place);
+  if (realm && realm !== state.realm) {
+    $("realm").value = String(state.realms.indexOf(realm));
+    $("realm").dispatchEvent(new Event("change"));
+  }
   run(() => loadHistory(itemKey));
+}
+
+// An item's name that opens its prices, as Deals and Movers do; plain text
+// when the item has no key to look up.
+function itemButton(name, qualityClass, itemKey, place) {
+  return itemKey
+    ? element("button", { className: qualityClass, textContent: name, title: "Show its prices", onclick: () => openItem(itemKey, place) })
+    : element("span", { className: qualityClass, textContent: name });
 }
 
 const itemColumn = {
@@ -1379,7 +1420,7 @@ const BAG_COLUMNS = [
     value: (row) => row.name ?? row.key,
     cell: (row) =>
       element("span", { className: `quality-${quality(row)}`, title: row.from?.join(" · ") ?? "" }, [
-        row.name ?? `Item ${row.key}`,
+        itemButton(row.name ?? `Item ${row.key}`, "", row.key, { realm: row.realm, faction: row.faction }),
         element("span", { className: "count", textContent: ` x${row.count.toLocaleString("en")}` }),
       ]),
   },
@@ -1621,7 +1662,7 @@ function drawMonth(list, trades) {
     line("Expenses", money(totals.expenses)),
     line("Net", signedMoney(totals.net)),
     line("Realized profit", totals.profit === null ? none() : signedMoney(totals.profit)),
-    line("Best sale", best ? element("span", { className: `quality-${QUALITIES[best.quality] ? best.quality : 1}`, textContent: best.item }) : none()),
+    line("Best sale", best ? itemButton(best.item, `quality-${QUALITIES[best.quality] ? best.quality : 1}`, best.itemKey, { realm: best.realm }) : none()),
   );
 }
 
@@ -1792,9 +1833,10 @@ function signedMoney(copper) {
 function tradedItems(trades) {
   const items = new Map();
   for (const trade of trades.filter(({ side }) => SIDES[side].goods)) {
-    const item = items.get(trade.item) ?? { name: trade.item, quality: null, itemKey: null, bought: 0, cost: 0, sold: 0, proceeds: 0, last: trade.at };
+    const item = items.get(trade.item) ?? { name: trade.item, quality: null, itemKey: null, realm: null, bought: 0, cost: 0, sold: 0, proceeds: 0, last: trade.at };
     item.quality ??= trade.quality;
     item.itemKey ??= trade.itemKey;
+    item.realm ??= trade.realm;
     item.last = Math.max(item.last, trade.at);
     if (SIDES[trade.side].revenue) {
       item.sold += trade.count;
@@ -1842,7 +1884,7 @@ const ITEM_COLUMNS = [
     label: "Item",
     className: "item",
     value: (item) => item.name,
-    cell: (item) => element("span", { className: `quality-${itemQuality(item.quality)}`, textContent: item.name }),
+    cell: (item) => itemButton(item.name, `quality-${itemQuality(item.quality)}`, item.itemKey, item.realm ? { realm: item.realm } : null),
   },
   { label: "Bought", className: "number", value: (item) => item.bought, cell: (item) => item.bought.toLocaleString("en") },
   { label: "Avg cost", className: "number average", value: (item) => item.averageCost, cell: (item) => optionalAverage(item.averageCost) },
@@ -1954,7 +1996,7 @@ $("items-character").onchange = itemsChanged(() => { state.character = $("items-
 function entryCell(trade) {
   const side = SIDES[trade.side];
   return element("span", { className: side.goods ? `quality-${itemQuality(trade.quality)}` : "" }, [
-    trade.item,
+    side.goods ? itemButton(trade.item, "", trade.itemKey, { realm: trade.realm }) : trade.item,
     ...(side.goods ? [element("span", { className: "count", textContent: ` x${trade.count.toLocaleString("en")}` })] : []),
     ...(side.party && trade.party ? [element("span", { className: "count", textContent: ` · ${side.party} ${trade.party}` })] : []),
   ]);
