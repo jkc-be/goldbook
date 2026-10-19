@@ -685,14 +685,7 @@ fn check_player(db: &Connection, identity: &str) -> Result<()> {
     }
     Ok(())
 }
-pub(super) fn enrollment_identity(
-    input: &Input,
-    app: &App,
-    db: &Connection,
-) -> Result<Option<String>> {
-    if app.config.battlenet.is_none() {
-        return Ok(None);
-    }
+pub(super) fn enrollment_identity(input: &Input, db: &Connection) -> Result<String> {
     let token = header(&input.headers, "authorization")
         .strip_prefix("Bearer ")
         .unwrap_or_default();
@@ -705,20 +698,17 @@ pub(super) fn enrollment_identity(
         .optional()?;
     let identity = identity.ok_or_else(|| failure(401, "Battle.net sign-in required"))?;
     check_player(db, &identity)?;
-    Ok(Some(identity))
+    Ok(identity)
 }
-pub(super) fn authorize_upload(db: &Connection, fingerprint: &str, app: &App) -> Result<()> {
+// Only a token registered after Battle.net sign-in uploads.
+pub(super) fn authorize_upload(db: &Connection, fingerprint: &str) -> Result<()> {
     let identity: Option<String> = db.query_row(
         "SELECT battlenet_identity FROM upload_identities WHERE fingerprint=?1",
         [fingerprint],
         |row| row.get(0),
     )?;
-    if let Some(identity) = identity {
-        check_player(db, &identity)?;
-    } else if app.config.battlenet.is_some() {
-        return Err(failure(401, "Battle.net sign-in required"));
-    }
-    Ok(())
+    let identity = identity.ok_or_else(|| failure(401, "Battle.net sign-in required"))?;
+    check_player(db, &identity)
 }
 
 #[cfg(test)]

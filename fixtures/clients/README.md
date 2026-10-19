@@ -18,15 +18,12 @@ deploys with it, so it needs no fixtures.
 
 ## Request files
 
-A folder holds one JSON file per request, replayed in name order. Each file has
-these fields.
+A folder holds one JSON file per request, replayed in name order against one
+server that signs in with Battle.net, as production does. Each file has these
+fields.
 
 - `about`: what the app does when it sends the request.
 - `source`: where the app sends it, as `file:line` at that version's tag.
-- `server`: which server setup answers it. `default` has upload tokens
-  (`dev-token`) and automatic setup (`SELF_REGISTRATION=true`). `battlenet` adds
-  Battle.net sign-in, as the main README sets up production. Leave it out for
-  `default`.
 - `files`: files to put in the server's data folder first, such as the update
   feed in `updates/`. Optional.
 - `request`: `method`, `path`, `headers`, and the body as `body` (text, sent as
@@ -38,7 +35,9 @@ these fields.
   - `body`: the shape of the JSON answer, described below.
 - `capture`: response fields to keep for later requests in the folder, as
   `{"name": "field"}`. A later request uses one as `{{name}}`. `{{base}}` is
-  the server's address.
+  the server's address, and `{{battlenet_session}}` a Battle.net session as the
+  app holds one after sign-in. The test server cannot reach Battle.net, so the
+  session is written into its database.
 
 A shape is a type name (`string`, `boolean`, `null`, `unsigned`, or
 `positive`), several joined with `|`, or `{"$match": "<regular expression>"}`

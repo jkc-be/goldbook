@@ -87,8 +87,8 @@ def server(directory, old_repo, binary, settings=None):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     environment = local_environment(directory, port)
-    if not old_repo:
-        environment.pop("UPLOAD_TOKEN")
+    if old_repo:
+        environment["UPLOAD_TOKEN"] = f"{TOKEN},{FRIEND_TOKEN}"
     if settings:
         environment.update(settings(port))
     if old_repo:
@@ -122,7 +122,7 @@ make_server(os.environ['HOST'], int(os.environ['PORT']), create_app(os.environ['
                 time.sleep(.05)
             else:
                 raise RuntimeError("server did not start within 10 seconds")
-            if not old_repo and environment.get("BNET_CLIENT_ID"):
+            if not old_repo:
                 api.token = register(api, environment["DATABASE"], "player")
                 api.friend_token = register(api, environment["DATABASE"], "friend")
             yield api
@@ -139,26 +139,31 @@ def local_environment(directory, port):
     """Use only local data and test credentials, regardless of the caller's shell."""
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("GOLDBOOK_", "BNET_"))
-                   and key not in ("WEB_DIR", "TRUSTED_PROXY")}
+                   and key not in ("WEB_DIR", "TRUSTED_PROXY", "UPLOAD_TOKEN", "SELF_REGISTRATION")}
     environment.update(HOST="127.0.0.1", PORT=str(port),
                        DATABASE=str(directory / "goldbook.sqlite"),
-                       UPLOAD_TOKEN=f"{TOKEN},{FRIEND_TOKEN}", SELF_REGISTRATION="true",
                        BNET_CLIENT_ID="test-client", BNET_CLIENT_SECRET="test-secret",
                        GOLDBOOK_PUBLIC_URL=f"http://127.0.0.1:{port}")
     return environment
 
 
-def register(api, database, player):
-    """An upload token for `player`, set up as the app does after Battle.net sign-in.
+def sign_in(database, player):
+    """A Battle.net session for `player`, as the app holds after signing in.
 
-    The sign-in itself needs Battle.net, so its session is written straight
-    into the database; tests/oauth.rs covers sign-in against a fake provider."""
+    Sign-in itself needs Battle.net, so the session is written straight into
+    the database; tests/oauth.rs covers sign-in against a fake provider."""
     identity = hashlib.sha256(f"battlenet:{player}".encode()).hexdigest()
     session = f"session-{player}"
     with contextlib.closing(sqlite3.connect(database, timeout=30)) as db, db:
         db.execute("INSERT OR IGNORE INTO battlenet_identities (identity_hash) VALUES (?)", (identity,))
         db.execute("INSERT OR REPLACE INTO battlenet_sessions (token_hash, identity_hash, expires_at) VALUES (?, ?, ?)",
                    (hashlib.sha256(session.encode()).hexdigest(), identity, int(time.time()) + 3600))
+    return session
+
+
+def register(api, database, player):
+    """An upload token for `player`, set up as the app does after Battle.net sign-in."""
+    session = sign_in(database, player)
     fingerprint = hashlib.sha256(f"account:{player}".encode()).hexdigest()
     answer = api.request("POST", "/api/installations", {"fingerprint": fingerprint, "fingerprintVersion": 1},
                          token=session)[0]

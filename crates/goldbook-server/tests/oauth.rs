@@ -46,7 +46,7 @@ impl Fixture {
                 else { (StatusCode::OK,Json(json!({"access_token":body["code"],"token_type":"bearer"}))) }
             }
         })).route("/userinfo",get(|headers:HeaderMap| async move {
-            let subject=if headers["authorization"]=="Bearer other-player" {"456"} else {"123"};
+            let subject=match headers["authorization"].to_str().unwrap() {"Bearer other-player"=>"456","Bearer third-player"=>"789",_=>"123"};
             Json(json!({"sub":subject,"id":subject.parse::<u64>().unwrap(),"battletag":"Private#1234"}))
         }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -61,8 +61,7 @@ impl Fixture {
         bnet.authorization_endpoint = format!("{origin}/authorize");
         bnet.token_endpoint = format!("{origin}/token");
         bnet.userinfo_endpoint = format!("{origin}/userinfo");
-        let mut config = Config::new(directory.join("goldbook.sqlite"), "admin-token");
-        config.self_registration = true;
+        let mut config = Config::new(directory.join("goldbook.sqlite"));
         config.battlenet = Some(bnet);
         let app = router(config.clone()).unwrap();
         Self {
@@ -484,18 +483,7 @@ async fn denial_provider_failures_pending_polling_and_start_limits_are_safe() {
 async fn enrollment_binds_verified_players_revokes_legacy_credentials_and_blocks_every_fingerprint()
 {
     let f = Fixture::new().await;
-    let mut legacy = f.config.clone();
-    legacy.battlenet = None;
-    let legacy = router(legacy).unwrap();
-    let old = call(
-        &legacy,
-        "POST",
-        "/api/installations",
-        registration("a"),
-        &[],
-    )
-    .await;
-    let old = format!("Bearer {}", old.2["token"].as_str().unwrap());
+    let old = format!("Bearer {}", legacy_token(&f, "a"));
     let before = call(
         &f.app,
         "POST",
@@ -657,25 +645,23 @@ async fn enrollment_binds_verified_players_revokes_legacy_credentials_and_blocks
         .0,
         403
     );
-    assert_eq!(
-        call(
-            &f.app,
-            "POST",
-            "/api/installations",
-            registration("c"),
-            &[("authorization", &other)]
-        )
-        .await
-        .0,
-        200
-    );
+    let others = call(
+        &f.app,
+        "POST",
+        "/api/installations",
+        registration("c"),
+        &[("authorization", &other)],
+    )
+    .await;
+    assert_eq!(others.0, 200);
+    let others = format!("Bearer {}", others.2["token"].as_str().unwrap());
     assert_eq!(
         call(
             &f.app,
             "POST",
             "/api/scans",
             json!({}),
-            &[("authorization", "Bearer admin-token")]
+            &[("authorization", &others)]
         )
         .await
         .0,
@@ -734,6 +720,26 @@ async fn install(f: &Fixture, digit: &str, session: &str) -> String {
     .await;
     assert_eq!(registered.0, 200);
     format!("Bearer {}", registered.2["token"].as_str().unwrap())
+}
+// An upload token registered before uploads needed Battle.net sign-in.
+fn legacy_token(f: &Fixture, digit: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let token = format!("gb_{}", digit.repeat(43));
+    let db = db::connect(&f.database()).unwrap();
+    db.execute(
+        "INSERT INTO upload_identities (fingerprint) VALUES (?1)",
+        [digit.repeat(64)],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO upload_tokens (token_hash,fingerprint,created_at) VALUES (?1,?2,0)",
+        [
+            hex::encode(Sha256::digest(token.as_bytes())),
+            digit.repeat(64),
+        ],
+    )
+    .unwrap();
+    token
 }
 fn recorded(f: &Fixture) -> Vec<(String, String)> {
     let db = db::connect(&f.database()).unwrap();
@@ -823,12 +829,6 @@ async fn account_uploads_record_the_bound_player_and_answer_exactly_as_before() 
     let session = bound.session("approved").await;
     let upload = install(&bound, "a", &session).await;
     let recording = account_answers(&bound.app, &upload).await;
-    let admin = Fixture::new().await;
-    let unrecorded = account_answers(&admin.app, "Bearer admin-token").await;
-    assert_eq!(
-        recording, unrecorded,
-        "recording the player changes no answer"
-    );
     let character = json!({"name":"Sultan","realm":"Faramon","faction":"Horde","class":"MAGE","level":60,"updatedAt":1791970261_u64,"gold":2});
     assert_eq!(
         recording,
@@ -866,7 +866,6 @@ async fn account_uploads_record_the_bound_player_and_answer_exactly_as_before() 
         ("K7Q2M9PX".to_owned(), mine.clone()),
     ];
     assert_eq!(recorded(&bound), both);
-    assert_eq!(recorded(&admin), vec![]);
 
     let other = install(&bound, "b", &bound.session("other-player").await).await;
     let refused = call(
@@ -878,40 +877,20 @@ async fn account_uploads_record_the_bound_player_and_answer_exactly_as_before() 
     )
     .await;
     assert_eq!(refused.0, 409);
-    let admin_upload = call(
-        &bound.app,
-        "POST",
-        "/api/account",
-        account("MNPQRSTV", KEY),
-        &[("authorization", "Bearer admin-token")],
-    )
-    .await;
-    assert_eq!(admin_upload.0, 200);
-    let mut legacy = bound.config.clone();
-    legacy.battlenet = None;
-    let legacy = router(legacy).unwrap();
-    let unbound = call(
-        &legacy,
-        "POST",
-        "/api/installations",
-        registration("c"),
-        &[],
-    )
-    .await;
-    let unbound = format!("Bearer {}", unbound.2["token"].as_str().unwrap());
+    let unbound = format!("Bearer {}", legacy_token(&bound, "c"));
     let unbound_upload = call(
-        &legacy,
+        &bound.app,
         "POST",
         "/api/account",
         account("XYZW2345", KEY),
         &[("authorization", &unbound)],
     )
     .await;
-    assert_eq!(unbound_upload.0, 200);
+    assert_eq!(unbound_upload.0, 401);
     assert_eq!(
         recorded(&bound),
         both,
-        "refused uploads, admin tokens and installs without a player record nothing"
+        "refused uploads and installs without a player record nothing"
     );
     let shared = call(
         &bound.app,
@@ -1051,12 +1030,12 @@ async fn website_players_see_every_id_their_installs_uploaded_with_its_linked_gr
     let laptop = install(&f, "a", &mine).await;
     let desktop = install(&f, "b", &mine).await;
     let stranger = install(&f, "c", &f.session("other-player").await).await;
-    let admin = "Bearer admin-token";
+    let elsewhere = install(&f, "d", &f.session("third-player").await).await;
     for (upload, credential) in [
         (named("K7Q2M9PX", KEY, "Sultan"), laptop.as_str()),
         (named("ABCDEFGH", OTHER_KEY, "Mirelle"), desktop.as_str()),
-        (named("MNPQRSTV", THIRD_KEY, "Brannoc"), admin),
-        (named("XYZW2345", THIRD_KEY, "Unseen"), admin),
+        (named("MNPQRSTV", THIRD_KEY, "Brannoc"), elsewhere.as_str()),
+        (named("XYZW2345", THIRD_KEY, "Unseen"), elsewhere.as_str()),
         (named("QRSTVWXY", THIRD_KEY, "Stranger"), stranger.as_str()),
     ] {
         let stored = call(

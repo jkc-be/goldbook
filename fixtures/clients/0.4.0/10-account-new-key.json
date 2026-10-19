@@ -1,11 +1,11 @@
 {
   "about": "After New key in the addon's web login window, the next upload names the key it replaces.",
-  "source": "crates/goldbook-sync/src/sync.rs:322",
+  "source": "crates/goldbook-sync/src/sync.rs:330",
   "request": {
     "method": "POST",
     "path": "/api/account",
     "headers": {
-      "Authorization": "Bearer dev-token",
+      "Authorization": "Bearer {{registered_token}}",
       "Content-Type": "application/json"
     },
     "json": {

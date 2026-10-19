@@ -1,11 +1,11 @@
 {
   "about": "The account from GoldbookDB.account, characters from GoldbookDB.characters (bags and bank) and GoldbookDB.gold, and one trade of every side GoldbookDB.trades holds.",
-  "source": "crates/goldbook-sync/src/sync.rs:326",
+  "source": "crates/goldbook-sync/src/sync.rs:337",
   "request": {
     "method": "POST",
     "path": "/api/account",
     "headers": {
-      "Authorization": "Bearer dev-token",
+      "Authorization": "Bearer {{registered_token}}",
       "Content-Type": "application/json"
     },
     "json": {

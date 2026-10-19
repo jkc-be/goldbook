@@ -27,7 +27,6 @@ start=$(cat <<'EOF'
 set -euo pipefail
 env_file=/opt/goldbook/.env
 if [[ ! -e $env_file ]]; then
-  token=$(openssl rand -hex 32)
   bind=127.0.0.1
   if command -v tailscale >/dev/null; then
     bind=$(tailscale ip -4 | head -n 1)
@@ -35,8 +34,8 @@ if [[ ! -e $env_file ]]; then
   # Written aside and renamed, so an interrupted run leaves no half file
   # that later runs would keep.
   umask 077
-  printf 'UPLOAD_TOKEN=%s\nGOLDBOOK_BIND=%s\nGOLDBOOK_DATA=/opt/goldbook/data\nGOLDBOOK_USER=%s\n' \
-    "$token" "$bind" "$(id -u):$(id -g)" > "$env_file.new"
+  printf 'GOLDBOOK_BIND=%s\nGOLDBOOK_DATA=/opt/goldbook/data\nGOLDBOOK_USER=%s\n' \
+    "$bind" "$(id -u):$(id -g)" > "$env_file.new"
   mv "$env_file.new" "$env_file"
 fi
 

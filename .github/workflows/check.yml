@@ -93,8 +93,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.13'
+      # Battle.net is never called: the check writes its own session.
+      - name: Configure a test Battle.net client
+        run: printf 'BNET_CLIENT_ID=ci-client\nBNET_CLIENT_SECRET=ci-secret\nGOLDBOOK_PUBLIC_URL=http://localhost:8080/goldbook\n' > server/.env.local
       - name: Build and verify the OVH stack locally
-        run: python3 scripts/dev.py up
+        run: python3 scripts/dev.py up --signed-in
       - name: Show container logs on failure
         if: failure()
         run: timeout 10s python3 scripts/dev.py logs || true

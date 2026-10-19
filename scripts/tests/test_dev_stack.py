@@ -26,8 +26,7 @@ class DevStackTests(unittest.TestCase):
         app = config['services']['goldbook']
         self.assertEqual(app.get('ports', []), [])
         self.assertEqual(app['image'], 'goldbook-local')
-        self.assertEqual(app['environment']['UPLOAD_TOKEN'], DEV['TOKEN'])
-        self.assertEqual(app['environment']['SELF_REGISTRATION'], 'true')
+        self.assertNotIn('UPLOAD_TOKEN', app['environment'])
         labels = app['labels']
         for router in ('goldbook-web', 'goldbook-upload', 'goldbook-path', 'goldbook-path-upload'):
             base = f'traefik.http.routers.{router}'

@@ -1,11 +1,11 @@
 {
   "about": "Seller snapshots from GoldbookDB.sellerScans in one batch: named owners, an offer shared by two, unnamed owners, an empty book and a suffixed item key.",
-  "source": "crates/goldbook-sync/src/sync.rs:286",
+  "source": "crates/goldbook-sync/src/sync.rs:291",
   "request": {
     "method": "POST",
     "path": "/api/sellers/batch",
     "headers": {
-      "Authorization": "Bearer dev-token",
+      "Authorization": "Bearer {{registered_token}}",
       "Content-Type": "application/json"
     },
     "json": [
