@@ -278,10 +278,12 @@ fn apply(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct InitialState {
     settings: Settings,
     status: Snapshot,
     configured: bool,
+    default_api: &'static str,
 }
 
 #[tauri::command]
@@ -290,6 +292,7 @@ fn get_state(state: State<'_, AppState>) -> InitialState {
         settings: settings::read(&state.config),
         status: state.snapshot.lock().unwrap().clone(),
         configured: state.config.exists(),
+        default_api: settings::DEFAULT_API,
     }
 }
 
