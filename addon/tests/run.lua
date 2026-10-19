@@ -1205,7 +1205,7 @@ eq(cells(1), "Thu 09 Oct | 26s 00c |  | 2 | +4.0%", "the change from the day bef
 eq(cells(5), "Sun 05 Oct | 25s 00c |  | 4 | +4.2%", "the item view's chart and cards leave room for 5 rows")
 eq(cells(6), " |  |  |  | ", "rows under the chart stay empty")
 eq(GoldbookWindow.rows[1].cells[5].text .. " " .. GoldbookWindow.rows[3].cells[5].text .. " " .. GoldbookWindow.rows[4].cells[5].text,
-  "|cff5fd35a+4.0%|r 0.0% |cffff6d5a-4.0%|r", "a gain is green, a loss red, no change plain")
+  "|cff5fd35a+4.0%|r 0.0% |cffff8c7d-4.0%|r", "a gain is green, a loss red, no change plain")
 eq(tostring(GoldbookWindow.rows[1].rule.shown) .. " " .. tostring(GoldbookWindow.rows[5].rule.shown) .. " " .. tostring(GoldbookWindow.rows[6].rule.shown),
   "true true false", "every filled row is ruled off")
 local thumb = GoldbookWindow.scroll.thumb
@@ -1326,8 +1326,7 @@ for _, theme in ipairs({ "light", "dark" }) do
     local group, member = key:match("^(%a+)%.(%w+)$")
     return group and palette[group][tonumber(member) or member] or palette[key]
   end
-  -- The dark theme's selected rows fall short already: https://github.com/jkc-be/goldbook/issues/37
-  for name, alpha in pairs(theme == "light" and { hovered = palette.hover, selected = 0.16 } or { hovered = palette.hover }) do
+  for name, alpha in pairs({ hovered = palette.hover, selected = 0.16 }) do
     local row = ""
     for index = 1, 3 do
       local below = tonumber(palette.panel:sub(index * 2 - 1, index * 2), 16)
