@@ -985,7 +985,9 @@ local FILTERS = {
   end,
   quality = function()
     local options = { { nil, "All qualities" } }
-    for id, name in ipairs({ "Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Artifact", "Heirloom" }) do
+    -- The qualities the auction house lists: legendaries are bound, and
+    -- Classic has no artifacts or heirlooms.
+    for id, name in ipairs({ "Poor", "Common", "Uncommon", "Rare", "Epic" }) do
       options[#options + 1] = { id - 1, name }
     end
     return options

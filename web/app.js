@@ -3,6 +3,9 @@ const PAGE = 50;
 const HOUR = 3600;
 const DAY = 24 * HOUR;
 const QUALITIES = ["Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Artifact", "Heirloom"];
+// The qualities the auction house lists: legendaries are bound, and Classic
+// has no artifacts or heirlooms.
+const LISTED_QUALITIES = QUALITIES.slice(0, 5);
 const SCAN_NAMES = { browse: "Quick", replicate: "Full" };
 const CLASSES = new Map([
   ["WARRIOR", "Warrior"],
@@ -1064,7 +1067,7 @@ function loadProfessions() {
     fill("[data-profession-filter]", "All professions", () =>
       professions.filter((p) => p.materials.length > 0).map((p) => element("option", { value: p.id, textContent: p.name })));
     fill("[data-quality-filter]", "All qualities", () =>
-      QUALITIES.map((name, index) => element("option", { value: String(index), textContent: name })));
+      LISTED_QUALITIES.map((name, index) => element("option", { value: String(index), textContent: name })));
     return professions;
   }, (error) => {
     professionList = null;
