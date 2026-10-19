@@ -329,5 +329,12 @@ local eleventh = chip.menu.options[11]
 eq(table.concat({ chip.menu.width, chip.menu.height, eleventh.point[2], eleventh.point[3] }, " "), "400 228 201 -4",
   "twenty choices run in two columns of ten")
 
+booked()
+Stub.fire("PLAYER_LOGOUT")
+eq(booked() .. "|" .. accruing(), "|otherIn 1 12", "logging out within the hour leaves its gold adding up")
+Stub.advance(HOUR)
+Stub.fire("PLAYER_LOGOUT")
+eq(booked() .. "|" .. accruing(), "otherIn Other nil 1 12 nil|", "logging out after the hour has ended books its gold for the sync")
+
 io.write(("%d accounting checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
