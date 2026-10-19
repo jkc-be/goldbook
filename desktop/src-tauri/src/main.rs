@@ -28,8 +28,9 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 const SITE: &str = "site";
-// The website's own Log out, which the view hides with its rail.
-const LOGOUT: &str = "fetch(new URL('api/logout', document.baseURI), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).catch(() => {});";
+// The website's own Log out, which the view hides with its rail, then a new
+// page load of the public market, so nothing the session showed stays in memory.
+const LOGOUT: &str = "fetch(new URL('api/logout', document.baseURI), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).catch(() => {}).finally(() => location.replace(new URL('./?signed-out#prices', document.baseURI)));";
 
 // Under this mark web/style.css hides the website's rail and brand, which the
 // app's own rail replaces. WebView2 can run this before the document element exists.

@@ -46,6 +46,9 @@ field("log-out").addEventListener("click", async () => {
   try {
     await window.goldbook.battlenetLogout();
     drawSession(null);
+    const settings = document.querySelector('[data-view="settings"]');
+    await window.goldbook.showView("settings");
+    showPage("settings", settings);
     notify("Logged out of Battle.net. Uploads continue for the game accounts already set up.");
   } catch (message) {
     notify(String(message));
@@ -287,7 +290,7 @@ function showUpdates(status) {
   field("update-alert").hidden = update.phase !== "ready" && update.phase !== "failed";
   field("update-alert").textContent = update.phase === "ready" ? "Update ready" : "Update needs attention";
 }
-field("update-alert").onclick = () => document.querySelector('[data-view="sync"]').click();
+field("update-alert").onclick = () => document.querySelector('[data-view="settings"]').click();
 field("check-updates").onclick = async () => {
   field("check-updates").disabled = true;
   try { await window.goldbook.checkUpdates(); }
