@@ -1180,6 +1180,16 @@ local function captureViews(suffix)
   all.scripts.OnClick(all)
   run("items")
   captureWindow("items" .. suffix)
+  -- With a filter chosen, Clear filters joins By item's four chips.
+  local profession = GoldbookWindow.filters.controls.profession
+  profession.scripts.OnClick(profession)
+  for _, option in ipairs(GoldbookWindow.menu.options) do
+    if option.label.text == "Mining" then
+      option.scripts.OnClick(option)
+    end
+  end
+  captureWindow("items-filtered" .. suffix)
+  GoldbookWindow.filters.clear.scripts.OnClick(GoldbookWindow.filters.clear)
   -- The mailbox opens the Mail view, and closing it closes the window. Its
   -- invoices book trades; the seeded ones are kept, so both themes match.
   local trades = ns.db.trades
