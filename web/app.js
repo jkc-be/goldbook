@@ -859,22 +859,25 @@ function drawSellers(data) {
   show(data.snapshot);
 }
 
-async function loadHistory(itemKey) {
-  const { realm, faction } = state.realm;
+async function loadHistory(itemKey, place = state.realm) {
+  const { realm, faction } = place;
   ++latest.sellers;
   const [data, sellers] = await latestOnly("history", Promise.all([
     api("/api/history", { realm, faction, itemKey }),
     api("/api/sellers", { realm, faction, itemKey, history: 1 }),
   ]));
-  state.selected = itemKey;
-  for (const row of $("prices-table").tBodies[0].rows) {
-    row.setAttribute("aria-selected", String(row.dataset.itemKey === itemKey));
+  const inPane = !$("item-pane").hidden;
+  if (!inPane) {
+    state.selected = itemKey;
+    for (const row of $("prices-table").tBodies[0].rows) {
+      row.setAttribute("aria-selected", String(row.dataset.itemKey === itemKey));
+    }
   }
   $("detail").hidden = false;
   $("detail-title").textContent = itemName(data);
   $("detail-title").className = `quality-${quality(data)}`;
   $("detail-wowhead").href = `${WOWHEAD_ITEM}${itemKey.split(":")[0]}`;
-  const item = { itemKey, name: itemName(data), ...state.realm };
+  const item = { itemKey, name: itemName(data), ...place };
   $("detail-compare").dataset.compareKey = itemKey;
   $("detail-compare").onclick = () => toggleComparison(item);
   updateCompareButtons();
@@ -884,7 +887,7 @@ async function loadHistory(itemKey) {
   drawItemChart(itemName(data), data.points);
   drawScans(data.points);
   // Side by side the detail stays in view. Stacked, it sits below the list.
-  if (!WIDE.matches) {
+  if (!WIDE.matches && !inPane) {
     $("detail").scrollIntoView();
   }
 }
@@ -1109,51 +1112,88 @@ async function openPrices() {
   if (await ensureRealms()) {
     const asked = askedItem;
     askedItem = null;
-    const realm = asked && realmOf(asked.place);
-    if (realm && realm !== state.realm) {
-      state.realm = realm;
-      $("realm").value = String(state.realms.indexOf(realm));
-      drawLastScan();
-    }
+    // Asked for before the list loads, so an item chosen meanwhile is newer.
+    const opening = asked ? loadHistory(asked) : null;
     await loadPrices();
-    if (asked) {
-      await loadHistory(asked.itemKey);
-    }
+    await opening;
   }
 }
 
 const plural = (count, word) => `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
 
-// The realm with scans that `place` names. A trade knows its realm but not
-// the faction, which settles it only when one faction has scans there.
-function realmOf(place) {
-  const there = place === null ? [] : (state.realms ?? []).filter(
-    (entry) => entry.realm === place.realm && (place.faction ?? entry.faction) === entry.faction,
-  );
-  return there.length === 1 ? there[0] : null;
-}
-
-// An item opens in Prices, where its history is: on the realm it was seen
-// on when that realm has scans, else on the realm chosen.
-function openItem(itemKey, place = null) {
+// An item of Deals or Movers opens in Prices, where its history is.
+function openItem(itemKey) {
   if (location.hash !== "#prices") {
-    askedItem = { itemKey, place };
+    askedItem = itemKey;
     location.hash = "#prices";
     return;
-  }
-  const realm = realmOf(place);
-  if (realm && realm !== state.realm) {
-    $("realm").value = String(state.realms.indexOf(realm));
-    $("realm").dispatchEvent(new Event("change"));
   }
   run(() => loadHistory(itemKey));
 }
 
-// An item's name that opens its prices, as Deals and Movers do; plain text
-// when the item has no key to look up.
+// Outside Market an item's prices open in a pane beside the view, which
+// borrows Prices' detail panel and gives it back when the pane closes.
+const detailHome = { parent: $("detail").parentElement, next: $("detail").nextElementSibling };
+let paneRow = null;
+
+function closePane() {
+  if ($("item-pane").hidden) {
+    return;
+  }
+  // A history still on its way belongs to the pane.
+  latest.history++;
+  $("item-pane").hidden = true;
+  document.body.classList.remove("pane-open");
+  paneRow?.removeAttribute("aria-selected");
+  paneRow = null;
+  $("detail").hidden = true;
+  $("detail-close").hidden = true;
+  $("detail-compare").hidden = false;
+  detailHome.parent.insertBefore($("detail"), detailHome.next);
+}
+
+// The realm and faction with scans that `place` names; a trade knows its
+// realm but not the faction, which settles it only when one has scans there.
+async function paneRealm(place) {
+  const realms = state.realms.length ? state.realms : (await api("/api/realms")).realms;
+  const there = place === null ? [] : realms.filter((entry) => entry.realm === place.realm && (place.faction ?? entry.faction) === entry.faction);
+  return there.length === 1 ? there[0] : (state.realm ?? there[0] ?? realms[0] ?? null);
+}
+
+async function openPane(itemKey, place, row) {
+  const realm = await paneRealm(place);
+  if (realm === null) {
+    showMessage("No scans have been uploaded yet, so there are no prices to show.");
+    return;
+  }
+  paneRow?.removeAttribute("aria-selected");
+  paneRow = row;
+  paneRow?.setAttribute("aria-selected", "true");
+  $("item-pane").append($("detail"));
+  $("detail-close").hidden = false;
+  $("detail-compare").hidden = true;
+  $("item-pane").hidden = false;
+  document.body.classList.add("pane-open");
+  await loadHistory(itemKey, realm);
+}
+
+$("detail-close").onclick = closePane;
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closePane();
+  }
+});
+
+// An item's name that opens its prices in the pane; plain text when the
+// item has no key to look up.
 function itemButton(name, qualityClass, itemKey, place) {
   return itemKey
-    ? element("button", { className: qualityClass, textContent: name, title: "Show its prices", onclick: () => openItem(itemKey, place) })
+    ? element("button", {
+      className: qualityClass,
+      textContent: name,
+      title: "Show its prices",
+      onclick: (event) => run(() => openPane(itemKey, place, event.currentTarget.closest("tr"))),
+    })
     : element("span", { className: qualityClass, textContent: name });
 }
 
@@ -2631,6 +2671,7 @@ function render() {
   if (location.hash !== shownHash) {
     shownHash = location.hash;
     scrollTo(0, 0);
+    closePane();
   }
   for (const id of viewSections()) {
     $(id).hidden = !tab.shows.includes(id);
