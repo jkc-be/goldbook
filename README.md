@@ -127,7 +127,11 @@ Web files are mounted read-only from the checkout, so refresh the browser after
 an edit. Run `make dev` again to rebuild and restart after Rust changes.
 `make dev-check` verifies both host layouts, HTTPS, authentication and upload
 buffering. It checks that upload setup refuses a request without Battle.net
-sign-in, and adds nothing to the local database. `make dev-logs` follows container logs;
+sign-in, and adds nothing to the local database. With Battle.net configured,
+`python3 scripts/dev.py check --signed-in` also registers and uploads through
+every route as a throwaway Battle.net player. It writes that player into the
+local database and removes it, with what it registered, afterwards. The Check
+workflow runs the stack this way, with a test Battle.net client. `make dev-logs` follows container logs;
 `make dev-down` stops the stack and keeps local data. The network and Compose
 project are separate from production. The container uses your local UID/GID
 so it can write the development bind mount.

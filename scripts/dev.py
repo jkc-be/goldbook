@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run the OVH Compose stack locally, with isolated data and credentials."""
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -93,7 +94,47 @@ def request(host, path, body=None, token=None, scheme="https"):
     return int(status), content
 
 
-def verify():
+@contextmanager
+def disposable_sign_in():
+    """A throwaway player's Battle.net session, and the list the caller adds its
+    registered fingerprints to. Sign-in itself needs Battle.net, so the session
+    is written into the local database; all of it is removed afterwards."""
+    database = DATA / 'goldbook.sqlite'
+    player = secrets.token_hex(16)
+    identity = hashlib.sha256(f'battlenet:dev-check-{player}'.encode()).hexdigest()
+    session = f'dev-check-{player}'
+    fingerprints = []
+    with closing(sqlite3.connect(database, timeout=30)) as db, db:
+        db.execute('INSERT INTO battlenet_identities (identity_hash) VALUES (?)', (identity,))
+        db.execute('INSERT INTO battlenet_sessions (token_hash, identity_hash, expires_at) VALUES (?, ?, ?)',
+                   (hashlib.sha256(session.encode()).hexdigest(), identity, int(time.time()) + 600))
+    try:
+        yield session, fingerprints
+    finally:
+        with closing(sqlite3.connect(database, timeout=30)) as db, db:
+            for fingerprint in fingerprints:
+                db.execute('DELETE FROM upload_tokens WHERE fingerprint=?', (fingerprint,))
+                db.execute('DELETE FROM upload_identities WHERE fingerprint=?', (fingerprint,))
+            db.execute('DELETE FROM battlenet_sessions WHERE identity_hash=?', (identity,))
+            db.execute('DELETE FROM battlenet_identities WHERE identity_hash=?', (identity,))
+
+
+def verify_signed_in_uploads(body):
+    """Registration with a Battle.net session, and an upload with its token, through every route."""
+    with disposable_sign_in() as (session, fingerprints):
+        for scheme in ('http', 'https'):
+            for host, prefix in (('goldbook.localhost', ''), ('localhost', '/goldbook')):
+                fingerprints.append(secrets.token_hex(32))
+                payload = json.dumps({'fingerprint': fingerprints[-1], 'fingerprintVersion': 1}).encode()
+                status, response = request(host, prefix + '/api/installations', payload, session, scheme)
+                assert status == 200, f'upload setup after Battle.net sign-in returned {status}: {response[:200]}'
+                token = json.loads(response)['token']
+                assert token.startswith('gb_')
+                assert request(host, prefix + '/api/sellers/batch', body, token, scheme)[0] == 400, \
+                    'a large batch with a registered token must reach JSON validation'
+
+
+def verify(signed_in=False):
     for _ in range(60):
         try:
             if request('localhost', '/goldbook/api/realms')[0] == 200:
@@ -126,6 +167,11 @@ def verify():
             assert request(host, prefix + '/api/sellers/batch', body, scheme=scheme)[0] == 401
             assert request(host, prefix + '/api/login', body, scheme=scheme)[0] == 413
             assert b'id="chart"' in request(host, prefix + '/', scheme=scheme)[1]
+    if signed_in:
+        if not battlenet:
+            raise SystemExit('--signed-in needs Battle.net sign-in from server/.env.local.')
+        verify_signed_in_uploads(body)
+        print('Verified registration and an upload with its token, as a throwaway player now removed again.')
     print('Verified HTTP and HTTPS routes, upload setup, authentication and upload buffering.')
     print(f'Battle.net sign-in is {"on, from server/.env.local" if battlenet else "off, so the app cannot upload"}.')
 
@@ -134,6 +180,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=('up', 'down', 'logs', 'check', 'config'), nargs='?', default='up')
     parser.add_argument('--database', type=Path, help='Copy this SQLite database on first start only')
+    parser.add_argument('--signed-in', action='store_true',
+                        help='Also register and upload as a throwaway Battle.net player, written into the '
+                             'local database and removed afterwards')
     args = parser.parse_args()
     if args.database and args.command != 'up':
         parser.error('--database is only valid with up')
@@ -142,14 +191,14 @@ def main():
         if args.database:
             import_database(args.database)
         compose('up', '-d', '--build', '--wait', '--wait-timeout', '120')
-        verify()
+        verify(args.signed_in)
         print('Desktop API and web: http://localhost:8080/goldbook/\n'
               'HTTPS web: https://localhost:8443/goldbook/\n'
               'Dedicated host: https://goldbook.localhost:8443/\n'
               'TLS uses a local self-signed certificate; no production settings are loaded.\n'
               f'Data: {DATA}\nStop with make dev-down; data is kept.')
     elif args.command == 'check':
-        verify()
+        verify(args.signed_in)
     elif args.command == 'config':
         compose('config')
     elif args.command == 'logs':
