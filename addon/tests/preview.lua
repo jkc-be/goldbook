@@ -5,20 +5,22 @@
 -- client would (<view>.html) and a screenshot of that page cropped to the
 -- window (<view>.png). It approximates the game; it is not pixel-exact.
 --
---   luajit addon/tests/preview.lua [--client] [--dpr <n>] [--addon <folder>] <outdir>
+--   luajit addon/tests/preview.lua [--auctions] [--client] [--dpr <n>] [--addon <folder>] <outdir>
 --
 -- --client draws every pixel the way the game client measured in client.lua
 -- does, --dpr renders at that many device pixels per point, as a Retina
 -- screen does, and --addon previews another copy of the Goldbook folder.
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
-local USAGE = "usage: luajit addon/tests/preview.lua [--client] [--dpr <n>] [--addon <folder>] <outdir>"
+local USAGE = "usage: luajit addon/tests/preview.lua [--auctions] [--client] [--dpr <n>] [--addon <folder>] <outdir>"
 local flags = { dpr = 1, addon = here .. "/../Goldbook" }
 local outdir
 do
   local index = 1
   while arg[index] do
     local word = arg[index]
-    if word == "--client" then
+    if word == "--auctions" then
+      flags.auctions = true
+    elseif word == "--client" then
       flags.client = true
     elseif word == "--dpr" or word == "--addon" then
       index = index + 1
@@ -35,7 +37,7 @@ local DPR = assert(tonumber(flags.dpr), USAGE)
 local Stub = dofile(here .. "/wowstub.lua")
 local Client = dofile(here .. "/client.lua")
 
-local SCREEN_WIDTH, SCREEN_HEIGHT = 1280, 800
+local SCREEN_WIDTH, SCREEN_HEIGHT = flags.auctions and 1600 or 1280, flags.auctions and 1000 or 800
 local DAY = 24 * 3600
 
 -- Recording. records[widget] holds what the stub does not keep: kind, parent,
@@ -786,6 +788,7 @@ end
 
 -- The addon, as run.lua loads it.
 
+local auctionServer = flags.auctions and dofile(here .. "/auctionstub.lua")(Stub)
 local ns = Stub.loadAddon(flags.addon)
 local Codec, Database = ns.Codec, ns.Database
 
@@ -1233,6 +1236,75 @@ local function captureViews(suffix)
 
   Stub.fire("AUCTION_HOUSE_SHOW")
   capture("scan" .. suffix, { GoldbookScanButton }, { GoldbookScanButton })
+end
+
+if flags.auctions then
+  auctionServer.seed(); auctionServer.cache(ns)
+  local function click(widget) widget.scripts.OnClick(widget) end
+  for _, theme in ipairs({ "dark", "light" }) do
+    ns.UI.SetTheme(theme)
+    Stub.fire("AUCTION_HOUSE_SHOW")
+    ns.AuctionUI.Show("ore")
+    Stub.advance(0.3)
+    local panel = GoldbookAuctionHouse
+    local function shot(name) capture("auction-" .. name .. "-" .. theme, { panel }, { panel }) end
+    shot("browse")
+    click(panel.filters.controls.profession)
+    shot("filters")
+    panel.filterMenu:Hide()
+    click(panel.filters.category)
+    click(panel.categoryMenus[1].options[3])
+    click(panel.categoryMenus[2].options[2])
+    capture("auction-categories-" .. theme, { panel }, { panel, unpack(panel.categoryMenus) })
+    panel.categoryMenus[1]:Hide()
+    click(panel.rows[1])
+    Stub.advance(1)
+    shot("order-book")
+    click(panel.rows[1])
+    panel.quantity:SetText("4")
+    click(panel.action)
+    Stub.advance(0.2)
+    shot("buy")
+    click(panel.review.back)
+    click(panel.tabs.sell)
+    click(panel.rows[1])
+    shot("sell")
+    panel:SetSize(940, 670)
+    shot("sell-small")
+    panel:SetSize(1300, 900)
+    shot("sell-large")
+    panel:SetSize(1020, 690)
+    ns.AuctionRules.Save({ name = "Ore", items = "2770,2771", minimum = "1s", normal = "2s", maximum = "5s", shopping = "3s",
+      undercut = "1", cap = "10", stack = "4", duration = "2", below = "skip", above = "normal" })
+    click(panel.tabs.queue)
+    click(panel.scans[1])
+    Stub.advance(2)
+    click(panel.rows[1])
+    shot("queue")
+    click(panel.groupButton)
+    capture("auction-rules-" .. theme, { panel, GoldbookAuctionRules }, { GoldbookAuctionRules })
+    GoldbookAuctionRules:Hide()
+    ns.db.settings.minProfit = 0
+    ns.Database.ApplyScan(ns.db, { realm = "Faramon", faction = "Horde", region = "EU", by = "Preview", build = "1", at = time(), mode = "replicate",
+      rows = { { key = "2770", min = 125, mv = 500, qty = 50, n = 2 }, { key = "1206", min = 100, mv = 500, qty = 2, n = 1 } },
+      names = { ["2770"] = { name = "Copper Ore", quality = 1 }, ["1206"] = { name = "Moss Agate", quality = 2 } } })
+    click(panel.tabs.deals)
+    panel.search:SetText("")
+    click(panel.rows[1])
+    shot("deals")
+    auctionServer.seedVariants(); auctionServer.cache(ns)
+    click(panel.tabs.browse)
+    click(panel.searchButton)
+    Stub.advance(0.3)
+    click(panel.stack)
+    shot("grouped")
+    click(panel.rows[1])
+    shot("variants")
+    click(panel.stack)
+    Stub.fire("AUCTION_HOUSE_CLOSED")
+    auctionServer.seed(); auctionServer.cache(ns)
+  end
+  return
 end
 
 captureViews("")
