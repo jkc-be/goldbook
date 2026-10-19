@@ -16,7 +16,7 @@ services:
       traefik.http.routers.goldbook-path.tls.certresolver: ""
       traefik.http.routers.goldbook-path-upload.tls.certresolver: ""
   traefik:
-    image: traefik:v3.7.13
+    image: traefik:v3.7.15
     restart: unless-stopped
     command:
       - --providers.docker=true

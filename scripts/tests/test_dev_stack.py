@@ -40,7 +40,7 @@ class DevStackTests(unittest.TestCase):
         self.assertEqual(config['services']['traefik']['networks']['traefik']['ipv4_address'],
                          '172.30.254.2')
         self.assertFalse(config['networks']['traefik'].get('external', False))
-        self.assertEqual(config['services']['traefik']['image'], 'traefik:v3.7.13')
+        self.assertEqual(config['services']['traefik']['image'], 'traefik:v3.7.15')
         for port in config['services']['traefik']['ports']:
             self.assertEqual(port['host_ip'], '127.0.0.1')
 

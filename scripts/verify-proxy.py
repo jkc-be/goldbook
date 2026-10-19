@@ -18,12 +18,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPERS = runpy.run_path(str(ROOT / 'scripts/verify-migration.py'))
-VERSION = '3.7.13'
+VERSION = '3.7.15'
 CHECKSUMS = {
-    'darwin_amd64': '30bdf96fb9580267e82e736be5e1aa75a646bdbbb248fada5e70f59ce7869086',
-    'darwin_arm64': '567d69886242437afd5c9c887bf2b434ed6b333b82b75ee87cc874d2c797a1d6',
-    'linux_amd64': '52cd039a34258dd61c617a95d69252bc6bcae27c520f338186c31c7fef8f6394',
-    'linux_arm64': '9155048abd64c59000d2f3c07dc6d6919bc6be9b618e6a554bc3808338aaf8b8',
+    'darwin_amd64': '9bb903e320eda7950c5ae3289b5d4e383a03bf0568a28cd0b919a7ebb8545bba',
+    'darwin_arm64': '402f59cef47bbba629dda7ee34e99897648634fac8dc020fb992a7cdb034d323',
+    'linux_amd64': '5b9f51199fcb7a3b5f7ae0f9dae8dcf01efadafd92c5fca96ea2822eca81f8e6',
+    'linux_arm64': '1866d8e831b95d14b599bb59eb20d2033b979c0cb1e347b48a0866a9b810454e',
 }
 
 
