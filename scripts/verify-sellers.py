@@ -74,7 +74,7 @@ def main():
             assert api.request("POST", "/api/sellers", {})[0]["status"] == 401
             invalid = {"realm": "Faramon", "faction": "Horde", "itemKey": "2589", "scannedAt": 1,
                        "offers": [{"quantity": 1, "unitPrice": 1, "owners": ["Alice"], "totalOwners": 0}]}
-            assert api.request("POST", "/api/sellers", invalid, token="dev-token")[0]["status"] == 400
+            assert api.request("POST", "/api/sellers", invalid, token=api.token)[0]["status"] == 400
             empty = api.request("GET", query.replace("2589", "9999"))[0]["body"]["snapshot"]["summary"]
             assert empty["totalQuantity"] == 0 and empty["sellers"] == []
             own = api.request("GET", query.replace("2589", "7070"))[0]["body"]["snapshot"]["summary"]
@@ -85,11 +85,11 @@ def main():
                         "offers": [{"unitPrice": 100, "quantity": 2, "owners": ["Alice"], "totalOwners": 1},
                                    {"unitPrice": 200, "quantity": 3, "owners": ["Alice"], "totalOwners": 1},
                                    {"unitPrice": 150, "quantity": 5, "owners": ["Bob"], "totalOwners": 1}]}
-            assert api.request("POST", "/api/sellers", repeated, token="dev-token")[0]["status"] == 200
+            assert api.request("POST", "/api/sellers", repeated, token=api.token)[0]["status"] == 200
             merged = api.request("GET", query.replace("2589", "1111"))[0]["body"]["snapshot"]["summary"]
             assert merged["sellers"][0] == {"name": "Alice", "quantity": 5, "minPrice": 100, "maxPrice": 200, "share": 0.5}
             repeated["offers"].reverse()
-            assert api.request("POST", "/api/sellers", repeated, token="dev-token")[0]["body"] == {"stored": False}
+            assert api.request("POST", "/api/sellers", repeated, token=api.token)[0]["body"] == {"stored": False}
             with sqlite3.connect(directory / "goldbook.sqlite") as db:
                 assert db.execute("SELECT COUNT(*) FROM seller_snapshots").fetchone()[0] == 8
                 assert db.execute("PRAGMA foreign_key_check").fetchall() == []
@@ -100,7 +100,7 @@ def main():
                 {"unitPrice": 100, "quantity": 5, "owners": ["Bob"], "totalOwners": 2},
                 {"unitPrice": 100, "quantity": 4, "owners": [], "totalOwners": 0},
             ]
-            api.request("POST", "/api/sellers", repeated, token="dev-token")
+            api.request("POST", "/api/sellers", repeated, token=api.token)
             item_query = query.replace("2589", "1111")
             book = api.request("GET", item_query)[0]["body"]["snapshot"]
             assert book["orderBook"] == [
@@ -108,10 +108,10 @@ def main():
                 {"unitPrice": 200, "quantity": 3, "cumulativeQuantity": 14, "cumulativeCost": 1700, "owners": ["Alice"], "hasUnnamedOwners": False},
             ]
             repeated["scannedAt"], repeated["offers"] = 3, []
-            api.request("POST", "/api/sellers", repeated, token="dev-token")
+            api.request("POST", "/api/sellers", repeated, token=api.token)
             assert api.request("GET", item_query)[0]["body"]["snapshot"] == book, "late uploads must not replace the latest observation"
             repeated["scannedAt"] = 5
-            api.request("POST", "/api/sellers", repeated, token="dev-token")
+            api.request("POST", "/api/sellers", repeated, token=api.token)
             empty_book = api.request("GET", item_query + "&history=1")[0]["body"]
             assert empty_book["snapshot"]["orderBook"] == []
             assert [row["scannedAt"] for row in empty_book["history"]] == [5, 4, 3, 2]

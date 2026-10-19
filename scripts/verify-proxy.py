@@ -151,7 +151,7 @@ def proxy(directory, binary, config):
                 process.wait()
 
 
-def exercise(port, directory):
+def exercise(port, directory, upload):
     snapshots = [dict(realm='ProxyTest', faction='Horde', itemKey=str(20000+i),
                       scannedAt=1760000000, offers=[dict(unitPrice=100+j, quantity=2,
                       owners=['Seller-ProxyTest'], totalOwners=1) for j in range(20)])
@@ -164,26 +164,26 @@ def exercise(port, directory):
             for _ in range(4):
                 status, _, response = request(port, host, path, b' ' * (1024 * 1024), token)
                 assert status == 401, f'{host}{path}: upload must reach authentication, got {status}: {response[:200]}'
-        status, _, raw = request(port, host, path, body, 'dev-token')
+        status, _, raw = request(port, host, path, body, upload)
         assert status == 200, f'{host}{path}: expected 200 for {len(body)} bytes, got {status}: {raw[:200]}'
         assert json.loads(raw) == {'received': 100, 'stored': 100 if index == 0 else 0}
-        assert json.loads(request(port, host, path, body, 'dev-token')[2])['stored'] == 0
+        assert json.loads(request(port, host, path, body, upload)[2])['stored'] == 0
         invalid = copy.deepcopy(snapshots)
         invalid[0]['itemKey'] = '99999'
         invalid[-1]['scannedAt'] = 0
-        assert request(port, host, path, json.dumps(invalid).encode(), 'dev-token')[0] == 400
+        assert request(port, host, path, json.dumps(invalid).encode(), upload)[0] == 400
         query = prefix + '/api/sellers?realm=ProxyTest&faction=Horde&itemKey='
         status, _, raw = request(port, host, query + '20000')
         book = json.loads(raw)['snapshot']['orderBook']
         assert status == 200 and len(book) == 20 and book[-1]['cumulativeQuantity'] == 40
         assert json.loads(request(port, host, query + '99999')[2])['snapshot'] is None
         assert request(port, host, prefix + '/api/login', body)[0] == 413, 'public routes keep 64 KiB buffer'
-        assert request(port, host, path, b' ' * (20 * 1024 * 1024 + 1), 'dev-token')[0] == 413
+        assert request(port, host, path, b' ' * (20 * 1024 * 1024 + 1), upload)[0] == 413
         if index == 0:
             rows = [[str(30000 + i), 1000 + i, 0, 1, 0] for i in range(40000)]
             scan = dict(realm='ProxyExport', faction='Horde', region='EU', scannedAt=1760000000, mode='browse',
                         scanner='Proxy', build='1.15.7', rows=rows, items={})
-            assert request(port, host, prefix + '/api/scans', json.dumps(scan).encode(), 'dev-token')[0] == 200
+            assert request(port, host, prefix + '/api/scans', json.dumps(scan).encode(), upload)[0] == 200
         for _ in range(3):
             status, _, raw = request(port, host, prefix + '/api/export?realm=ProxyExport&faction=Horde')
             assert status == 200 and len(raw) > 2 * 1024 * 1024, f'{host}{prefix}: export got {status}, {len(raw)} bytes'
@@ -198,7 +198,7 @@ def exercise(port, directory):
         subprocess.run(['luajit', 'addon/tests/orderbook.lua', str(fixture)], cwd=ROOT, check=True)
         for state in ('state.json', 'state.json', 'lost-state.json'):
             subprocess.run([str(ROOT / 'target/debug/goldbook-sync'), '--once', '--file', str(fixture),
-                '--api', f'http://{host}:{port}{prefix}', '--token', 'dev-token',
+                '--api', f'http://{host}:{port}{prefix}', '--token', upload,
                 '--state', str(directory / f'{index}-{state}')], cwd=ROOT, check=True)
         print(f'Verified {host}{prefix}: {len(body):,}-byte batch, auth, readback, retries, atomic validation, body limits and a {len(raw):,}-byte export sent as {len(zipped):,} gzip bytes.', flush=True)
     status, headers, _ = request(port, '127.0.0.1', '/goldbook')
@@ -213,7 +213,7 @@ def main():
         with HELPERS['server'](directory, None, ROOT / 'target/debug/goldbook-server') as api:
             config = production_config(api.port)
             with proxy(directory, binary, config) as port:
-                body = exercise(port, directory)
+                body = exercise(port, directory, api.token)
             # Prove this test setup reproduces the production regression.
             broken = copy.deepcopy(config)
             for router in broken['http']['routers'].values():
@@ -221,7 +221,7 @@ def main():
                     router['rule'] = router['rule'].replace(f' || Path(`{prefix}/api/sellers/batch`)', '')
             with proxy(directory, binary, broken) as port:
                 for host, prefix in (('localhost', ''), ('127.0.0.1', '/goldbook')):
-                    assert request(port, host, prefix + '/api/sellers/batch', body, 'dev-token')[0] == 413
+                    assert request(port, host, prefix + '/api/sellers/batch', body, api.token)[0] == 413
             print('Negative control reproduced HTTP 413 when batch upload routes were removed.')
     print('Local Traefik verification passed; temporary server, proxy and database removed.')
 

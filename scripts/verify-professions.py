@@ -21,7 +21,7 @@ def main():
             scan = dict(realm="Filter", faction="Horde", region="EU", scannedAt=1760000000,
                         mode="browse", scanner="Test", build="1.60.1", items=items,
                         rows=[[key, 100, 0, 1, 0] for key in items])
-            assert api.request("POST", "/api/scans", scan, token="dev-token")[0]["status"] == 200
+            assert api.request("POST", "/api/scans", scan, token=api.token)[0]["status"] == 200
             base = "/api/prices?realm=Filter&faction=Horde"
 
             def check(parameters, keys, total=None):
