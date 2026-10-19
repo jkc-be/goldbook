@@ -148,17 +148,23 @@ def local_environment(directory, port):
     return environment
 
 
-def register(api, database, player):
-    """An upload token for `player`, set up as the app does after Battle.net sign-in.
+def sign_in(database, player):
+    """A Battle.net session for `player`, as the app holds after signing in.
 
-    The sign-in itself needs Battle.net, so its session is written straight
-    into the database; tests/oauth.rs covers sign-in against a fake provider."""
+    Sign-in itself needs Battle.net, so the session is written straight into
+    the database; tests/oauth.rs covers sign-in against a fake provider."""
     identity = hashlib.sha256(f"battlenet:{player}".encode()).hexdigest()
     session = f"session-{player}"
     with contextlib.closing(sqlite3.connect(database, timeout=30)) as db, db:
         db.execute("INSERT OR IGNORE INTO battlenet_identities (identity_hash) VALUES (?)", (identity,))
         db.execute("INSERT OR REPLACE INTO battlenet_sessions (token_hash, identity_hash, expires_at) VALUES (?, ?, ?)",
                    (hashlib.sha256(session.encode()).hexdigest(), identity, int(time.time()) + 3600))
+    return session
+
+
+def register(api, database, player):
+    """An upload token for `player`, set up as the app does after Battle.net sign-in."""
+    session = sign_in(database, player)
     fingerprint = hashlib.sha256(f"account:{player}".encode()).hexdigest()
     answer = api.request("POST", "/api/installations", {"fingerprint": fingerprint, "fingerprintVersion": 1},
                          token=session)[0]

@@ -1,0 +1,20 @@
+{
+  "about": "Without a Battle.net session, Open website and the Bags and Gold views post the addon's ID and key instead.",
+  "source": "desktop/src-tauri/src/website.rs:112",
+  "request": {
+    "method": "POST",
+    "path": "/api/desktop-login?view=gold",
+    "headers": {
+      "Origin": "http://127.0.0.1:49152",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    "body": "id=K7Q2M9PX&key=ABCDEFGHJKMNPQRSTVWX"
+  },
+  "expect": {
+    "status": 303,
+    "headers": {
+      "set-cookie": "goldbook_session=[^;]+;.*",
+      "location": ".*#gold"
+    }
+  }
+}
