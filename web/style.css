@@ -810,6 +810,7 @@ td button {
   padding: 0;
   border: 0;
   background: none;
+  color: inherit;
   cursor: pointer;
   text-align: inherit;
 }
@@ -1127,6 +1128,32 @@ tbody tr:is(:hover, [aria-selected="true"]) td:first-child {
 .external {
   font-size: 13px;
   text-decoration: none;
+}
+
+/* An item's prices beside a view outside Market, under the title bar; on a
+   phone it covers the view. */
+.item-pane {
+  position: fixed;
+  top: var(--top);
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: min(440px, 100%);
+  overflow-y: auto;
+  padding: 12px 14px 16px;
+  border-left: 1px solid var(--edge);
+  background: var(--page);
+  box-shadow: -10px 0 24px rgb(0 0 0 / 14%);
+}
+
+.item-pane #detail {
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .pane-open .content {
+    margin-right: 440px;
+  }
 }
 
 .external::after {
