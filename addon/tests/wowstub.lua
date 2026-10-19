@@ -190,6 +190,12 @@ function methods:GetChecked()
 end
 -- Nothing is laid out, so a widget is only as wide, and reaches only as far
 -- right, as a test says.
+-- Text is about 6 wide a character in the window's small face, as the
+-- preview measures it; a character is one UTF-8 sequence.
+function methods:GetStringWidth()
+  local text = rawget(self, "text") or ""
+  return rawget(self, "stringWidth") or select(2, text:gsub("[^\128-\191]", "")) * 6
+end
 function methods:GetWidth()
   return rawget(self, "width") or 0
 end

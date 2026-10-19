@@ -1185,20 +1185,39 @@ local function showSegments(labels, on, onClick)
 end
 
 local function placeChips(definition)
+  -- The gap from a chip's label to the one before it, and the narrowest
+  -- the search box gets to leave room for the chips.
+  local CHIP_GAP, SEARCH_MIN = 17, 120
+  -- How far a chip reaches past the one before it: the gap, its label and
+  -- caret, and its padding of 9.
+  local function chipWidth(chip)
+    local width = CHIP_GAP + (chip.label:GetStringWidth() or 0) + 9
+    if chip.caret then
+      width = width + 5 + (chip.caret:GetStringWidth() or 0)
+    end
+    return width
+  end
   local toolbar, previous = window.filters, window.search
   for _, chip in pairs(toolbar.controls) do
     chip:SetShown(false)
   end
+  local used = 0
   for _, name in ipairs(definition.chips or {}) do
     local chip = toolbar.controls[name]
     chip:SetShown(true)
-    chip.label:SetPoint("LEFT", previous, "RIGHT", 17, 0)
+    chip.label:SetPoint("LEFT", previous, "RIGHT", CHIP_GAP, 0)
+    used = used + chipWidth(chip)
     previous = chip
   end
   local clear = toolbar.clear
   -- Segments on the toolbar take its room.
   clear:SetShown(filtered() and not definition.segmentsOnToolbar)
-  clear.label:SetPoint("LEFT", previous, "RIGHT", 17, 0)
+  clear.label:SetPoint("LEFT", previous, "RIGHT", CHIP_GAP, 0)
+  if clear:IsShown() then
+    used = used + chipWidth(clear)
+  end
+  -- The search box gives up width so that the last chip ends inside the page.
+  window.search:SetSize(math.max(SEARCH_MIN, math.min(SEARCH_WIDTH, PAGE_WIDTH - used)), TOOLBAR_HEIGHT)
 end
 
 local function chipLabels()

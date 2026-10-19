@@ -73,6 +73,27 @@ window.filters.clear.scripts.OnClick()
 assert(shown() == "10504:584,2318,2447,2589,2840,2881,858,999999", "clear restores all items")
 choose("quality", 4)
 assert(shown() == "10504:584,2881", "uncommon quality filters the whole list")
+-- By item has four chips; with a filter chosen, Clear filters joins them, and
+-- the search box gives up width so the row still ends inside the page.
+local function reach()
+  local right = window.search.width
+  for _, chip in pairs(window.filters.controls) do
+    if chip:IsShown() then
+      right = right + 17 + chip.label:GetStringWidth() + 9 + (chip.caret and 5 + chip.caret:GetStringWidth() or 0)
+    end
+  end
+  if window.filters.clear:IsShown() then
+    right = right + 17 + window.filters.clear.label:GetStringWidth() + 9
+  end
+  return right
+end
+window.filters.clear.scripts.OnClick()
+ns.UI.Show("items")
+local unfiltered = window.search.width
+assert(reach() <= 681, "By item's chips end inside the page, " .. reach())
+choose("profession", 2)
+assert(window.filters.clear:IsShown() and window.search.width < unfiltered and reach() <= 681,
+  "a filter on By item narrows the search box so Clear filters ends inside the page, " .. window.search.width .. " " .. reach())
 ns.UI.Show("gold")
 assert(not window.filters:IsShown(), "item filters are hidden on the gold view")
 io.write("Profession filters passed: shared materials, recipes, crafted goods, suffixes, quality and UI dropdowns.\n")
