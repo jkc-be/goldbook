@@ -78,6 +78,8 @@ struct App {
     registrations: Mutex<LoginLimits>,
     oauth_starts: Mutex<LoginLimits>,
     oauth_codes: Mutex<LoginLimits>,
+    // Apart from the app's starts: any site can send a browser to the website's.
+    web_starts: Mutex<LoginLimits>,
 }
 
 pub fn router(config: Config) -> anyhow::Result<Router> {
@@ -99,6 +101,7 @@ pub fn router(config: Config) -> anyhow::Result<Router> {
         registrations: Mutex::new(LoginLimits::default()),
         oauth_starts: Mutex::new(LoginLimits::default()),
         oauth_codes: Mutex::new(LoginLimits::default()),
+        web_starts: Mutex::new(LoginLimits::default()),
     });
     let updates = state
         .config
