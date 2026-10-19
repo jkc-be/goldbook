@@ -141,14 +141,20 @@ needed. Enabling both publishing methods can produce duplicate uploads.
 
 ## Publish to WoWInterface
 
-Create the first Goldbook entry through WoWInterface's
-[upload form](https://www.wowinterface.com/downloads/upload-update.php), using
-the existing GitHub release ZIP. Set the addon mirror's repository variable
-`WOWINTERFACE_PROJECT_ID` to the numeric ID from its download page. Without
-that variable the WoWInterface job stays disabled.
+[Goldbook on WoWInterface](https://www.wowinterface.com/downloads/info27272-Goldbook.html)
+is project `27272`; its initial version was uploaded through the website. The
+addon mirror's repository variable `WOWINTERFACE_PROJECT_ID` selects this
+project. Without that variable the workflow stays disabled.
 
-Later mirror releases offer a separate `wowinterface` approval in **Package
-addon release**. It uploads the same tested ZIP as GitHub and CurseForge using
+The separate **Publish to WoWInterface** workflow starts after **Package addon
+release** succeeds, including its CurseForge upload or verified receipt. It
+has its own `wowinterface` approval and concurrency group. Approval delays,
+failed uploads and moderation cannot block promotion, tagging or the next
+release. Retry this workflow separately after checking the project page.
+
+It checks out the successful run's exact commit and downloads its GitHub
+release ZIP. Before uploading, it compares the ZIP with that commit's package
+and verifies its CurseForge receipt. It publishes those same bytes through
 the [WoWInterface update API](https://www.wowinterface.com/forums/showthread.php?t=51835).
 Store `WOWINTERFACE_API_TOKEN` only in the protected `wowinterface` environment,
 restricted to `main`, with approval by `jkc-be` and administrator bypass off.

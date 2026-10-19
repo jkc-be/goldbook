@@ -214,7 +214,10 @@ disable administrator bypass. The repository variable
 entry is created through its website. There are no repository-level secrets. The
 release workflow accepts only runs initiated and rerun by `jkc-be`; the
 existing mirror key's pushes are attributed to that account. Tests and GitHub
-packaging run before each separate publishing job can receive its token.
+packaging run before each publishing job can receive its token. WoWInterface
+runs in a separate workflow after the CurseForge workflow succeeds, with its
+own concurrency group. Release promotion waits only for the primary
+GitHub/CurseForge workflow.
 
 Only `jkc-be` is a collaborator, and the mirror key is the only write deploy
 key. Public contributors can fork and propose pull requests, but cannot push

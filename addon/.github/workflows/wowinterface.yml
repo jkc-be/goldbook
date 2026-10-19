@@ -1,0 +1,67 @@
+name: Publish to WoWInterface
+on:
+  workflow_run:
+    workflows: [Package addon release]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: addon-wowinterface
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'jkc-be/goldbook-addon' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.actor.login == 'jkc-be' &&
+      github.event.workflow_run.triggering_actor.login == 'jkc-be' &&
+      vars.WOWINTERFACE_PROJECT_ID != ''
+    environment: wowinterface
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Verify the release already sent to CurseForge
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          expected=$(python3 package.py expected)
+          archive=$(basename "$expected")
+          version=${archive#Goldbook-}
+          tag="v${version%.zip}"
+          gh release download "$tag" --pattern "$archive" --pattern curseforge.json --dir dist
+          cmp "$expected" "dist/$archive"
+          python3 upload-curseforge.py "dist/$archive" --receipt dist/curseforge.json --check
+          gh release view "$tag" --json body --jq .body > release-notes.md
+          gh release view "$tag" --json assets --jq '.assets[].name' > release-assets.txt
+          if grep -Fxq wowinterface.json release-assets.txt; then
+            gh release download "$tag" --pattern wowinterface.json
+          fi
+          printf 'archive=%s\ntag=%s\n' "$archive" "$tag" >> "$GITHUB_OUTPUT"
+      - name: Upload to WoWInterface
+        env:
+          WOWINTERFACE_API_TOKEN: ${{ secrets.WOWINTERFACE_API_TOKEN }}
+          PROJECT_ID: ${{ vars.WOWINTERFACE_PROJECT_ID }}
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+        run: python3 upload-wowinterface.py "dist/$ARCHIVE" --project-id "$PROJECT_ID" --changelog release-notes.md
+      - name: Record the WoWInterface upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if ! grep -Fxq wowinterface.json release-assets.txt; then
+            gh release upload "$TAG" wowinterface.json
+          fi

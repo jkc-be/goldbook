@@ -122,7 +122,7 @@ class Release:
         promote_id, promote_url = self.dispatch(PROMOTE, {"build_run_id": build_id})
         self.say(f"Release promote run {promote_id}: {promote_url}")
         self.say("Approve production for server and for publish, then addon-mirror, "
-                 "then curseforge and, when enabled, wowinterface in jkc-be/goldbook-addon.")
+                 "then curseforge in jkc-be/goldbook-addon.")
         conclusion = self.watch(promote_id)["conclusion"]
         if conclusion != "success":
             raise Failure(f"Release promote run {promote_id} ended with {conclusion}: {promote_url}\n"

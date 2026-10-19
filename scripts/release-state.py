@@ -367,7 +367,7 @@ def downstream_verdict(runs, read_jobs):
     """Whether goldbook-addon's Package addon release finished for a mirror
     commit: ('success' | 'pending' | 'failure', message)."""
     for run in sorted(runs, key=lambda r: r["id"], reverse=True):
-        # A successful run ended with every enabled destination uploaded or recorded.
+        # A successful run ended with CurseForge uploaded or already recorded.
         # Its package job must have run, in this or an earlier attempt, rather
         # than been skipped by the job's actor condition.
         if run["status"] == "completed" and run["conclusion"] == "success":
