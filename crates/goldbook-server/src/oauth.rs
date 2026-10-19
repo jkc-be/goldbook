@@ -91,9 +91,15 @@ fn secret() -> String {
 }
 fn no_store(mut reply: Reply) -> Reply {
     reply.headers.push(("cache-control", "no-store".into()));
-    reply
+    if !reply
         .headers
-        .push(("referrer-policy", "no-referrer".into()));
+        .iter()
+        .any(|(name, _)| *name == "referrer-policy")
+    {
+        reply
+            .headers
+            .push(("referrer-policy", "no-referrer".into()));
+    }
     reply
 }
 fn failure(status: u16, text: &str) -> Error {
@@ -196,9 +202,18 @@ fn confirmation(input: &Input, db: &Connection) -> Result<Reply> {
             "sign-in request expired or already opened; start again in Goldbook",
         ));
     }
-    Ok(html(format!(
+    let mut page = html(format!(
         r#"<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Connect Goldbook</title><main><h1>Connect Goldbook to Battle.net</h1><p>Only continue if you started sign-in in Goldbook.</p><p>Enter the eight-character code shown in the Goldbook app. Never enter a code sent by someone else.</p><form method="post" action="authorize"><input type="hidden" name="request" value="{request}"><label>Goldbook code <input name="userCode" required minlength="8" maxlength="8" autocomplete="off" spellcheck="false" pattern="[A-Z2-9]{{8}}"></label><button type="submit">Continue to Battle.net</button></form></main></html>"#
-    )))
+    ));
+    // Browsers send the form's Origin only under a referrer policy that
+    // allows it. Its redirect to Battle.net continues through regional login
+    // hosts, and form-action would have to name every one.
+    page.headers.push(("referrer-policy", "same-origin".into()));
+    page.headers.push((
+        "content-security-policy",
+        crate::CSP.replace("; form-action 'self'", ""),
+    ));
+    Ok(page)
 }
 fn authorize(input: &Input, app: &App, config: &BattleNetConfig, db: &Connection) -> Result<Reply> {
     let origin = url::Url::parse(&config.public_url)

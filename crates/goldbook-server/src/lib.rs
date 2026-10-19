@@ -202,6 +202,7 @@ impl From<anyhow::Error> for Error {
         Self::new(500, "internal error")
     }
 }
+pub(crate) const CSP: &str = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 struct Reply {
     status: u16,
     body: Vec<u8>,
@@ -223,10 +224,20 @@ impl Reply {
         r
     }
     fn response(self, head: bool) -> Response {
-        let mut response = Response::builder().status(self.status)
-            .header("content-type",self.content_type).header("content-length",self.body.len())
-            .header("x-content-type-options","nosniff").header("referrer-policy","same-origin")
-            .header("content-security-policy","default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+        let mut response = Response::builder()
+            .status(self.status)
+            .header("content-type", self.content_type)
+            .header("content-length", self.body.len())
+            .header("x-content-type-options", "nosniff");
+        // A handler's own policy replaces the default, since browsers enforce every copy.
+        for (name, value) in [
+            ("referrer-policy", "same-origin"),
+            ("content-security-policy", CSP),
+        ] {
+            if !self.headers.iter().any(|(set, _)| *set == name) {
+                response = response.header(name, value);
+            }
+        }
         for (name, value) in self.headers {
             response = response.header(name, value);
         }

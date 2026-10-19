@@ -98,6 +98,17 @@ impl Fixture {
         let page = opened.2.as_str().unwrap();
         assert!(page.contains("Only continue if you started sign-in in Goldbook."));
         assert!(!page.contains(started.2["userCode"].as_str().unwrap()));
+        // Browsers enforce every copy of these headers, so each must be the only one.
+        let only = |name| {
+            let values: Vec<_> = opened.1.get_all(name).iter().collect();
+            assert_eq!(values.len(), 1, "{name}");
+            values[0].to_str().unwrap().to_owned()
+        };
+        assert_eq!(only("referrer-policy"), "same-origin");
+        assert_eq!(
+            only("content-security-policy"),
+            "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"
+        );
         let request = public_url
             .query_pairs()
             .find(|(key, _)| key == "request")
