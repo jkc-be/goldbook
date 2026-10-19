@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 helpers = runpy.run_path(str(ROOT / "scripts/verify-migration.py"))
 # Both upload setups the released app supports. The README sets up production with Battle.net.
 SERVERS = {
-    "default": lambda port: {"SELF_REGISTRATION": "true"},
+    "default": lambda port: {"SELF_REGISTRATION": "true", "UPLOAD_TOKEN": "dev-token", "BNET_CLIENT_ID": "",
+                             "BNET_CLIENT_SECRET": "", "GOLDBOOK_PUBLIC_URL": ""},
     "battlenet": lambda port: {"SELF_REGISTRATION": "true", "BNET_CLIENT_ID": "compatibility-client",
                                "BNET_CLIENT_SECRET": "compatibility-secret",
                                "GOLDBOOK_PUBLIC_URL": f"http://127.0.0.1:{port}"},
