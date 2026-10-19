@@ -1,6 +1,6 @@
 {
   "about": "The Prices, Bags and Gold views load the website at the server address.",
-  "source": "desktop/src-tauri/src/main.rs:674",
+  "source": "desktop/src-tauri/src/main.rs:736",
   "request": {
     "method": "GET",
     "path": "/"

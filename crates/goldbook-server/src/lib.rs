@@ -22,7 +22,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
-use subtle::ConstantTimeEq;
 
 const MAX_BODY: usize = 20 * 1024 * 1024;
 const MAX_LOGIN_BODY: usize = 4096;
@@ -31,8 +30,6 @@ const SESSION_SECONDS: i64 = 30 * 86400;
 #[derive(Clone)]
 pub struct Config {
     pub database: PathBuf,
-    pub upload_token: String,
-    pub self_registration: bool,
     pub battlenet: Option<BattleNetConfig>,
     pub web_dir: Option<PathBuf>,
     pub trusted_proxy: String,
@@ -40,11 +37,9 @@ pub struct Config {
     pub port: u16,
 }
 impl Config {
-    pub fn new(database: impl Into<PathBuf>, upload_token: impl Into<String>) -> Self {
+    pub fn new(database: impl Into<PathBuf>) -> Self {
         Self {
             database: database.into(),
-            upload_token: upload_token.into(),
-            self_registration: false,
             battlenet: None,
             web_dir: None,
             trusted_proxy: String::new(),
@@ -53,13 +48,8 @@ impl Config {
         }
     }
     pub fn from_env() -> anyhow::Result<Self> {
-        let mut c = Self::new(
-            std::env::var("DATABASE").unwrap_or_else(|_| "data/goldbook.sqlite".into()),
-            std::env::var("UPLOAD_TOKEN").unwrap_or_default(),
-        );
-        c.self_registration = std::env::var("SELF_REGISTRATION")
-            .map(|value| value.parse::<bool>())
-            .unwrap_or(Ok(false))?;
+        let mut c =
+            Self::new(std::env::var("DATABASE").unwrap_or_else(|_| "data/goldbook.sqlite".into()));
         c.battlenet = BattleNetConfig::from_env()?;
         c.host = std::env::var("HOST").unwrap_or(c.host);
         c.port = std::env::var("PORT")
@@ -72,7 +62,6 @@ impl Config {
 }
 struct App {
     config: Config,
-    tokens: Vec<Vec<u8>>,
     proxies: Vec<Network>,
     logins: Mutex<LoginLimits>,
     registrations: Mutex<LoginLimits>,
@@ -90,12 +79,8 @@ pub fn router(config: Config) -> anyhow::Result<Router> {
     let proxies = split(&config.trusted_proxy)
         .map(Network::parse)
         .collect::<anyhow::Result<Vec<_>>>()?;
-    let tokens = split(&config.upload_token)
-        .map(|t| format!("Bearer {t}").into_bytes())
-        .collect();
     let state = Arc::new(App {
         config,
-        tokens,
         proxies,
         logins: Mutex::new(LoginLimits::default()),
         registrations: Mutex::new(LoginLimits::default()),
@@ -253,18 +238,12 @@ impl Reply {
             .expect("valid response")
     }
 }
-fn authorize(headers: &HeaderMap, state: &App) -> Result<Option<String>> {
+// The fingerprint of the WoW account whose registered token uploads.
+fn authorize(headers: &HeaderMap, state: &App) -> Result<String> {
     let given = headers
         .get("authorization")
         .map(|v| v.as_bytes())
         .unwrap_or_default();
-    let mut matches = subtle::Choice::from(0);
-    for token in &state.tokens {
-        matches |= given.ct_eq(token);
-    }
-    if bool::from(matches) {
-        return Ok(None);
-    }
     if let Some(token) = std::str::from_utf8(given)
         .ok()
         .and_then(|value| value.strip_prefix("Bearer gb_"))
@@ -280,14 +259,11 @@ fn authorize(headers: &HeaderMap, state: &App) -> Result<Option<String>> {
             Some((_, true, _)) => return Err(Error::new(403, "this account is blocked")),
             Some((true, false, _)) => return Err(Error::new(401, "invalid upload token")),
             Some((false, false, fingerprint)) => {
-                oauth::authorize_upload(&db, &fingerprint, state)?;
-                return Ok(Some(fingerprint));
+                oauth::authorize_upload(&db, &fingerprint)?;
+                return Ok(fingerprint);
             }
             None => {}
         }
-    }
-    if state.tokens.is_empty() && !state.config.self_registration {
-        return Err(Error::new(503, "the upload token is not configured"));
     }
     Err(Error::new(401, "invalid upload token"))
 }
@@ -360,7 +336,7 @@ async fn handle(State(state): State<Arc<App>>, request: Request) -> Response {
                 .await
                 .unwrap_or_else(|_| Err(Error::new(500, "internal error")));
         match authorization {
-            Ok(fingerprint) => fingerprint,
+            Ok(fingerprint) => Some(fingerprint),
             Err(error) => {
                 // Closing with an unread body can reset the proxy connection,
                 // replacing this response with a 502. Keep draining bounded.
