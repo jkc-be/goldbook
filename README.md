@@ -50,7 +50,7 @@ tests override database and upload settings and remove inherited Battle.net,
 proxy and web-directory configuration. Deployment tooling tests use fixtures;
 the suite does not deploy anything. Cargo may download build dependencies.
 
-The proxy check starts real Traefik 3.7.15 on a random loopback
+The proxy check starts real Traefik 3.7.15, matching OVH, on a random loopback
 port. It renders both production Compose proxy configurations with test-only
 settings and uses their routing rules, priorities, middleware chains and body
 limits. It tests an authenticated batch larger than 64 KiB, both host layouts,
