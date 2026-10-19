@@ -1320,7 +1320,7 @@ for _, entry in pairs(GoldbookWindow.hubs) do
     shortest, strokes = math.min(shortest, math.sqrt((to[3] - from[3]) ^ 2 + (to[4] - from[4]) ^ 2)), strokes + 1
   end
 end
-eq(("%d strokes, the shortest %.1f"):format(strokes, shortest), "20 strokes, the shortest 4.0", "every rail icon stroke is long enough for the client to draw")
+eq(("%d strokes, the shortest %.1f"):format(strokes, shortest), "21 strokes, the shortest 4.0", "every rail icon stroke is long enough for the client to draw")
 
 eq(ns.UI.Theme(), "dark", "the window starts dark")
 SlashCmdList.GOLDBOOK("theme light")
