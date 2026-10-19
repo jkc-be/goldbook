@@ -496,13 +496,32 @@ fn web_callback(
         return Err(failure(400, "sign-in state expired or already used"));
     }
     let identity = verified_identity(input, config)?;
+    let cookie = web_session(input, db, &identity)?;
+    let mut reply = Reply::json(json!({}));
+    reply.status = 303;
+    reply.headers.push((
+        "location",
+        format!("{}/#gold", config.public_url.trim_end_matches('/')),
+    ));
+    reply.headers.push(cookie);
+    reply
+        .headers
+        .push(("set-cookie", config.cookie(WEB_CSRF, "", 0)));
+    Ok(reply)
+}
+// A website session for the player, as its cookie.
+fn web_session(
+    input: &Input,
+    db: &mut Connection,
+    identity: &str,
+) -> Result<(&'static str, String)> {
     let token = secret();
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute(
         "INSERT INTO battlenet_identities(identity_hash) VALUES (?1) ON CONFLICT DO NOTHING",
-        [&identity],
+        [identity],
     )?;
-    check_player(&tx, &identity)?;
+    check_player(&tx, identity)?;
     tx.execute(
         "DELETE FROM battlenet_web_sessions WHERE expires_at<=?1",
         [now()],
@@ -512,18 +531,34 @@ fn web_callback(
         params![hash(&token), identity, now() + SESSION_SECONDS],
     )?;
     tx.commit()?;
+    Ok(crate::routes::cookie(input, &token, SESSION_SECONDS))
+}
+// The app's Battle.net session signs the website in as the same player, and
+// sends the browser on to `view`, so the app needs no ID and key.
+pub(super) fn desktop_login(
+    input: &Input,
+    app: &App,
+    db: &mut Connection,
+    session: &str,
+    view: &str,
+) -> Result<Reply> {
+    let identity: Option<String> = match app.config.battlenet {
+        Some(_) => db
+            .query_row(
+                "SELECT identity_hash FROM battlenet_sessions WHERE token_hash=?1 AND expires_at>?2",
+                params![hash(session), now()],
+                |row| row.get(0),
+            )
+            .optional()?,
+        None => None,
+    };
+    let identity =
+        identity.ok_or_else(|| failure(401, "sign in with Battle.net again in Goldbook"))?;
+    let cookie = web_session(input, db, &identity)?;
     let mut reply = Reply::json(json!({}));
     reply.status = 303;
-    reply.headers.push((
-        "location",
-        format!("{}/#gold", config.public_url.trim_end_matches('/')),
-    ));
-    reply
-        .headers
-        .push(crate::routes::cookie(input, &token, SESSION_SECONDS));
-    reply
-        .headers
-        .push(("set-cookie", config.cookie(WEB_CSRF, "", 0)));
+    reply.headers.push(("location", format!("../#{view}")));
+    reply.headers.push(cookie);
     Ok(reply)
 }
 fn provider_json(response: reqwest::blocking::Response) -> Result<Value> {
