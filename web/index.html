@@ -99,6 +99,7 @@
             <nav class="pager" aria-label="Pages"></nav>
           </div>
 
+          <div id="detail-splitter" class="splitter" role="separator" aria-orientation="vertical" aria-controls="detail" aria-label="Resize the item's prices" title="Drag to resize. Double-click for the default width." tabindex="0"></div>
           <section id="detail" class="panel" aria-labelledby="detail-title" hidden>
             <div class="detail-head">
               <h2 id="detail-title"></h2>
@@ -327,6 +328,6 @@
 
     <script type="module" src="app.js"></script>
     <!-- An item's prices beside a view outside Market; it borrows #detail. -->
-    <aside id="item-pane" class="item-pane" aria-label="Item prices" hidden></aside>
+    <aside id="item-pane" class="item-pane" aria-label="Item prices" hidden><div id="pane-splitter" class="splitter" role="separator" aria-orientation="vertical" aria-controls="detail" aria-label="Resize the item's prices" title="Drag to resize. Double-click for the default width." tabindex="0"></div></aside>
   </body>
 </html>
