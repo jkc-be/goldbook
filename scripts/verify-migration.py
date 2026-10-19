@@ -304,7 +304,7 @@ def exercise_upgrade(directory, old_repo, server_binary):
     with sqlite3.connect(database) as db:
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("SELECT id, uploaded_at FROM scans").fetchall() == [(7, 1760000010)], "upgrade lost or duplicated a historical scan"
-        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == (5 if old_repo else 12)
+        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == (5 if old_repo else 13)
     with server(directory, old_repo, server_binary) as restarted:
         restarted.check("upgrade-restart", "GET", "/api/character?name=Legacy&realm=Legacy", cookie="goldbook_session=legacy-session")
         api.transcript.update(restarted.transcript)

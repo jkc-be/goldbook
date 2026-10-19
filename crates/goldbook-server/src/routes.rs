@@ -851,6 +851,11 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
         }
         if stored != account.key_hash {
             tx.execute("DELETE FROM sessions WHERE account_id=?1", [&account.id])?;
+            // A new key also shuts out the other players who uploaded the ID.
+            tx.execute(
+                "DELETE FROM account_identities WHERE account_id=?1",
+                [&account.id],
+            )?;
         }
     }
     tx.execute("INSERT INTO accounts (id,key_hash,updated_at) VALUES (?1,?2,?3) ON CONFLICT(id) DO UPDATE SET key_hash=excluded.key_hash,updated_at=excluded.updated_at",params![account.id,account.key_hash,now()])?;
@@ -897,6 +902,12 @@ fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply> {
             ])?;
             *copy += 1;
         }
+    }
+    if let Some(fingerprint) = &input.uploader {
+        tx.execute(
+            "INSERT INTO account_identities (account_id,identity_hash,first_seen) SELECT ?1,battlenet_identity,?3 FROM upload_identities WHERE fingerprint=?2 AND battlenet_identity IS NOT NULL ON CONFLICT DO NOTHING",
+            params![account.id, fingerprint, now()],
+        )?;
     }
     tx.commit()?;
     Ok(Reply::json(
