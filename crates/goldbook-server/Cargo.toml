@@ -15,7 +15,7 @@ goldbook-core.workspace = true
 hex.workspace = true
 rand.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "form"] }
-rusqlite = { version = "0.38", features = ["bundled", "functions"] }
+rusqlite = { version = "0.39", features = ["bundled", "functions"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
