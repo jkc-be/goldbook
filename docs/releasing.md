@@ -185,8 +185,8 @@ days.
    revision or a later commit. Check `https://app.jkc-be.com/goldbook`.
 3. Approve `production` for `publish`.
 4. Approve `addon-mirror` for the mirror.
-5. Approve `curseforge` in the **Package addon release** run in
-   `jkc-be/goldbook-addon`.
+5. Approve `curseforge`, and `wago` once Wago uploads are on, in the
+   **Package addon release** run in `jkc-be/goldbook-addon`.
 6. The `tag` job creates `v<version>` on the built commit.
 
 The jobs, in order:
@@ -197,7 +197,7 @@ The jobs, in order:
 | `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The helper compares the revision with the one the server runs. It skips the deploy when the server already runs that commit or a later one, and refuses one whose history diverged. |
 | `publish` | Runs the helper's `publish` for the build run. |
 | `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. |
-| `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge job. It polls every 3 minutes for at most 120 minutes. |
+| `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge and Wago jobs. It polls every 3 minutes for at most 120 minutes. |
 | `tag` | Creates `v<version>` at the revision. A tag already on that commit passes. |
 
 Promote and **Deploy to OVH** share the concurrency group

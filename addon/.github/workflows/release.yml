@@ -20,6 +20,7 @@ jobs:
       tag: ${{ steps.archive.outputs.tag }}
       sha256: ${{ steps.archive.outputs.sha256 }}
       upload: ${{ steps.release.outputs.upload }}
+      wago: ${{ steps.release.outputs.wago }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -61,15 +62,32 @@ jobs:
 
           Upstream source: https://github.com/jkc-be/goldbook/tree/main/addon
           NOTES
-            gh release create "$TAG" "$ARCHIVE" --target "$REVISION" --title "Goldbook ${TAG#v}" --notes-file release-notes.md
+            gh release create "$TAG" "$ARCHIVE" dist/release.json --target "$REVISION" --title "Goldbook ${TAG#v}" --notes-file release-notes.md
           fi
           gh release view "$TAG" --json assets --jq '.assets[].name' > release-assets.txt
+          # Releases from before release.json get it added; a different one is never replaced.
+          if grep -Fxq release.json release-assets.txt; then
+            gh release download "$TAG" --pattern release.json --dir existing
+            if ! cmp --silent dist/release.json existing/release.json; then
+              echo 'This version already has a different release.json. Bump the addon version before publishing.' >&2
+              exit 1
+            fi
+          else
+            gh release upload "$TAG" dist/release.json
+          fi
           if grep -Fxq curseforge.json release-assets.txt; then
             gh release download "$TAG" --pattern curseforge.json --dir existing
             python3 upload-curseforge.py "$ARCHIVE" --receipt existing/curseforge.json --check
             echo 'upload=false' >> "$GITHUB_OUTPUT"
           else
             echo 'upload=true' >> "$GITHUB_OUTPUT"
+          fi
+          if grep -Fxq wago.json release-assets.txt; then
+            gh release download "$TAG" --pattern wago.json --dir existing
+            python3 upload-wago.py "$ARCHIVE" --receipt existing/wago.json --check
+            echo 'wago=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'wago=true' >> "$GITHUB_OUTPUT"
           fi
 
   curseforge:
@@ -112,4 +130,47 @@ jobs:
         run: |
           if ! grep -Fxq curseforge.json release-assets.txt; then
             gh release upload "$TAG" curseforge.json
+          fi
+
+  # Off until the repository variable WAGO_UPLOAD is true.
+  wago:
+    needs: package
+    if: needs.package.outputs.wago == 'true' && vars.WAGO_UPLOAD == 'true'
+    environment: wago
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Download the tested release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.package.outputs.tag }}
+          ARCHIVE: ${{ needs.package.outputs.archive }}
+          ARCHIVE_SHA256: ${{ needs.package.outputs.sha256 }}
+        run: |
+          gh release download "$TAG" --pattern "$ARCHIVE" --dir dist
+          printf '%s  dist/%s\n' "$ARCHIVE_SHA256" "$ARCHIVE" | sha256sum --check --status
+          gh release view "$TAG" --json body --jq .body > release-notes.md
+          gh release view "$TAG" --json assets --jq '.assets[].name' > release-assets.txt
+          if grep -Fxq wago.json release-assets.txt; then
+            gh release download "$TAG" --pattern wago.json
+          fi
+      - name: Upload to Wago
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          ARCHIVE: ${{ needs.package.outputs.archive }}
+        run: python3 upload-wago.py "dist/$ARCHIVE" --changelog release-notes.md
+      - name: Record the Wago upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.package.outputs.tag }}
+        run: |
+          if ! grep -Fxq wago.json release-assets.txt; then
+            gh release upload "$TAG" wago.json
           fi

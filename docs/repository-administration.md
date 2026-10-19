@@ -208,15 +208,17 @@ extra directory and must not be uploaded to CurseForge.
 
 The mirror stores `CURSEFORGE_API_TOKEN` only in its `curseforge` environment.
 That environment permits the `main` branch, requires approval by `jkc-be`, and
-disables administrator bypass. There are no repository-level secrets. The
+disables administrator bypass. Wago Addons uploads are off until the repository
+variable `WAGO_UPLOAD` is `true`; then `WAGO_API_TOKEN` lives only in a `wago`
+environment with the same rules. There are no repository-level secrets. The
 release workflow accepts only runs initiated and rerun by `jkc-be`; the
 existing mirror key's pushes are attributed to that account. Tests and GitHub
-packaging run before the separate job can receive the CurseForge token.
+packaging run before the separate upload jobs can receive a token.
 
 Only `jkc-be` is a collaborator, and the mirror key is the only write deploy
 key. Public contributors can fork and propose pull requests, but cannot push
 to this repository, merge changes, edit secrets, or approve publishing jobs.
-External pull-request workflows require approval and receive no CurseForge
+External pull-request workflows require approval and receive no upload
 secret. GitHub Actions has read-only permissions by default and cannot approve
 pull requests.
 
