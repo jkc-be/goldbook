@@ -157,7 +157,7 @@ pub async fn prepare_uploads(settings: &mut Settings, config: &Path) -> Result<U
 mod tests {
     use super::*;
     use axum::Router;
-    use goldbook_server::{Config, router};
+    use goldbook_server::{BattleNetConfig, Config, router};
 
     fn account_files(root: &Path, account: &str) {
         for flavor in ["_retail_", "_classic_"] {
@@ -246,9 +246,30 @@ mod tests {
         account_files(&game, "ACCOUNT_A");
         account_files(&game, "ACCOUNT_B");
         let database = temp.path().join("server.sqlite");
-        let mut config = Config::new(&database, "");
-        config.self_registration = true;
+        let mut config = Config::new(&database);
+        config.battlenet = Some(BattleNetConfig::new(
+            "client".into(),
+            "test-secret".into(),
+            "https://gold.example/goldbook".into(),
+        ));
         let app = Router::new().nest("/goldbook", router(config).unwrap());
+        // The session sign-in leaves, written straight into the server's database.
+        let session = "bne_test-session";
+        {
+            use sha2::{Digest, Sha256};
+            let db = goldbook_server::db::connect(&database).unwrap();
+            let identity = hex::encode(Sha256::digest(b"battlenet:123"));
+            db.execute(
+                "INSERT INTO battlenet_identities (identity_hash) VALUES (?1)",
+                [&identity],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO battlenet_sessions (token_hash,identity_hash,expires_at) VALUES (?1,?2,unixepoch()+3600)",
+                [hex::encode(Sha256::digest(session)), identity],
+            )
+            .unwrap();
+        }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let api = format!("http://{}/goldbook", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
@@ -263,6 +284,7 @@ mod tests {
         let mut settings = Settings {
             api: api.clone(),
             wow_dir: game.to_string_lossy().into(),
+            battlenet_session: Some(session.into()),
             ..Settings::default()
         };
         let setup = prepare_uploads(&mut settings, &file).await.unwrap();
@@ -312,6 +334,7 @@ mod tests {
         let mut reset = Settings {
             api: api.clone(),
             wow_dir: game.to_string_lossy().into(),
+            battlenet_session: Some(session.into()),
             ..Settings::default()
         };
         let next = prepare_uploads(&mut reset, &file).await.unwrap();
