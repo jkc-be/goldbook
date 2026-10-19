@@ -362,6 +362,9 @@ def main():
             entry for entry in transcript["sync-state"]["uploaded"]
             if not entry.startswith("sellers:")
         ]
+        # Accounts now also remember the credential they were sent with.
+        for account in transcript["sync-state"]["accounts"].values():
+            del account["tokenHash"]
         rendered = json.dumps(transcript, indent=2, sort_keys=True) + "\n"
     if transcript != expected:
         difference = difflib.unified_diff(json.dumps(expected, indent=2, sort_keys=True).splitlines(), rendered.splitlines(), fromfile="original Python API", tofile="current API", lineterm="")

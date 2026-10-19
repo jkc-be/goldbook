@@ -374,7 +374,28 @@ async fn state_remembers_old_account_payloads_and_rotates_key_with_previous_hash
     let mut legacy: Value = serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
     legacy["accounts"]["K7Q2M9PX"] = legacy["accounts"]["K7Q2M9PX"]["payload"].clone();
     std::fs::write(&state, serde_json::to_vec(&legacy).unwrap()).unwrap();
+    // State from before credentials were remembered sends the account once more.
+    assert_eq!(sync_file(&options).await.unwrap().sent, 1);
     assert_eq!(sync_file(&options).await.unwrap().already_sent, 1);
+    assert_eq!(received.lock().unwrap().len(), 3);
+    task.abort();
+}
+#[tokio::test]
+async fn a_new_credential_sends_the_unchanged_account_again_once() {
+    let (api, received, task) = server().await;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("account.lua");
+    let state = dir.path().join("state.json");
+    std::fs::write(&file, "GoldbookDB={[\"account\"]={[\"id\"]=\"K7Q2M9PX\",[\"key\"]=\"7KQ2M9PXABCDEFGHJKMN\"},[\"items\"]={},[\"scans\"]={}}").unwrap();
+    let mut options = options(&file, &state, &api);
+    assert_eq!(sync_file(&options).await.unwrap().sent, 1);
+    options.token = "gb_after-battlenet-sign-in".into();
+    assert_eq!(sync_file(&options).await.unwrap().sent, 1);
+    assert_eq!(sync_file(&options).await.unwrap().already_sent, 1);
+    let sent = received.lock().unwrap().clone();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[0], sent[1]);
+    assert_eq!(sent[1]["id"], "K7Q2M9PX");
     task.abort();
 }
 #[tokio::test]
