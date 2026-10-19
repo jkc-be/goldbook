@@ -1193,6 +1193,77 @@ async function openPane(itemKey, place, row, name) {
   await loadHistory(itemKey, realm, name);
 }
 
+// The item's prices beside a list are as wide as the reader drags them, in
+// Prices and in the pane alike, and stay so in this browser.
+const DETAIL_WIDTH = "goldbook-detail-width";
+const MIN_DETAIL = 320;
+const MIN_BESIDE = 360;
+
+function setDetailWidth(width) {
+  const style = document.documentElement.style;
+  try {
+    if (width === null) {
+      style.removeProperty("--detail-width");
+      localStorage.removeItem(DETAIL_WIDTH);
+    } else {
+      style.setProperty("--detail-width", `${width}px`);
+      localStorage.setItem(DETAIL_WIDTH, String(width));
+    }
+  } catch {
+    // Without storage the width lasts until the page is left.
+  }
+}
+
+// A divider between `beside()` and the item's prices on its right. Dragging
+// it, or its arrow keys, moves the border; a double click restores the default.
+function splitter(handle, beside) {
+  const sizes = () => {
+    const detail = $("detail").getBoundingClientRect().width;
+    return { detail, max: detail + beside().getBoundingClientRect().width - MIN_BESIDE };
+  };
+  const describe = () => {
+    const { detail, max } = sizes();
+    handle.setAttribute("aria-valuenow", String(Math.round((detail / (max + MIN_BESIDE)) * 100)));
+  };
+  const resize = (width, max) => {
+    setDetailWidth(Math.round(Math.max(MIN_DETAIL, Math.min(width, max))));
+    describe();
+  };
+  handle.onpointerdown = (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    const { detail, max } = sizes();
+    const from = event.clientX;
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add("dragging");
+    document.body.classList.add("resizing");
+    handle.onpointermove = (move) => resize(detail + from - move.clientX, max);
+    handle.onpointerup = handle.onpointercancel = () => {
+      handle.onpointermove = null;
+      handle.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+    };
+  };
+  handle.onkeydown = (event) => {
+    const step = { ArrowLeft: 16, ArrowRight: -16 }[event.key];
+    if (step) {
+      event.preventDefault();
+      const { detail, max } = sizes();
+      resize(detail + step, max);
+    }
+  };
+  handle.ondblclick = () => {
+    setDetailWidth(null);
+    describe();
+  };
+  handle.onfocus = describe;
+}
+
+splitter($("detail-splitter"), () => $("prices-view").querySelector(".list"));
+splitter($("pane-splitter"), () => document.querySelector(".content"));
+
 $("detail-close").onclick = closePane;
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
