@@ -368,8 +368,6 @@ async fn battlenet_login(app: tauri::AppHandle) -> Reply {
         // The website view signs in again, now as the player.
         state.site.lock().unwrap().1 = false;
         settings.upload_tokens.clear();
-        // An explicit sign-in switches this server to verified account setup.
-        settings.token.clear();
         stop_sync(&app);
         settings::write(&state.config, &settings)?;
         connect(&app, settings).await
@@ -389,26 +387,6 @@ async fn battlenet_login(app: tauri::AppHandle) -> Reply {
     }
 }
 
-async fn check_upload(settings: &Settings) -> anyhow::Result<()> {
-    let client = goldbook_sync::api_client(&settings.api, Duration::from_secs(10))?;
-    let response = client
-        .post(goldbook_sync::api_url(&settings.api, "/api/scans")?)
-        .bearer_auth(&settings.token)
-        .header("content-type", "application/json")
-        .body("{}")
-        .send()
-        .await
-        .map_err(|_| anyhow::anyhow!("Goldbook cannot reach that server."))?;
-    match response.status().as_u16() {
-        400 | 200..=299 => Ok(()),
-        401 => anyhow::bail!(
-            "The server refused this app's upload access. Check Settings or contact the server administrator."
-        ),
-        503 => anyhow::bail!("That server has no upload token configured."),
-        code => anyhow::bail!("The server answered {code}."),
-    }
-}
-
 fn stop_sync(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
     state.generation.fetch_add(1, Ordering::SeqCst);
@@ -421,22 +399,18 @@ fn stop_sync(app: &tauri::AppHandle) {
 async fn connect(app: &tauri::AppHandle, mut settings: Settings) -> anyhow::Result<Settings> {
     let state = app.state::<AppState>();
     let setup = registration::prepare_uploads(&mut settings, &state.config).await?;
-    let _ = app.emit_to("main", "upload-ready", ());
     apply(app, &settings, setup)?;
     Ok(settings)
 }
 
 #[tauri::command]
-async fn save(app: tauri::AppHandle, input: Settings, token_edited: bool) -> Reply {
+async fn save(app: tauri::AppHandle, input: Settings) -> Reply {
     let state = app.state::<AppState>();
     let _operation = state.operation.lock().await;
     let result = async {
         let mut settings = input.prepare()?;
         let previous = settings::read(&state.config);
-        settings.reconcile_token(&previous, token_edited);
-        if !registration::needs_registration(&settings) {
-            check_upload(&settings).await?;
-        }
+        settings.keep_credentials(&previous);
         let source = updates::source(&app)?;
         let game = PathBuf::from(&settings.wow_dir);
         let website = settings.api.clone();
@@ -505,16 +479,13 @@ async fn do_sync(app: &tauri::AppHandle) -> Result<(), String> {
 async fn sync_now(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let _operation = state.operation.lock().await;
-    let running = state.service.lock().unwrap().is_some();
     let settings = settings::read(&state.config)
         .prepare()
         .map_err(|e| e.to_string())?;
-    if !running || registration::needs_registration(&settings) {
-        if !state.config.exists() {
-            return Err("Choose your World of Warcraft folder in Settings and save first.".into());
-        }
-        connect(&app, settings).await.map_err(|e| e.to_string())?;
+    if !state.config.exists() {
+        return Err("Choose your World of Warcraft folder in Settings and save first.".into());
     }
+    connect(&app, settings).await.map_err(|e| e.to_string())?;
     do_sync(&app).await
 }
 
@@ -996,17 +967,6 @@ mod tests {
 
     const WEB_STYLE: &str = include_str!("../../../web/style.css");
     const APP_STYLE: &str = include_str!("../../ui/style.css");
-
-    #[tokio::test]
-    async fn upload_check_rejects_saved_remote_http_settings() {
-        let settings = Settings {
-            api: "http://example.com/goldbook".into(),
-            token: "test-token".into(),
-            ..Settings::default()
-        };
-        let error = check_upload(&settings).await.unwrap_err();
-        assert!(error.to_string().contains("HTTPS"));
-    }
 
     fn rules(css: &str) -> impl Iterator<Item = (Vec<&str>, &str)> {
         css.split('}').filter_map(|rule| {
