@@ -919,7 +919,7 @@ function priceRow(item, market, trends) {
     marketCell,
     element("td", { className: "spark-column" }, trends ? [weekTrend(trends.days, lows, item.minBuyout)] : []),
     element("td", { className: "number listed", textContent: item.quantity.toLocaleString("en") }),
-    element("td", { className: "number seen", textContent: ago(market.seen), title: when(market.seen) }),
+    element("td", { className: "number seen", textContent: ago(item.scannedAt ?? market.seen), title: when(item.scannedAt ?? market.seen) }),
   ]);
   row.dataset.itemKey = item.itemKey;
   row.setAttribute("aria-selected", String(item.itemKey === state.selected));
@@ -989,7 +989,7 @@ function drawPrices(data, trends) {
   const { scan, marketScan } = data;
   const market = { borrowed: marketScan !== null && marketScan.id !== scan.id, scannedAt: marketScan?.scannedAt, seen: scan.scannedAt };
   const where = `${state.realm.realm}-${state.realm.faction}`;
-  $("scan").textContent = `${plural(data.total, "item")} on ${where}${market.borrowed ? ` · market values from the full scan of ${when(market.scannedAt)}` : ""}`;
+  $("scan").textContent = `${plural(data.total, "item")} scanned on ${where}${market.borrowed ? ` · market values from the full scan of ${when(market.scannedAt)}` : ""}`;
   $("prices-table").tBodies[0].replaceChildren(...data.items.map((item) => priceRow(item, market, trends)));
 }
 

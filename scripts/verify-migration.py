@@ -304,7 +304,7 @@ def exercise_upgrade(directory, old_repo, server_binary):
     with sqlite3.connect(database) as db:
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("SELECT id, uploaded_at FROM scans").fetchall() == [(7, 1760000010)], "upgrade lost or duplicated a historical scan"
-        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == (5 if old_repo else 14)
+        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == (5 if old_repo else 15)
     with server(directory, old_repo, server_binary) as restarted:
         restarted.check("upgrade-restart", "GET", "/api/character?name=Legacy&realm=Legacy", cookie="goldbook_session=legacy-session")
         api.transcript.update(restarted.transcript)
@@ -365,6 +365,15 @@ def main():
         # Accounts now also remember the credential they were sent with.
         for account in transcript["sync-state"]["accounts"].values():
             del account["tokenHash"]
+        # Prices now lists every item scanned on the realm, each at its newest
+        # price with its scan's time, and counts them all; tests/api.rs checks
+        # that. Here the newest scan's items keep the original answers.
+        for label, answer in transcript.items():
+            body = answer.get("body") if isinstance(answer, dict) else None
+            if isinstance(body, dict) and {"items", "scan", "total"} <= body.keys():
+                newest = body["scan"]["scannedAt"]
+                body["items"] = [item for item in body["items"] if item.pop("scannedAt") == newest]
+                body["total"] = expected[label]["body"]["total"]
         rendered = json.dumps(transcript, indent=2, sort_keys=True) + "\n"
     if transcript != expected:
         difference = difflib.unified_diff(json.dumps(expected, indent=2, sort_keys=True).splitlines(), rendered.splitlines(), fromfile="original Python API", tofile="current API", lineterm="")

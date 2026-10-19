@@ -855,7 +855,7 @@ eq(GoldbookWindow.shown, true, "window opens")
 eq(cells(1), "Linen Cloth | 1s 00c | 1s 05c | 100 | 3m ago", "price list shows the match")
 eq(cells(2), " |  |  |  | ", "price list shows only matches")
 eq(GoldbookWindow.rows[2].hit.shown, false, "empty rows cannot be clicked")
-eq(head(), "Prices |  | 1 item on Faramon-Horde", "the price list's title counts its items")
+eq(head(), "Prices |  | 1 item scanned on Faramon-Horde", "the price list's title counts its items")
 eq(GoldbookWindow.status.text, "Click an item to search the auction house · Alt+click for its history", "price list status")
 eq(GoldbookWindow.rows[1].spark.shown, true, "the price list draws the last 7 days of each item")
 eq(selectedTabs(), "prices", "the open view's tab is drawn selected and every tab stays clickable")
@@ -1137,7 +1137,7 @@ eq(GoldbookWindow.headers[1].text .. " " .. AuctionHouseFrame.SearchBar.searches
 Stub.alt = false
 GoldbookWindow.search.text = "silk"
 GoldbookWindow.search.scripts.OnTextChanged(GoldbookWindow.search, true)
-eq(GoldbookWindow.headers[1].text .. " " .. head(), "ITEM ↑ Prices |  | 0 items on Faramon-Horde", "typing a search leaves the item view for the price list")
+eq(GoldbookWindow.headers[1].text .. " " .. head(), "ITEM ↑ Prices |  | 0 items scanned on Faramon-Horde", "typing a search leaves the item view for the price list")
 
 for index = 1, 30 do
   GoldbookDB.items["900" .. index] = "1|Test Ore " .. index
@@ -1171,7 +1171,7 @@ ns.UI.ShowItem("9001")
 eq(GoldbookWindow.head.back.label.text .. " / " .. navigation(), "Back to Prices / Market: Prices Deals Movers",
   "an item opened with the window closed goes back to the price list, under Market")
 GoldbookWindow.head.back.scripts.OnClick(GoldbookWindow.head.back)
-eq(head(), "Prices |  | 30 items on Faramon-Horde", "and Back goes there")
+eq(head(), "Prices |  | 30 items scanned on Faramon-Horde", "and Back goes there")
 for index = 1, 30 do
   GoldbookDB.items["900" .. index], GoldbookDB.prices["Faramon-Horde"]["900" .. index] = nil, nil
 end

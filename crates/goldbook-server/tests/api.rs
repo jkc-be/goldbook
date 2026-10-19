@@ -1978,3 +1978,123 @@ async fn seller_batches_require_auth_validate_atomically_and_deduplicate() {
         );
     }
 }
+#[tokio::test]
+async fn prices_list_every_scanned_item_at_its_newest_price() {
+    let f = Fixture::new();
+    let names = json!({"2589":["Linen Cloth",1],"7070":["Elemental Water",1],"14047":["Runecloth",1],"2592":["Wool Cloth",1]});
+    for (at, rows) in [
+        (
+            1760000000,
+            json!([["2589", 110, 0, 42, 3], ["7070", 300, 0, 5, 2]]),
+        ),
+        (
+            1760100000,
+            json!([["2589", 150, 0, 40, 3], ["14047", 900, 0, 20, 4]]),
+        ),
+        // Uploaded last, scanned first: it adds Wool Cloth but no newer price.
+        (
+            1759900000,
+            json!([["7070", 999, 0, 1, 1], ["2592", 50, 0, 8, 2]]),
+        ),
+    ] {
+        let mut upload = scan();
+        upload["scannedAt"] = json!(at);
+        upload["mode"] = json!("browse");
+        upload["rows"] = rows;
+        upload["items"] = names.clone();
+        assert_eq!(
+            call(&f.app, "POST", "/api/scans", upload, &AUTH).await.0,
+            200
+        );
+    }
+    let listed = |prices: &Value| {
+        prices["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                (
+                    item["itemKey"].as_str().unwrap().to_owned(),
+                    item["minBuyout"].as_i64().unwrap(),
+                    item["scannedAt"].as_i64().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let (_, _, all) = call(
+        &f.app,
+        "GET",
+        "/api/prices?realm=Faramon&faction=Horde",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(all["total"], 4);
+    assert_eq!(
+        all["scan"]["scannedAt"], 1760100000,
+        "the scan named is still the newest"
+    );
+    assert_eq!(
+        listed(&all),
+        [
+            ("7070".to_owned(), 300, 1760000000),
+            ("2589".to_owned(), 150, 1760100000),
+            ("14047".to_owned(), 900, 1760100000),
+            ("2592".to_owned(), 50, 1759900000),
+        ]
+    );
+    let (_, _, cloth) = call(
+        &f.app,
+        "GET",
+        "/api/prices?realm=Faramon&faction=Horde&q=cloth&limit=1&offset=1",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(
+        cloth["total"], 3,
+        "Linen Cloth, Runecloth and Wool Cloth match"
+    );
+    assert_eq!(listed(&cloth), [("14047".to_owned(), 900, 1760100000)]);
+    let (_, _, other) = call(
+        &f.app,
+        "GET",
+        "/api/prices?realm=Faramon&faction=Alliance",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(other["error"], "no scans for this realm and faction");
+}
+#[tokio::test]
+async fn upgrading_fills_the_newest_price_of_every_scanned_item() {
+    let f = Fixture::new();
+    let mut db = db::connect(&f.database()).unwrap();
+    // Scans stored before the migration, the newer one first by id.
+    db.execute_batch(
+        "DROP TABLE latest_prices; DELETE FROM migrations WHERE name='0015_latest_prices.sql';",
+    )
+    .unwrap();
+    db.execute_batch("INSERT INTO scans (id,realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint) VALUES (1,'Faramon','Horde','EU',1760100000,'browse','Sultan','1.60.1.70338',1,1760100010,'a'),(2,'Faramon','Horde','EU',1760000000,'browse','Sultan','1.60.1.70338',2,1760100020,'b'); INSERT INTO prices VALUES (1,'2589',150,0,40,3),(2,'2589',110,0,42,3),(2,'7070',300,0,5,2);").unwrap();
+    db::migrate(&mut db).unwrap();
+    let app = router(Config::new(f.database(), "dev-token")).unwrap();
+    let (_, _, prices) = call(
+        &app,
+        "GET",
+        "/api/prices?realm=Faramon&faction=Horde&sort=min",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(prices["total"], 2);
+    let listed: Vec<_> = prices["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| (item["itemKey"].clone(), item["minBuyout"].clone()))
+        .collect();
+    assert_eq!(
+        listed,
+        [(json!("2589"), json!(150)), (json!("7070"), json!(300))]
+    );
+}

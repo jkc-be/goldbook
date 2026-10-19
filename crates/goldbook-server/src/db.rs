@@ -2,7 +2,7 @@ use rusqlite::{Connection, OptionalExtension, functions::FunctionFlags};
 use serde_json::Value;
 use std::{path::Path, time::Duration};
 
-const MIGRATIONS: [(&str, &str); 14] = [
+const MIGRATIONS: [(&str, &str); 15] = [
     (
         "0001_init.sql",
         include_str!("../../../server/migrations/0001_init.sql"),
@@ -58,6 +58,10 @@ const MIGRATIONS: [(&str, &str); 14] = [
     (
         "0014_battlenet_web.sql",
         include_str!("../../../server/migrations/0014_battlenet_web.sql"),
+    ),
+    (
+        "0015_latest_prices.sql",
+        include_str!("../../../server/migrations/0015_latest_prices.sql"),
     ),
 ];
 
