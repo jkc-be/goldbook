@@ -18,18 +18,20 @@
         <button type="button" data-view="gold" data-sign-in><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2V14" /><path d="M3 5H13" /><path d="M3 5L1 10H5Z" /><path d="M13 5L11 10H15Z" /></svg>Ledger</button>
         <button type="button" data-view="settings" aria-current="page"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.7 3L6.9 1.1H9.1L9.3 3L10.7 3.5L12.1 2.3L13.7 3.9L12.5 5.3L13 6.7L14.9 6.9V9.1L13 9.3L12.5 10.7L13.7 12.1L12.1 13.7L10.7 12.5L9.3 13L9.1 14.9H6.9L6.7 13L5.3 12.5L3.9 13.7L2.3 12.1L3.5 10.7L3 9.3L1.1 9.1V6.9L3 6.7L3.5 5.3L2.3 3.9L3.9 2.3L5.3 3.5Z" /><circle cx="8" cy="8" r="2.2" /></svg>Settings</button>
       </nav>
-      <div class="rail-sync">
-        <button type="button" id="sync" class="button sync-now"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7a5.5 5.5 0 0 1 10-2.5M13.5 9a5.5 5.5 0 0 1-10 2.5M12.5 1.5v3h-3M3.5 14.5v-3h3" /></svg>Sync now</button>
-      </div>
       <div class="rail-foot">
         <p id="session" class="session">Not signed in</p>
         <button type="button" id="log-in" class="button primary">Log in</button>
         <button type="button" id="log-out" class="button" hidden>Log out</button>
         <p class="rail-version">
           <span>Client <strong id="rail-version"></strong></span>
-          <button type="button" id="theme" class="icon-button">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
-          </button>
+          <span class="rail-buttons">
+            <button type="button" id="sync" class="icon-button" title="Sync now" aria-label="Sync now">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7a5.5 5.5 0 0 1 10-2.5M13.5 9a5.5 5.5 0 0 1-10 2.5M12.5 1.5v3h-3M3.5 14.5v-3h3" /></svg>
+            </button>
+            <button type="button" id="theme" class="icon-button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 3a5 5 0 0 0 0 10z" /></svg>
+            </button>
+          </span>
         </p>
         <button type="button" id="update-alert" class="button" hidden>Update ready</button>
       </div>

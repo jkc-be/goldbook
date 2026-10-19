@@ -314,15 +314,10 @@ input:disabled {
   outline-offset: -2px;
 }
 
-/* Sync now, above the foot's line, in reach over every view. */
-.rail-sync {
-  margin-top: auto;
-  padding: 0 14px 10px;
-}
-
 .rail-foot {
   display: grid;
   gap: 10px;
+  margin-top: auto;
   padding: 12px 14px 13px;
   border-top: 1px solid var(--line);
   color: var(--muted);
@@ -333,18 +328,20 @@ input:disabled {
   text-align: center;
 }
 
-.rail-sync .sync-now {
-  display: inline-flex;
+.rail-version {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  padding: 1px 10px;
-  font-size: 13px;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.sync-now svg {
-  width: 13px;
-  height: 13px;
+/* Sync now beside the theme switch, in reach over every view. */
+.rail-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+#sync path {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
@@ -352,11 +349,9 @@ input:disabled {
   stroke-linejoin: round;
 }
 
-.rail-version {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .rail-version strong {
