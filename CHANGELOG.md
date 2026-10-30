@@ -8,6 +8,57 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.4.1 - 2026-10-30
+
+### Addon
+
+- Add an auction house panel in Goldbook's dark and light themes. Open it
+  with the **Goldbook** button at the auction house or `/gb ah` to search,
+  buy, post bag items and cancel your auctions. Each trade has a review step.
+  Resize it from the bottom-right corner; Goldbook remembers the size.
+- Command+click a bag item on macOS, or Ctrl+click on Windows, to open its
+  live listings. Item icons also appear in the order book.
+- Hide Blizzard's auction window by default while the Goldbook panel is
+  open. Use Goldbook settings to keep it visible. Closing Goldbook's auction
+  panel closes Blizzard's window and ends the auction session too.
+- Browse saved scan prices immediately. Show the last scan time and a Quick
+  scan reminder; fetch current listings only when opening an item.
+- Run quick and full scans from the auction panel and browse Deals using
+  the same calculations as Market. Filter by profession, item type and
+  quality, or use Classic auction categories with nested submenus. Group item
+  variants with the stack icon, then expand a group to choose the exact
+  suffix or item level.
+- Save item groups with minimum, normal and maximum prices, undercut
+  amounts, post caps, stack sizes, durations and shopping limits. Posting,
+  undercut and shopping scans build a queue from current listings. Confirm
+  each post or cancellation, or open a shopping result to review a purchase.
+  Groups and rules are available inside Automation. Posting durations are
+  2, 8 or 24 hours.
+- Each GitHub release of the addon now carries a `release.json`, so WowUp
+  picks the right Goldbook download for the Forever client when it installs
+  or updates the addon from GitHub.
+
+### Server
+
+- Uploading now always needs Battle.net sign-in in the app. The server no
+  longer takes the shared `UPLOAD_TOKEN` or registers upload tokens without a
+  Battle.net session, and ignores `UPLOAD_TOKEN` and `SELF_REGISTRATION` in
+  its environment. A token registered before Battle.net sign-in stops
+  uploading; click **Sign in with Battle.net** in the app to get a new one.
+
+### Build
+
+- Sign and notarize the macOS app and disk image so Gatekeeper can verify
+  Goldbook downloads with Apple.
+- Add detailed help for every Makefile command, with arguments, examples,
+  prerequisites and effects. Use `make help release`, `make help-release`
+  or `make release HELP=1`. Help mode skips commands and their prerequisites,
+  including when several commands are requested together.
+- Explain that `make release --help` displays Make's own help, and point
+  missing-version errors to the relevant command help.
+- Add WoWInterface as a secondary addon download destination. Its separate
+  publishing workflow follows CurseForge and cannot block a release.
+
 ## 0.4.0 - 2026-10-19
 
 ### Addon
