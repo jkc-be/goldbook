@@ -81,6 +81,26 @@ jobs:
       - name: Test desktop authentication and the optimized GLib iterator
         run: cargo test --locked -p goldbook-desktop
 
+  desktop-windows-tests:
+    needs: paths
+    if: ${{ !cancelled() && (needs.paths.result != 'success' || needs.paths.outputs.desktop == 'true') }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - name: Check the ZIP dependency
+        run: python scripts/check-zip-dependency.py
+      - name: Test the Windows desktop app and compile its updater
+        run: cargo test --locked -p goldbook-desktop
+
   local-stack:
     needs: paths
     if: ${{ !cancelled() && (needs.paths.result != 'success' || needs.paths.outputs.stack == 'true') }}

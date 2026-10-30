@@ -12,7 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Also check Rust formatting and clippy")
     args = parser.parse_args()
-    commands = []
+    commands = [[sys.executable, "scripts/check-zip-dependency.py"]]
     if args.check:
         commands.append(["cargo", "fmt", "--all", "--check"])
     commands.extend(["luajit", f"addon/tests/{name}.lua"]

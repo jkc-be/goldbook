@@ -16,6 +16,25 @@ plain HTTP only for `localhost` and loopback IP addresses. Those local requests
 bypass environment proxies. API clients refuse redirects so upload credentials,
 account data, and sign-in tokens stay with the configured server.
 
+## Windows updater archives
+
+Tauri updater 2.14.1 moves its Windows ZIP dependency from 4.x to 9.x.
+Goldbook requires at least that updater release and locks ZIP to a patched
+version. ZIP 9.0.5 fixes
+[GHSA-m665-v7pm-7grj](https://github.com/advisories/GHSA-m665-v7pm-7grj)
+and includes the earlier archive extraction fixes in 9.0.0.
+
+`scripts/check-zip-dependency.py` rejects ZIP versions older than 9.0.5 and
+prereleases in the shared lockfile. It runs in `make check` and the Windows
+desktop test job. The updater continues to verify update signatures before
+extracting or installing packages.
+
+`desktop/src-tauri/tests/updater_zip.rs` exercises the same `ZipArchive::extract`
+API as the Windows updater. It checks that oversized symlink targets are
+rejected before filesystem operations, that symlinks cannot escape the update
+directory, and that ordinary archives still extract. Both symlink checks fail
+against the old ZIP 4.6.1.
+
 ## GLib security backport
 
 Tauri 2 and its GTK 3 dependencies require GLib 0.18. The registry release
