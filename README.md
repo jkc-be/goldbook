@@ -1076,11 +1076,7 @@ It checks the app and DMG signatures, Apple notarization tickets and Gatekeeper
 acceptance before uploading artifacts. Missing signing or notarization credentials
 fail the build.
 
-Notarization is off for now, because Apple does not yet accept the team for it.
-`NOTARIZE: 'false'` in `.github/workflows/desktop.yml` makes the builder sign
-without notarizing and skip the notarization and Gatekeeper checks, so macOS
-still warns on first launch. [Issue #24](https://github.com/jkc-be/goldbook/issues/24)
-tracks turning it back on. The update feed still requires its separate
+The update feed still requires its separate
 `TAURI_SIGNING_PRIVATE_KEY` secret in the same protected environment.
 
 To run all checks and build every installer, use **Actions > Check > Run

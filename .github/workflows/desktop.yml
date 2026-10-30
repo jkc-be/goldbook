@@ -46,13 +46,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: cargo test --locked -p goldbook-desktop
       - run: npm ci
-      - name: Build Apple-signed macOS installers
+      - name: Build Apple-signed and notarized macOS installers
         if: runner.os == 'macOS' && (inputs.release || inputs.sign-macos)
         shell: bash
         env:
-          # Apple refuses to notarize for the team until it enables the account.
-          # Remove this line to notarize again: https://github.com/jkc-be/goldbook/issues/24
-          NOTARIZE: 'false'
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: 'Developer ID Application: jkc (P5339LSR49)'
