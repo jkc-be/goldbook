@@ -1,4 +1,8 @@
-use crate::{App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header, now};
+use crate::{
+    App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header,
+    house::{House, HouseRules},
+    now,
+};
 use axum::http::Method;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use flate2::{Compression, write::GzEncoder};
@@ -15,7 +19,7 @@ use std::{
 };
 use subtle::ConstantTimeEq;
 
-const SCANS: &str = "SELECT id, scanned_at AS scannedAt, mode, item_count AS itemCount, scanner FROM scans WHERE realm=?1 AND faction=?2";
+const SCANS: &str = "SELECT id, scanned_at AS scannedAt, mode, item_count AS itemCount, scanner FROM scans WHERE house=?1 AND faction=?2";
 const NAMED: &str = "LEFT JOIN items i ON i.item_key=p.item_key";
 const MARKET_JOIN: &str = "LEFT JOIN prices m ON m.scan_id=?5 AND m.item_key=p.item_key";
 const MARKET: &str = "COALESCE(m.market_value,p.market_value)";
@@ -67,12 +71,13 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
         return Err(Error::new(404, "not found"));
     }
     let mut db = db::connect(&app.config.database)?;
+    let rules = app.config.houses;
     match route {
         ("POST", "/api/installations") => register_installation(&input, app, &mut db),
-        ("POST", "/api/scans") => upload_scan(&input, &mut db),
-        ("POST", "/api/sellers") => upload_sellers(&input, &mut db),
-        ("POST", "/api/sellers/batch") => upload_seller_batch(&input, &mut db),
-        ("GET", "/api/sellers") => sellers(&input, &db),
+        ("POST", "/api/scans") => upload_scan(&input, &mut db, rules),
+        ("POST", "/api/sellers") => upload_sellers(&input, &mut db, rules),
+        ("POST", "/api/sellers/batch") => upload_seller_batch(&input, &mut db, rules),
+        ("GET", "/api/sellers") => sellers(&input, &db, rules),
         ("POST", "/api/account") => upload_account(&input, &mut db),
         ("POST", "/api/login") => authenticate(&input, app, &mut db, input.json()?, None),
         ("POST", "/api/desktop-login") => {
@@ -124,18 +129,20 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
             r.headers.push(cookie(&input, "", 0));
             Ok(r)
         }
+        // One row per house and faction, listed under `realm`: a house name
+        // maps to itself, so what is listed here answers `?realm=` as well.
         ("GET", "/api/realms") => Ok(Reply::json(
-            json!({"realms":db::query(&db,"SELECT realm,faction,MAX(region) AS region,COUNT(*) AS scans,MAX(scanned_at) AS lastScan FROM scans GROUP BY realm,faction ORDER BY lastScan DESC",&[])?}),
+            json!({"realms":db::query(&db,"SELECT house AS realm,faction,MAX(region) AS region,COUNT(*) AS scans,MAX(scanned_at) AS lastScan FROM scans GROUP BY house,faction ORDER BY lastScan DESC",&[])?}),
         )),
         ("GET", "/api/professions") => Ok(Reply::json(
             json!({"professions": goldbook_core::professions()}),
         )),
-        ("GET", "/api/prices") => prices(&input, &db),
-        ("GET", "/api/deals") => deals(&input, &db),
-        ("GET", "/api/movers") => movers(&input, &db),
-        ("GET", "/api/history") => history(&input, &db),
-        ("GET", "/api/trends") => trends(&input, &db),
-        ("GET", "/api/export") => export(&input, &db),
+        ("GET", "/api/prices") => prices(&input, &db, rules),
+        ("GET", "/api/deals") => deals(&input, &db, rules),
+        ("GET", "/api/movers") => movers(&input, &db, rules),
+        ("GET", "/api/history") => history(&input, &db, rules),
+        ("GET", "/api/trends") => trends(&input, &db, rules),
+        ("GET", "/api/export") => export(&input, &db, rules),
         ("GET", "/api/account") => characters(&input, &db),
         ("GET", "/api/character") => character(&input, &db),
         ("GET", "/api/trades") => trades(&input, &db),
@@ -149,6 +156,13 @@ fn required<'a>(input: &'a Input, name: &str) -> Result<&'a str> {
         .map(String::as_str)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Error::new(400, format!("{name} is required")))
+}
+/// The house and faction a read answers for, from the `realm` and `faction`
+/// the client asked for. The only place a realm becomes a house.
+fn market(input: &Input, rules: HouseRules) -> Result<(House, &str)> {
+    let realm = required(input, "realm")?;
+    let faction = required(input, "faction")?;
+    Ok((rules.of(realm), faction))
 }
 fn integer(input: &Input, name: &str, fallback: i64, maximum: i64) -> Result<i64> {
     let Some(value) = input.query.get(name) else {
@@ -248,10 +262,13 @@ fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Resul
     Ok(reply)
 }
 
-fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
+fn upload_scan(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<Reply> {
     let scan = input.upload(goldbook_core::parse_scan_upload)?;
+    let house = rules.of(&scan.realm);
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let inserted = tx.execute("INSERT INTO scans (realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,unixepoch(),?9) ON CONFLICT(fingerprint) DO NOTHING",params![scan.realm,scan.faction,scan.region,scan.scanned_at as i64,scan.mode,scan.scanner,scan.build,scan.rows.len() as i64,scan.fingerprint()])?;
+    // The fingerprint keeps the realm, so a retry still deduplicates and two
+    // shards of one house never collide.
+    let inserted = tx.execute("INSERT INTO scans (realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint,house) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,unixepoch(),?9,?10) ON CONFLICT(fingerprint) DO NOTHING",params![scan.realm,scan.faction,scan.region,scan.scanned_at as i64,scan.mode,scan.scanner,scan.build,scan.rows.len() as i64,scan.fingerprint(),house])?;
     let id = tx.last_insert_rowid();
     {
         let mut items = tx.prepare("INSERT INTO items (item_key,name,quality) VALUES (?1,?2,?3) ON CONFLICT(item_key) DO UPDATE SET name=excluded.name,quality=excluded.quality WHERE items.name IS NOT excluded.name OR items.quality IS NOT excluded.quality")?;
@@ -272,8 +289,8 @@ fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
             }
             // A scan uploaded late does not replace a newer price.
             tx.execute(
-                "INSERT INTO latest_prices (realm,faction,item_key,scan_id) SELECT ?2,?3,item_key,scan_id FROM prices WHERE scan_id=?1 ON CONFLICT(realm,faction,item_key) DO UPDATE SET scan_id=excluded.scan_id WHERE (SELECT scanned_at,id FROM scans WHERE id=excluded.scan_id) > (SELECT scanned_at,id FROM scans WHERE id=latest_prices.scan_id)",
-                params![id, scan.realm, scan.faction],
+                "INSERT INTO latest_prices (house,faction,item_key,scan_id) SELECT ?2,?3,item_key,scan_id FROM prices WHERE scan_id=?1 ON CONFLICT(house,faction,item_key) DO UPDATE SET scan_id=excluded.scan_id WHERE (SELECT scanned_at,id FROM scans WHERE id=excluded.scan_id) > (SELECT scanned_at,id FROM scans WHERE id=latest_prices.scan_id)",
+                params![id, house, scan.faction],
             )?;
         }
     }
@@ -282,17 +299,18 @@ fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
         json!({"stored":inserted==1,"items":scan.rows.len()}),
     ))
 }
-fn upload_sellers(input: &Input, db: &mut Connection) -> Result<Reply> {
+fn upload_sellers(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<Reply> {
     let snapshot = input.upload(goldbook_core::parse_seller_snapshot)?;
     let inserted = db.execute(
-        "INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(fingerprint) DO NOTHING",
+        "INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload,house) VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(fingerprint) DO NOTHING",
         params![snapshot.fingerprint(), snapshot.realm, snapshot.faction, snapshot.item_key,
-            snapshot.scanned_at as i64, serde_json::to_string(&snapshot).map_err(|e| Error::new(400, e.to_string()))?],
+            snapshot.scanned_at as i64, serde_json::to_string(&snapshot).map_err(|e| Error::new(400, e.to_string()))?,
+            rules.of(&snapshot.realm)],
     )?;
     Ok(Reply::json(json!({"stored": inserted == 1})))
 }
 
-fn upload_seller_batch(input: &Input, db: &mut Connection) -> Result<Reply> {
+fn upload_seller_batch(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<Reply> {
     let snapshots = input.upload(|value| {
         let values = value.as_array().ok_or("seller batch must be an array")?;
         if values.is_empty() || values.len() > goldbook_core::MAX_SELLER_BATCH {
@@ -307,7 +325,7 @@ fn upload_seller_batch(input: &Input, db: &mut Connection) -> Result<Reply> {
     let mut inserted = 0;
     {
         let mut statement = tx.prepare_cached(
-            "INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(fingerprint) DO NOTHING",
+            "INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload,house) VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(fingerprint) DO NOTHING",
         )?;
         for snapshot in &snapshots {
             inserted += statement.execute(params![
@@ -316,7 +334,8 @@ fn upload_seller_batch(input: &Input, db: &mut Connection) -> Result<Reply> {
                 snapshot.faction,
                 snapshot.item_key,
                 snapshot.scanned_at as i64,
-                serde_json::to_string(snapshot).map_err(|e| Error::new(400, e.to_string()))?
+                serde_json::to_string(snapshot).map_err(|e| Error::new(400, e.to_string()))?,
+                rules.of(&snapshot.realm)
             ])?;
         }
     }
@@ -326,14 +345,13 @@ fn upload_seller_batch(input: &Input, db: &mut Connection) -> Result<Reply> {
     ))
 }
 
-fn sellers(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn sellers(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+    let (house, faction) = market(input, rules)?;
     let key = required(input, "itemKey")?;
     let selected = input.query.get("snapshot").map(String::as_str);
     let payload: Option<String> = db.query_row(
-        "SELECT payload FROM seller_snapshots WHERE realm=?1 AND faction=?2 AND item_key=?3 AND (?4 IS NULL OR fingerprint=?4) ORDER BY scanned_at DESC,rowid DESC LIMIT 1",
-        params![realm, faction, key, selected], |row| row.get(0),
+        "SELECT payload FROM seller_snapshots WHERE house=?1 AND faction=?2 AND item_key=?3 AND (?4 IS NULL OR fingerprint=?4) ORDER BY scanned_at DESC,rowid DESC LIMIT 1",
+        params![house, faction, key, selected], |row| row.get(0),
     ).optional()?;
     let Some(payload) = payload else {
         return Ok(Reply::json(json!({"snapshot": null})));
@@ -345,10 +363,10 @@ fn sellers(input: &Input, db: &Connection) -> Result<Reply> {
         "summary": snapshot.summary(), "orderBook": snapshot.order_book()}});
     if input.query.get("history").is_some_and(|v| v == "1") {
         let mut statement = db.prepare(
-            "SELECT fingerprint,scanned_at FROM seller_snapshots WHERE realm=?1 AND faction=?2 AND item_key=?3 ORDER BY scanned_at DESC,rowid DESC",
+            "SELECT fingerprint,scanned_at FROM seller_snapshots WHERE house=?1 AND faction=?2 AND item_key=?3 ORDER BY scanned_at DESC,rowid DESC",
         )?;
         let history = statement
-            .query_map(params![realm, faction, key], |row| {
+            .query_map(params![house, faction, key], |row| {
                 Ok(json!({"id": row.get::<_, String>(0)?, "scannedAt": row.get::<_, i64>(1)?}))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -396,9 +414,8 @@ impl<'a> Filter<'a> {
         self.search.is_empty() && self.selected.is_none() && self.quality.is_none()
     }
 }
-fn prices(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn prices(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+    let (house, faction) = market(input, rules)?;
     // q is checked before sort and order, and the other filters after them.
     let search = search(input)?;
     let (sort, sort_join) = match input
@@ -437,7 +454,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
     let scan = db::query(
         db,
         &format!("{SCANS} ORDER BY scanned_at DESC,id DESC LIMIT 1"),
-        &[&realm, &faction],
+        &[&house, &faction],
     )?
     .into_iter()
     .next()
@@ -445,7 +462,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
     let full = db::query(
         db,
         &format!("{SCANS} AND mode='replicate' ORDER BY scanned_at DESC,id DESC LIMIT 1"),
-        &[&realm, &faction],
+        &[&house, &faction],
     )?
     .into_iter()
     .next();
@@ -459,7 +476,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
     let columns = format!(
         "p.item_key AS itemKey,i.name,i.quality,p.min_buyout AS minBuyout,{MARKET} AS marketValue,p.quantity,p.num_auctions AS numAuctions,p.scanned_at AS scannedAt"
     );
-    // Every item scanned on the realm and faction, at its newest price.
+    // Every item scanned in the house and faction, at its newest price.
     let latest = "SELECT p.*,ps.scanned_at FROM latest_prices l JOIN prices p ON p.scan_id=l.scan_id AND p.item_key=l.item_key JOIN scans ps ON ps.id=l.scan_id";
     let bindings: [&dyn rusqlite::ToSql; 9] = [
         &id,
@@ -469,16 +486,16 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         &borrowed,
         &filter.selected,
         &filter.quality,
-        &realm,
+        &house,
         &faction,
     ];
     if filter.is_empty() {
         let sql = format!(
-            "SELECT {columns} FROM ({latest} {sort_join} WHERE l.realm=?8 AND l.faction=?9 {page}) p {NAMED} {MARKET_JOIN} {order}"
+            "SELECT {columns} FROM ({latest} {sort_join} WHERE l.house=?8 AND l.faction=?9 {page}) p {NAMED} {MARKET_JOIN} {order}"
         );
         let total: i64 = db.query_row(
-            "SELECT COUNT(*) FROM latest_prices WHERE realm=?1 AND faction=?2",
-            params![realm, faction],
+            "SELECT COUNT(*) FROM latest_prices WHERE house=?1 AND faction=?2",
+            params![house, faction],
             |row| row.get(0),
         )?;
         return Ok(Reply::json(
@@ -486,7 +503,7 @@ fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         ));
     }
     let matching = format!(
-        "FROM ({latest} WHERE l.realm=?8 AND l.faction=?9) p {NAMED} {MARKET_JOIN} WHERE {MATCHING}"
+        "FROM ({latest} WHERE l.house=?8 AND l.faction=?9) p {NAMED} {MARKET_JOIN} WHERE {MATCHING}"
     );
     let mut items = db::query(
         db,
@@ -544,18 +561,18 @@ impl Listing {
         }
     }
 }
-/// The realm's newest scan and the items of it that `filter` selects, with
+/// The house's newest scan and the items of it that `filter` selects, with
 /// the daily lows of the export's window of 61 days.
 fn listings(
     db: &Connection,
-    realm: &str,
+    house: &House,
     faction: &str,
     filter: &Filter,
 ) -> Result<(Value, Vec<Listing>)> {
     let scan = db::query(
         db,
         &format!("{SCANS} ORDER BY scanned_at DESC,id DESC LIMIT 1"),
-        &[&realm, &faction],
+        &[house, &faction],
     )?
     .into_iter()
     .next()
@@ -564,7 +581,7 @@ fn listings(
     let first = (scan["scannedAt"].as_i64().unwrap() / 86400 - 60) * 86400;
     let bindings: [&dyn rusqlite::ToSql; 7] = [
         &id,
-        &realm,
+        house,
         &faction,
         &filter.search,
         &first,
@@ -576,7 +593,7 @@ fn listings(
     // The unary plus keeps SQLite from looking each item up in each scan,
     // which for a whole realm is slower than reading the scans whole.
     let mut statement = db.prepare(&format!(
-        "SELECT p.item_key,s.scanned_at/86400,p.min_buyout FROM scans s JOIN prices p ON p.scan_id=s.id WHERE s.realm=?2 AND s.faction=?3 AND s.scanned_at>=?5 AND +p.item_key IN (SELECT p.item_key {matching}) ORDER BY s.scanned_at"
+        "SELECT p.item_key,s.scanned_at/86400,p.min_buyout FROM scans s JOIN prices p ON p.scan_id=s.id WHERE s.house=?2 AND s.faction=?3 AND s.scanned_at>=?5 AND +p.item_key IN (SELECT p.item_key {matching}) ORDER BY s.scanned_at"
     ))?;
     let mut rows = statement.query(&bindings[..])?;
     while let Some(row) = rows.next()? {
@@ -617,15 +634,14 @@ fn page<T>(items: Vec<T>, limit: i64, offset: i64) -> Vec<T> {
         .take(limit as usize)
         .collect()
 }
-fn deals(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn deals(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+    let (house, faction) = market(input, rules)?;
     let filter = Filter::parse(input, search(input)?)?;
     // The addon's DEFAULT_MIN_PROFIT.
     let min_profit = integer(input, "minProfit", 1000, 9007199254740991)?;
     let limit = integer(input, "limit", 50, 200)?;
     let offset = integer(input, "offset", 0, 9007199254740991)?;
-    let (scan, listings) = listings(db, realm, faction, &filter)?;
+    let (scan, listings) = listings(db, &house, faction, &filter)?;
     let mut deals: Vec<_> = listings
         .into_iter()
         .filter_map(|listing| {
@@ -647,9 +663,8 @@ fn deals(input: &Input, db: &Connection) -> Result<Reply> {
         "items": page(deals, limit, offset),
     })))
 }
-fn movers(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn movers(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+    let (house, faction) = market(input, rules)?;
     let filter = Filter::parse(input, search(input)?)?;
     let risers = match input
         .query
@@ -665,7 +680,7 @@ fn movers(input: &Input, db: &Connection) -> Result<Reply> {
     };
     let limit = integer(input, "limit", 50, 200)?;
     let offset = integer(input, "offset", 0, 9007199254740991)?;
-    let (scan, listings) = listings(db, realm, faction, &filter)?;
+    let (scan, listings) = listings(db, &house, faction, &filter)?;
     let mut movers: Vec<_> = listings
         .into_iter()
         .filter_map(|listing| {
@@ -684,14 +699,13 @@ fn movers(input: &Input, db: &Connection) -> Result<Reply> {
         "items": page(movers, limit, offset),
     })))
 }
-fn history(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn history(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+    let (house, faction) = market(input, rules)?;
     let key = required(input, "itemKey")?;
     let mut points = db::query(
         db,
-        "SELECT s.scanned_at AS scannedAt,s.mode,p.min_buyout AS minBuyout,p.market_value AS marketValue,p.quantity FROM prices p JOIN scans s ON s.id=p.scan_id WHERE s.realm=?1 AND s.faction=?2 AND p.item_key=?3 ORDER BY s.scanned_at DESC,s.id DESC LIMIT 2000",
-        &[&realm, &faction, &key],
+        "SELECT s.scanned_at AS scannedAt,s.mode,p.min_buyout AS minBuyout,p.market_value AS marketValue,p.quantity FROM prices p JOIN scans s ON s.id=p.scan_id WHERE s.house=?1 AND s.faction=?2 AND p.item_key=?3 ORDER BY s.scanned_at DESC,s.id DESC LIMIT 2000",
+        &[&house, &faction, &key],
     )?;
     points.reverse();
     let mut item = db::query(
@@ -706,9 +720,8 @@ fn history(input: &Input, db: &Connection) -> Result<Reply> {
     item["points"] = json!(points);
     Ok(Reply::json(item))
 }
-fn trends(input: &Input, db: &Connection) -> Result<Reply> {
-    let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+fn trends(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+    let (house, faction) = market(input, rules)?;
     let mut keys = Vec::new();
     for key in required(input, "items")?.split(',') {
         if !keys.contains(&key) {
@@ -719,8 +732,8 @@ fn trends(input: &Input, db: &Connection) -> Result<Reply> {
         return Err(Error::new(400, "items must name at most 200 items"));
     }
     let newest: Option<i64> = db.query_row(
-        "SELECT MAX(scanned_at) FROM scans WHERE realm=?1 AND faction=?2",
-        [realm, faction],
+        "SELECT MAX(scanned_at) FROM scans WHERE house=?1 AND faction=?2",
+        params![house, faction],
         |r| r.get(0),
     )?;
     let newest = newest
@@ -731,8 +744,8 @@ fn trends(input: &Input, db: &Connection) -> Result<Reply> {
     let last = first + 14 * 86400;
     let rows = db::query(
         db,
-        "SELECT p.item_key AS itemKey,s.scanned_at AS scannedAt,p.min_buyout AS minBuyout FROM scans s CROSS JOIN json_each(?4) k CROSS JOIN prices p WHERE s.realm=?1 AND s.faction=?2 AND s.scanned_at>=?3 AND s.scanned_at<?5 AND p.scan_id=s.id AND p.item_key=k.value",
-        &[&realm, &faction, &first, &encoded, &last],
+        "SELECT p.item_key AS itemKey,s.scanned_at AS scannedAt,p.min_buyout AS minBuyout FROM scans s CROSS JOIN json_each(?4) k CROSS JOIN prices p WHERE s.house=?1 AND s.faction=?2 AND s.scanned_at>=?3 AND s.scanned_at<?5 AND p.scan_id=s.id AND p.item_key=k.value",
+        &[&house, &faction, &first, &encoded, &last],
     )?;
     let mut items: BTreeMap<String, Vec<Option<i64>>> = BTreeMap::new();
     for row in rows {
@@ -750,8 +763,13 @@ fn trends(input: &Input, db: &Connection) -> Result<Reply> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Export<'a> {
+    /// Echoed as asked, so that an app files the answer under the key it
+    /// asked with.
     realm: &'a str,
     faction: &'a str,
+    /// The house the answer came from, `realm` itself unless the server
+    /// pools realms. Apps up to 0.4.1 ignore it.
+    house: &'a str,
     scanned_at: i64,
     items: BTreeMap<String, ExportItem>,
 }
@@ -763,12 +781,12 @@ struct ExportItem {
     hours: Vec<[i64; 4]>,
     days: Vec<[i64; 4]>,
 }
-fn export(input: &Input, db: &Connection) -> Result<Reply> {
+fn export(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
     let realm = required(input, "realm")?;
-    let faction = required(input, "faction")?;
+    let (house, faction) = market(input, rules)?;
     let newest: Option<i64> = db.query_row(
-        "SELECT MAX(scanned_at) FROM scans WHERE realm=?1 AND faction=?2",
-        [realm, faction],
+        "SELECT MAX(scanned_at) FROM scans WHERE house=?1 AND faction=?2",
+        params![house, faction],
         |r| r.get(0),
     )?;
     let newest = newest.ok_or_else(|| Error::new(404, "no scans for this realm and faction"))?;
@@ -776,9 +794,9 @@ fn export(input: &Input, db: &Connection) -> Result<Reply> {
     let first_hour = newest / 3600 - 167;
     let mut items: BTreeMap<String, ExportItem> = BTreeMap::new();
     let mut statement = db.prepare(
-        "SELECT p.item_key,s.scanned_at,p.min_buyout,p.quantity,p.num_auctions,p.market_value FROM scans s JOIN prices p ON p.scan_id=s.id WHERE s.realm=?1 AND s.faction=?2 AND s.scanned_at>=?3 ORDER BY s.scanned_at,s.id",
+        "SELECT p.item_key,s.scanned_at,p.min_buyout,p.quantity,p.num_auctions,p.market_value FROM scans s JOIN prices p ON p.scan_id=s.id WHERE s.house=?1 AND s.faction=?2 AND s.scanned_at>=?3 ORDER BY s.scanned_at,s.id",
     )?;
-    let mut rows = statement.query(params![realm, faction, first_day * 86400])?;
+    let mut rows = statement.query(params![house, faction, first_day * 86400])?;
     while let Some(row) = rows.next()? {
         let item = items.entry(row.get(0)?).or_default();
         let (at, min, qty, n, mv): (i64, i64, i64, i64, i64) = (
@@ -813,6 +831,7 @@ fn export(input: &Input, db: &Connection) -> Result<Reply> {
     let mut reply = Reply::json(Export {
         realm,
         faction,
+        house: house.as_str(),
         scanned_at: newest,
         items,
     });
