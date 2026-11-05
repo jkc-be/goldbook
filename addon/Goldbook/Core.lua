@@ -351,6 +351,42 @@ local function bookVendorSales(opened)
   end
 end
 
+local JUNK_QUALITY = 0
+
+-- The merchant's Sell All Junk button sells without filling the buyback list,
+-- so Trades.Merchant never sees these sales. They are read from the bags as
+-- the button is pressed, before the server takes the items: one sale per
+-- item, at what a vendor pays.
+local function bookJunk()
+  local now, realmKey, sales, byItem = time(), ns.RealmKey(), {}, {}
+  for _, container in ipairs(BAGS) do
+    for slot = 1, C_Container.GetContainerNumSlots(container) do
+      local info = C_Container.GetContainerItemInfo(container, slot)
+      local price = info and info.quality == JUNK_QUALITY and info.hyperlink and ns.SellPrice(info.hyperlink)
+      if price and price > 0 then
+        local key = Database.KeyFromLink(ns.db, realmKey, info.hyperlink)
+        local item = info.hyperlink:match("%[(.-)%]")
+        local id = tostring(item) .. "|" .. tostring(key)
+        if not byItem[id] then
+          byItem[id] = { at = now, side = "vendor", item = item, key = key, count = 0, price = 0 }
+          sales[#sales + 1] = byItem[id]
+        end
+        byItem[id].count = byItem[id].count + info.stackCount
+        byItem[id].price = byItem[id].price + price * info.stackCount
+      end
+    end
+  end
+  if #sales > 0 then
+    Trades.Add(ns.db, characterKey(), sales, now)
+    vendorSales = vendorSales + #sales
+    ns.UI.RefreshSoon()
+  end
+end
+
+if C_MerchantFrame and C_MerchantFrame.SellAllJunkItems then
+  hooksecurefunc(C_MerchantFrame, "SellAllJunkItems", bookJunk)
+end
+
 -- The open merchant's item at `index` as { name, price, stack, available,
 -- extendedCost, itemID, link }: `price` buys `stack` items, `available` is -1
 -- without limit, and `extendedCost` says it asks items or currencies besides
