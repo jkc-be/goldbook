@@ -165,8 +165,40 @@ def main():
             assert written.read_bytes() == content, "an addon update keeps the written ServerData.lua"
             assert not [p for p in addon.iterdir() if p.name.startswith(".")], list(addon.iterdir())
             assert {path: path.read_bytes() for path in (saved, other)} == before, "SavedVariables are never written"
+
+        # A WoW Forever shard nobody scanned gets its auction house's prices
+        # from a server that pools shards, with the released sync unchanged.
+        forever = directory / "forever"
+        flavor = forever / "wow/_forever_"
+        addon = flavor / "Interface/AddOns/Goldbook"
+        (flavor / "Interface/AddOns").mkdir(parents=True)
+        saved = flavor / "WTF/Account/TEST#3/SavedVariables/Goldbook.lua"
+        saved.parent.mkdir(parents=True)
+        saved.write_text('GoldbookDB = { ["characters"] = { ["Feretuse-CAMWOWEU4Realm6PvP"] = { ["name"] = "Feretuse", '
+                         '["realm"] = "CAMWOWEU4Realm6PvP", ["faction"] = "Horde" } }, ["items"] = {}, ["scans"] = {} }\n')
+        helpers["run"]([SYNC, "install", "--wow", forever / "wow"])
+        with helpers["server"](forever, None, ROOT / "target/debug/goldbook-server",
+                               settings=lambda port: {"GOLDBOOK_AUCTION_HOUSES": "forever"}) as api:
+            url = f"http://127.0.0.1:{api.port}"
+            scan = dict(realm="CAMWOWEU4Realm8PvP", faction="Horde", region="EU", scannedAt=1760003600, mode="browse",
+                        scanner="Someone", build="1.60.1.70790", rows=[["2589", 110, 0, 42, 0]], items={"2589": ["Linen Cloth", 1]})
+            answer = api.request("POST", "/api/scans", scan, token=api.token)[0]
+            assert answer["status"] == 200, answer
+            output = helpers["run"]([SYNC, "--wow", forever / "wow", "--api", url, "--token", api.token,
+                                     "--state", forever / "state.json", "--once"])
+            assert "server prices for CAMWOWEU4Realm6PvP-Horde written to" in output, output
+            assert dump(forever, addon / "ServerData.lua") == sorted([
+                "version\t1",
+                f"server\t{url}",
+                "items\t2589\t1|Linen Cloth",
+                "scannedAt\tCAMWOWEU4Realm6PvP-Horde\t1760003600",
+                "prices\tCAMWOWEU4Realm6PvP-Horde\t2589\t110,42,0,1760003600,0,0",
+                "hours\tCAMWOWEU4Realm6PvP-Horde\t2589\t488889:110:42:0",
+                "days\tCAMWOWEU4Realm6PvP-Horde\t2589\t20370:110:42:0",
+            ])
         print(f"Verified seeded server -> sync -> ServerData.lua ({len(content)} bytes) -> LuaJIT: "
-              "every exported item matches, names are escaped, the addon merges the file, unchanged data is not rewritten, updates keep the file.")
+              "every exported item matches, names are escaped, the addon merges the file, unchanged data is not rewritten, "
+              "updates keep the file, and a pooling server fills a Forever shard nobody scanned.")
 
 
 if __name__ == "__main__":
