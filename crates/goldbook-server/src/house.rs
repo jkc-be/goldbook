@@ -12,7 +12,7 @@
 //! house: the key everywhere is `(house, faction)`.
 
 use anyhow::{Result, bail};
-use rusqlite::{ToSql, types::ToSqlOutput};
+use rusqlite::{Connection, ToSql, TransactionBehavior, params, types::ToSqlOutput};
 
 /// The rule set `GOLDBOOK_AUCTION_HOUSES` selects at startup.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -82,6 +82,56 @@ fn forever_shard(realm: &str) -> Option<String> {
         return None;
     }
     Some(format!("CAMWOW{cluster}Realm{kind}"))
+}
+
+/// The rows `reconcile` moved to another house.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Reconciled {
+    pub scans: usize,
+    pub snapshots: usize,
+}
+
+/// Converges the stored `house` of every scan and seller snapshot, and the
+/// `latest_prices` keyed by it, to `rules`. Runs after `db::migrate` at every
+/// start, so that changing the rule needs no migration and toggling it back
+/// converges the other way. Idempotent: a second run moves nothing and
+/// rebuilds nothing. One transaction, so a crash midway leaves the old state.
+pub fn reconcile(db: &mut Connection, rules: HouseRules) -> Result<Reconciled> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let mut moved = Reconciled::default();
+    for (table, count) in [
+        ("scans", &mut moved.scans),
+        ("seller_snapshots", &mut moved.snapshots),
+    ] {
+        let stored: Vec<(String, String)> = tx
+            .prepare(&format!(
+                "SELECT realm, house FROM {table} GROUP BY realm, house"
+            ))?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        for (realm, house) in stored {
+            let wanted = rules.of(&realm);
+            if wanted.as_str() != house {
+                *count += tx.execute(
+                    &format!("UPDATE {table} SET house=?1 WHERE realm=?2 AND house=?3"),
+                    params![wanted, realm, house],
+                )?;
+            }
+        }
+    }
+    if moved.scans > 0 {
+        tx.execute_batch(
+            "DELETE FROM latest_prices;
+             INSERT INTO latest_prices (house, faction, item_key, scan_id)
+             SELECT house, faction, item_key, scan_id FROM (
+               SELECT s.house, s.faction, p.item_key, p.scan_id,
+                 ROW_NUMBER() OVER (PARTITION BY s.house, s.faction, p.item_key ORDER BY s.scanned_at DESC, s.id DESC) AS newest
+               FROM prices p JOIN scans s ON s.id = p.scan_id
+             ) WHERE newest = 1",
+        )?;
+    }
+    tx.commit()?;
+    Ok(moved)
 }
 
 #[cfg(test)]

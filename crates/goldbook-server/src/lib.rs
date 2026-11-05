@@ -82,7 +82,15 @@ pub fn router(config: Config) -> anyhow::Result<Router> {
     if let Some(battlenet) = &config.battlenet {
         battlenet.validate()?;
     }
-    db::migrate(&mut db::connect(&config.database)?)?;
+    let mut db = db::connect(&config.database)?;
+    db::migrate(&mut db)?;
+    let moved = house::reconcile(&mut db, config.houses)?;
+    if moved != house::Reconciled::default() {
+        eprintln!(
+            "auction houses {:?}: moved {} scans and {} seller snapshots",
+            config.houses, moved.scans, moved.snapshots
+        );
+    }
     let proxies = split(&config.trusted_proxy)
         .map(Network::parse)
         .collect::<anyhow::Result<Vec<_>>>()?;

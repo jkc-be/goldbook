@@ -2698,3 +2698,137 @@ async fn seller_snapshots_answer_by_house() {
     .await;
     assert_eq!(none, json!({"snapshot": null}));
 }
+// Toggling the flag between starts converges the stored houses both ways, and
+// a start with the rule unchanged moves nothing.
+#[tokio::test]
+async fn a_restart_moves_scans_to_the_running_rule_and_back() {
+    let f = Fixture::new().await;
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm8PvP",
+            1760000000,
+            "browse",
+            json!([["2589", 120, 0, 30, 0], ["7070", 300, 0, 5, 0]]),
+            json!({"2589":["Linen Cloth",1],"7070":["Elemental Water",1]}),
+        ),
+    )
+    .await;
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm6PvP",
+            1760003600,
+            "browse",
+            json!([["2589", 90, 0, 20, 0]]),
+            json!({}),
+        ),
+    )
+    .await;
+    let snapshot = json!({"realm":"CAMWOWEU4Realm8PvP","faction":"Horde","itemKey":"2589","scannedAt":1760000000,"offers":[]});
+    assert_eq!(
+        call(&f.app, "POST", "/api/sellers", snapshot, &f.auth())
+            .await
+            .2,
+        json!({"stored": true})
+    );
+    let realms = |app: &Router| {
+        let app = app.clone();
+        async move {
+            call(&app, "GET", "/api/realms", Value::Null, &[]).await.2["realms"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| {
+                    (
+                        r["realm"].as_str().unwrap().to_owned(),
+                        r["scans"].as_i64().unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        }
+    };
+    let prices = |app: &Router, realm: &str| {
+        let (app, target) = (
+            app.clone(),
+            format!("/api/prices?realm={realm}&faction=Horde"),
+        );
+        async move { listed(&call(&app, "GET", &target, Value::Null, &[]).await.2) }
+    };
+    let sellers = |app: &Router, realm: &str| {
+        let (app, target) = (
+            app.clone(),
+            format!("/api/sellers?realm={realm}&faction=Horde&itemKey=2589"),
+        );
+        async move {
+            call(&app, "GET", &target, Value::Null, &[]).await.2["snapshot"]["scannedAt"].clone()
+        }
+    };
+    assert_eq!(
+        realms(&f.app).await,
+        [
+            ("CAMWOWEU4Realm6PvP".to_owned(), 1),
+            ("CAMWOWEU4Realm8PvP".to_owned(), 1)
+        ]
+    );
+    assert_eq!(
+        prices(&f.app, "CAMWOWEU4Realm6PvP").await,
+        [("2589".to_owned(), 90, 1760003600)]
+    );
+    assert_eq!(sellers(&f.app, "CAMWOWEU4Realm6PvP").await, Value::Null);
+
+    let mut pooled = battlenet(f.database());
+    pooled.houses = HouseRules::Forever;
+    let pooled = router(pooled).unwrap();
+    assert_eq!(realms(&pooled).await, [("CAMWOWEU4RealmPvP".to_owned(), 2)]);
+    assert_eq!(
+        prices(&pooled, "CAMWOWEU4Realm6PvP").await,
+        [
+            ("7070".to_owned(), 300, 1760000000),
+            ("2589".to_owned(), 90, 1760003600)
+        ]
+    );
+    assert_eq!(
+        prices(&pooled, "CAMWOWEU4Realm8PvP").await,
+        prices(&pooled, "CAMWOWEU4Realm6PvP").await
+    );
+    assert_eq!(
+        sellers(&pooled, "CAMWOWEU4Realm6PvP").await,
+        json!(1760000000)
+    );
+    let mut db = db::connect(&f.database()).unwrap();
+    assert_eq!(
+        goldbook_server::house::reconcile(&mut db, HouseRules::Forever).unwrap(),
+        goldbook_server::house::Reconciled::default(),
+        "a second start with the same rule moves nothing"
+    );
+
+    let split = router(battlenet(f.database())).unwrap();
+    assert_eq!(
+        realms(&split).await,
+        [
+            ("CAMWOWEU4Realm6PvP".to_owned(), 1),
+            ("CAMWOWEU4Realm8PvP".to_owned(), 1)
+        ]
+    );
+    assert_eq!(
+        prices(&split, "CAMWOWEU4Realm6PvP").await,
+        [("2589".to_owned(), 90, 1760003600)]
+    );
+    assert_eq!(
+        prices(&split, "CAMWOWEU4Realm8PvP").await,
+        [
+            ("7070".to_owned(), 300, 1760000000),
+            ("2589".to_owned(), 120, 1760000000)
+        ]
+    );
+    assert_eq!(sellers(&split, "CAMWOWEU4Realm6PvP").await, Value::Null);
+    assert_eq!(
+        sellers(&split, "CAMWOWEU4Realm8PvP").await,
+        json!(1760000000)
+    );
+    assert_eq!(
+        goldbook_server::house::reconcile(&mut db, HouseRules::Off).unwrap(),
+        goldbook_server::house::Reconciled::default()
+    );
+}
