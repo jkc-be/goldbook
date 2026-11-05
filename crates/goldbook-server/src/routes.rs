@@ -763,13 +763,8 @@ fn trends(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Export<'a> {
-    /// Echoed as asked, so that an app files the answer under the key it
-    /// asked with.
     realm: &'a str,
     faction: &'a str,
-    /// The house the answer came from, `realm` itself unless the server
-    /// pools realms. Apps up to 0.4.1 ignore it.
-    house: &'a str,
     scanned_at: i64,
     items: BTreeMap<String, ExportItem>,
 }
@@ -831,7 +826,6 @@ fn export(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
     let mut reply = Reply::json(Export {
         realm,
         faction,
-        house: house.as_str(),
         scanned_at: newest,
         items,
     });

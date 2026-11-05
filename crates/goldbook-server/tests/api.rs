@@ -374,7 +374,6 @@ async fn export_folds_a_realms_scans_into_prices_hours_and_days() {
         json!({
             "realm": "Faramon",
             "faction": "Horde",
-            "house": "Faramon",
             "scannedAt": 1760090000,
             "items": {
                 "2589": {
@@ -2383,7 +2382,6 @@ async fn a_never_scanned_forever_shard_reads_its_house() {
             json!({
                 "realm": "CAMWOWEU4Realm6PvP",
                 "faction": "Horde",
-                "house": "CAMWOWEU4RealmPvP",
                 "scannedAt": 1760003600,
                 "items": {
                     "2589": {
@@ -2635,7 +2633,6 @@ async fn without_the_flag_every_realm_is_its_own_house() {
         json!({
             "realm": "CAMWOWEU4Realm8PvP",
             "faction": "Horde",
-            "house": "CAMWOWEU4Realm8PvP",
             "scannedAt": 1760000000,
             "items": {
                 "2589": {
