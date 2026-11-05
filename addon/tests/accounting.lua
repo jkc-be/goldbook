@@ -137,6 +137,17 @@ BuyTrainerService(1)
 BuyTrainerService(2)
 pay(1900)
 eq(booked(), "training Fireball (Rank 3) nil 1 1800 nil / training First Aid nil 1 100 nil", "training is booked per spell, with its rank")
+local trainerServiceInfo = GetTrainerServiceInfo
+function GetTrainerServiceInfo(index)
+  local entry = Stub.trainer[index]
+  return entry[1], "available", 136243, 10, entry[2]
+end
+BuyTrainerService(1)
+BuyTrainerService(2)
+pay(1900)
+eq(booked(), "training Fireball (Rank 3) nil 1 1800 nil / training First Aid nil 1 100 nil",
+  "a client that gives the category second and the rank fifth books the rank, not the category")
+GetTrainerServiceInfo = trainerServiceInfo
 ConfirmTalentWipe()
 pay(10000)
 eq(booked(), "respec Talent reset nil 1 10000 nil", "a talent reset costs what the gold says")
