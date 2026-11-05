@@ -100,16 +100,14 @@ pay(36)
 eq(booked(), "merchant Simple Flour 2678 7 36 nil", "part of a stack costs what the server asks")
 local merchantItemInfo = GetMerchantItemInfo
 GetMerchantItemInfo = nil
-C_MerchantFrame = {
-  GetItemInfo = function(index)
-    local entry = Stub.merchant[index]
-    return { name = entry[1], price = entry[2], stackCount = entry[3], numAvailable = -1, hasExtendedCost = false }
-  end,
-}
+function C_MerchantFrame.GetItemInfo(index)
+  local entry = Stub.merchant[index]
+  return { name = entry[1], price = entry[2], stackCount = entry[3], numAvailable = -1, hasExtendedCost = false }
+end
 BuyMerchantItem(2, 3)
 pay(75)
 eq(booked(), "merchant Refreshing Spring Water 159 3 75 nil", "a client with only C_MerchantFrame.GetItemInfo books the purchase too")
-GetMerchantItemInfo, C_MerchantFrame = merchantItemInfo, nil
+GetMerchantItemInfo, C_MerchantFrame.GetItemInfo = merchantItemInfo, nil
 
 pay(4320)
 eq(booked(), "", "gold spent at a merchant without a purchase waits for what explains it")
@@ -118,11 +116,26 @@ eq(booked(), "repair Repairs nil 1 4320 nil", "and is a repair once nothing did"
 gain(3100)
 Stub.advance(GRACE)
 eq(booked() .. "|" .. accruing(), "|", "gold a merchant pays is left to the buyback list, which books the sale")
+Stub.items[4865] = { name = "Ruined Pelt", quality = 0, vendor = 5, cached = true }
+Stub.items[3300] = { name = "Rabbit's Foot", quality = 0, vendor = 4, cached = true }
+Stub.items[2589] = { name = "Linen Cloth", quality = 1, vendor = 13, cached = true }
+Stub.items[3312] = { name = "Torn Letter", quality = 0, vendor = 0, cached = true }
+local function bagged(itemID, name, count, quality)
+  return { hyperlink = link(itemID, name), stackCount = count, quality = quality }
+end
+Stub.bags[0] = { slots = 16, bagged(4865, "Ruined Pelt", 3, 0), bagged(2589, "Linen Cloth", 20, 1), bagged(3300, "Rabbit's Foot", 1, 0),
+  bagged(4865, "Ruined Pelt", 2, 0), bagged(3312, "Torn Letter", 1, 0) }
+C_MerchantFrame.SellAllJunkItems()
+gain(29)
+Stub.advance(GRACE)
+eq(booked() .. "|" .. accruing(), "vendor Ruined Pelt 4865 5 25 nil / vendor Rabbit's Foot 3300 1 4 nil|",
+  "junk sold all at once never reaches the buyback list, so it is booked from the bags at what a vendor pays")
 BuybackItem(1)
 pay(85)
 Stub.advance(GRACE)
 eq(booked() .. "|" .. accruing(), "|", "buying a sale back is not a repair, and its sale is taken off instead")
 Stub.fire("MERCHANT_CLOSED")
+eq(plain(Stub.printed[#Stub.printed]), "Goldbook Booked 2 vendor sales. Type /gb accounting.", "closing the merchant counts the junk among its sales")
 Stub.advance(GRACE * 3)
 pay(20)
 Stub.advance(GRACE)
