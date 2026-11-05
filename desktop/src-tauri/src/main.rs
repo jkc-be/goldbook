@@ -1046,6 +1046,24 @@ mod tests {
     }
 
     #[test]
+    fn a_line_naming_realms_without_server_prices_becomes_a_status_message() {
+        assert_eq!(
+            describe_log("server has no prices for Faramon-Horde"),
+            Some(
+                "The server has no prices for Faramon-Horde yet. A scan there, uploaded by anyone, adds them."
+                    .into()
+            )
+        );
+        assert_eq!(
+            describe_log("server has no prices for Area 52-Alliance, Faramon-Horde, Nowhere-Horde"),
+            Some(
+                "The server has no prices for Area 52-Alliance, Faramon-Horde and Nowhere-Horde yet. A scan there, uploaded by anyone, adds them."
+                    .into()
+            )
+        );
+    }
+
+    #[test]
     fn theme_accepts_only_light_or_dark() {
         let dark: Theme = serde_json::from_str("\"dark\"").unwrap();
         assert_eq!(
