@@ -335,7 +335,7 @@ for index, option in ipairs(chip.menu.options) do
     options[index] = option.label.text
   end
 end
-eq(table.concat(options, ", "), "All sources, Merchant purchase, Trade sale, Trade purchase, Trade gold in, Trade gold out, Mail gold in, "
+eq(table.concat(options, ", "), "All sources, Vendor sale, Merchant purchase, Trade sale, Trade purchase, Trade gold in, Trade gold out, Mail gold in, "
   .. "Mail gold out, Cash on delivery, Quest reward, Looted gold, Repairs, Postage, Auction deposit, Flight, Training, Talent reset, Other income, Other expense",
   "the source chip offers every source booked")
 local eleventh = chip.menu.options[11]

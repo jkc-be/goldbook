@@ -24,8 +24,9 @@ local MAIL_ATTACHMENTS = ATTACHMENTS_MAX_RECEIVE or 16
 -- What a window makes of gold no claim explains, while it is open and GRACE
 -- after: the side to book, or "skip" when another booking covers it.
 local WINDOWS = {
-  -- Sales are booked from the buyback list (Trades.Merchant), and purchases
-  -- and buybacks leave claims, so a loss left over is a repair.
+  -- Sales are booked from the buyback list (Trades.Merchant), junk sold all
+  -- at once from the bags (Core), and purchases and buybacks leave claims,
+  -- so a loss left over is a repair.
   merchant = { gain = "skip", loss = "repair" },
   loot = { gain = "loot" },
   -- Booked from the trade window once the trade completes.
