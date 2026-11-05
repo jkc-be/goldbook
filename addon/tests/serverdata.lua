@@ -67,7 +67,7 @@ eq(tooltip("|Hitem:2589::::::|h[Linen Cloth]|h"),
     .. " /   Post at = 3g 00s 00c /   Deal: resells for 3g 00s 00c, profit 1g 85s 00c each /   Alt+click: price history",
   "the tooltip points out the deal")
 ns.UI.Show("deals")
-eq(plain(GoldbookWindow.lastScan.text), "Last scan 10m ago\nfrom the server", "the rail dates the server's scan")
+eq(plain(GoldbookWindow.lastScan.text), "Server scan 10m ago", "the rail dates the server's scan")
 eq(GoldbookWindow.head.sub.text, "1 in the scan of 10m ago, from the server", "the deals view says whose scan it is")
 Stub.fire("AUCTION_HOUSE_SHOW")
 SlashCmdList.GOLDBOOK("ah")
