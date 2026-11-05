@@ -150,7 +150,7 @@ fn describe_log(line: &str) -> Option<String> {
     }
     if let Some(keys) = line.strip_prefix("server has no prices for ") {
         return Some(format!(
-            "The server has no prices for {} yet. A scan there, uploaded by anyone, adds them.",
+            "The server has no prices for {} yet. Scan the auction house there to add them.",
             spoken_list(keys)
         ));
     }
@@ -459,7 +459,7 @@ async fn do_sync(app: &tauri::AppHandle) -> Result<(), String> {
             for (_, outcome) in service.refresh_server_data().await {
                 if matches!(
                     outcome,
-                    Ok(ServerData::Written { .. } | ServerData::NoRealms) | Err(_)
+                    Ok(ServerData::Written { .. } | ServerData::NoPrices { .. }) | Err(_)
                 ) {
                     any_update = true;
                 }
@@ -1059,14 +1059,14 @@ mod tests {
         assert_eq!(
             describe_log("server has no prices for Faramon-Horde"),
             Some(
-                "The server has no prices for Faramon-Horde yet. A scan there, uploaded by anyone, adds them."
+                "The server has no prices for Faramon-Horde yet. Scan the auction house there to add them."
                     .into()
             )
         );
         assert_eq!(
             describe_log("server has no prices for Area 52-Alliance, Faramon-Horde, Nowhere-Horde"),
             Some(
-                "The server has no prices for Area 52-Alliance, Faramon-Horde and Nowhere-Horde yet. A scan there, uploaded by anyone, adds them."
+                "The server has no prices for Area 52-Alliance, Faramon-Horde and Nowhere-Horde yet. Scan the auction house there to add them."
                     .into()
             )
         );

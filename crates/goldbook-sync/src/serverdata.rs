@@ -37,6 +37,9 @@ struct ExportItem {
 pub enum ServerData {
     NoAddon,
     NoRealms,
+    NoPrices {
+        realms: Vec<String>,
+    },
     Unchanged {
         realms: Vec<String>,
     },
@@ -223,7 +226,11 @@ async fn refresh(flavor: &Path, api: &str, log: &Logger) -> Result<ServerData> {
         log(&format!("server has no prices for {}", missing.join(", ")));
     }
     if realms.is_empty() {
-        return Ok(ServerData::NoRealms);
+        return Ok(if missing.is_empty() {
+            ServerData::NoRealms
+        } else {
+            ServerData::NoPrices { realms: missing }
+        });
     }
     let content = render(api, &realms);
     let path = addon.join(SERVER_DATA);
