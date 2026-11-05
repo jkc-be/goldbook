@@ -1,7 +1,9 @@
 mod auth;
 pub mod db;
+pub mod house;
 mod oauth;
 mod routes;
+pub use house::HouseRules;
 pub use oauth::BattleNetConfig;
 
 use auth::{LoginLimits, Network};
@@ -35,6 +37,9 @@ pub struct Config {
     pub trusted_proxy: String,
     pub host: String,
     pub port: u16,
+    /// Which realms share an auction house. `Off` unless the deployment sets
+    /// `GOLDBOOK_AUCTION_HOUSES`, so by default the server answers as before.
+    pub houses: HouseRules,
 }
 impl Config {
     pub fn new(database: impl Into<PathBuf>) -> Self {
@@ -45,6 +50,7 @@ impl Config {
             trusted_proxy: String::new(),
             host: "127.0.0.1".into(),
             port: 8787,
+            houses: HouseRules::Off,
         }
     }
     pub fn from_env() -> anyhow::Result<Self> {
@@ -57,6 +63,7 @@ impl Config {
             .unwrap_or(Ok(c.port))?;
         c.web_dir = std::env::var_os("WEB_DIR").map(PathBuf::from);
         c.trusted_proxy = std::env::var("TRUSTED_PROXY").unwrap_or_default();
+        c.houses = HouseRules::from_env(std::env::var("GOLDBOOK_AUCTION_HOUSES").ok().as_deref())?;
         Ok(c)
     }
 }
