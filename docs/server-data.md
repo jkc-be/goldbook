@@ -18,6 +18,8 @@ Data flows in three steps:
 
 `GET /api/export?realm=<realm>&faction=<faction>` is public and read-only, like `/api/prices`. It needs no login and no upload token.
 
+The server answers for the auction house that `realm` belongs to. Without `GOLDBOOK_AUCTION_HOUSES` every realm is its own auction house, and the answer holds that realm's scans. With `GOLDBOOK_AUCTION_HOUSES=forever`, WoW Forever shards of one cluster and realm type share a house: `CAMWOWEU4Realm6PvP` and `CAMWOWEU4Realm8PvP` both answer with the scans of `CAMWOWEU4RealmPvP`, the house's name, which `/api/realms` lists under `realm` and which answers for itself. Faction stays in the key. The body echoes the `realm` asked for and names the house in `house`. The server refuses to start with any other value, and converges the stored houses to the running rule at each start, so the variable can be set or unset again without a migration. Every other read endpoint scopes by the same house.
+
 When the request's `Accept-Encoding` names `gzip`, the server compresses the body and answers `Content-Encoding: gzip`. Every export answer carries `Vary: Accept-Encoding`. The server compresses the body itself, because the Traefik labels in `server/compose*.yaml` have no `compress` middleware. The sync client asks for gzip and decodes it.
 
 | Status | Body |
@@ -32,6 +34,7 @@ A 200 body looks like this:
 {
   "realm": "Faramon",
   "faction": "Horde",
+  "house": "Faramon",
   "scannedAt": 1760090000,
   "items": {
     "2589": {
@@ -47,7 +50,8 @@ A 200 body looks like this:
 
 The fields mean the following:
 
-- `scannedAt` is the time of the realm's newest scan, in unix seconds. Both history windows end at this scan, not at the time of the request.
+- `realm` and `faction` are the ones asked for. `house` is the auction house the answer came from, the same as `realm` unless the server pools realms. The app does not read these fields.
+- `scannedAt` is the time of the auction house's newest scan, in unix seconds. Both history windows end at this scan, not at the time of the request.
 - `items` maps each item key to the item's data, sorted by key. An item key is the addon's key from `Codec.ItemKey`: the item ID, or `itemID:suffix` for an item with a random suffix.
 - `name` and `quality` come from the server's item names. Both are `null` when no upload named the item.
 - `price` is `[min, qty, n, seen, mv, mvAt]`. `min`, `qty` and `n` are the lowest buyout, the quantity and the auction count of the item's newest row, and `seen` is that row's scan time. `n` is 0 when that row came from a quick scan. `mv` is the market value of the newest row whose market value is above 0, and `mvAt` is that row's scan time. Both are 0 when no full scan in the window measured the item.
@@ -104,7 +108,7 @@ The app writes `ServerData.lua` after a sync pass that uploaded without errors. 
 For each flavor folder, the app does the following:
 
 1. Reads every `WTF/Account/*/SavedVariables/Goldbook.lua` in the flavor. It collects the realm keys of `GoldbookDB.prices`, `GoldbookDB.scanned`, and the `realm` and `faction` of each entry in `GoldbookDB.characters`. It removes spaces from a character's realm, because older addon versions saved the realm's display name.
-2. Fetches `/api/export` for each realm key, in sorted order. A realm that answers 404 is left out of the file.
+2. Fetches `/api/export` for each realm key, in sorted order. A realm that answers 404 is left out of the file. A realm nobody scanned still answers when the server pools it with scanned realms of its auction house, and the app files the answer under that realm's key.
 3. Writes nothing when the flavor has no `Interface/AddOns/Goldbook` folder, when the server has data for none of the realms, or when any export fails. A failed export keeps the previous file, so a network error does not remove realms from it.
 4. Builds the file with sorted keys and escapes every string. It writes the file only when its bytes differ from the installed file. It writes a temporary file in the addon folder and renames it over `ServerData.lua`, so the game never reads half a file.
 
