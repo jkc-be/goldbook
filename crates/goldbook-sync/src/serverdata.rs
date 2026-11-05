@@ -191,6 +191,7 @@ async fn refresh(flavor: &Path, api: &str, log: &Logger) -> Result<ServerData> {
     let client = crate::api_client(api, Duration::from_secs(60))?;
     let url = api_url(api, "api/export")?;
     let mut realms = BTreeMap::new();
+    let mut missing = Vec::new();
     for key in keys {
         let Some((realm, faction)) = split_realm_key(&key) else {
             continue;
@@ -203,6 +204,7 @@ async fn refresh(flavor: &Path, api: &str, log: &Logger) -> Result<ServerData> {
             .map_err(|e| anyhow!("export of {key}: {e}"))?;
         let status = response.status();
         if status == reqwest::StatusCode::NOT_FOUND {
+            missing.push(key);
             continue;
         }
         if !status.is_success() {
@@ -216,6 +218,9 @@ async fn refresh(flavor: &Path, api: &str, log: &Logger) -> Result<ServerData> {
         let export =
             serde_json::from_slice::<Export>(&body).map_err(|e| anyhow!("export of {key}: {e}"))?;
         realms.insert(key, export);
+    }
+    if !missing.is_empty() {
+        log(&format!("server has no prices for {}", missing.join(", ")));
     }
     if realms.is_empty() {
         return Ok(ServerData::NoRealms);

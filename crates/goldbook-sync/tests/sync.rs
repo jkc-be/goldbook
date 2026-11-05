@@ -960,9 +960,11 @@ GoldbookServerData = data
     assert_eq!(
         *lines.lock().unwrap(),
         vec![
+            "server has no prices for Area 52-Alliance".to_owned(),
             format!(
                 "server prices for Faramon-Horde, PyrewoodVillage-Alliance written to {shown}: 3 items"
             ),
+            "server has no prices for Area 52-Alliance".to_owned(),
             format!(
                 "server prices for Faramon-Horde, PyrewoodVillage-Alliance unchanged in {shown}"
             ),

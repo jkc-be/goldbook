@@ -148,6 +148,12 @@ fn describe_log(line: &str) -> Option<String> {
             _ => None,
         };
     }
+    if let Some(keys) = line.strip_prefix("server has no prices for ") {
+        return Some(format!(
+            "The server has no prices for {} yet. A scan there, uploaded by anyone, adds them.",
+            spoken_list(keys)
+        ));
+    }
     if line.contains("this account is blocked") {
         return Some("The server has blocked uploads from this WoW account.".into());
     }
@@ -448,10 +454,13 @@ async fn do_sync(app: &tauri::AppHandle) -> Result<(), String> {
                 any_update = true;
             }
         }
-        // A written file or a failed download has already put its message in the status line.
+        // A written file, a failed download or a realm without server prices has already put its message in the status line.
         if results.iter().all(|result| result.failed == 0) {
             for (_, outcome) in service.refresh_server_data().await {
-                if matches!(outcome, Ok(ServerData::Written { .. }) | Err(_)) {
+                if matches!(
+                    outcome,
+                    Ok(ServerData::Written { .. } | ServerData::NoRealms) | Err(_)
+                ) {
                     any_update = true;
                 }
             }
