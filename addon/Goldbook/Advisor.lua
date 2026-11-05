@@ -92,7 +92,7 @@ end
 
 -- Vendor deals always count; a flip must make `minProfit` in total.
 function Advisor.Deals(db, realmKey, minProfit)
-  local newestScan = db.scanned[realmKey]
+  local newestScan = Database.NewestScan(db, realmKey)
   local deals = {}
   for _, item in ipairs(Database.Items(db, realmKey)) do
     local found = Advisor.Deal(item, Database.Vendor(db, item.key), newestScan, Database.MerchantSells(db, item.key))
@@ -119,7 +119,7 @@ end
 -- they were last seen, biggest rise first. `change` is in percent. Prices
 -- under a silver on both days are left out as noise.
 function Advisor.Movers(db, realmKey)
-  local newestScan = db.scanned[realmKey]
+  local newestScan = Database.NewestScan(db, realmKey)
   local movers = {}
   for _, item in ipairs(Database.Items(db, realmKey)) do
     local before = item.days[#item.days - 1]
@@ -203,7 +203,7 @@ end
 -- pays less than a vendor goes to the vendor, and so does one that merchants
 -- sell, which no informed buyer pays the auction price for.
 function Advisor.Sell(db, realmKey, bag)
-  local newestScan = db.scanned[realmKey]
+  local newestScan = Database.NewestScan(db, realmKey)
   local rows, total = {}, 0
   for _, held in ipairs(bag) do
     local record = Database.Lookup(db, realmKey, held.key)

@@ -644,8 +644,9 @@ local VIEWS = {
         stretches(palette.gain, money(row.total)), row.kind == "vendor" and "Vendor" or "Auction"
     end,
     head = function(rows)
-      local scanned = ns.db.scanned[ns.RealmKey()]
-      return { sub = scanned and (#rows .. " in the scan of " .. Codec.Age(time() - scanned)) or "Scan the auction house to find deals" }
+      local scanned, fromServer = Database.NewestScan(ns.db, ns.RealmKey())
+      return { sub = scanned and (#rows .. " in the scan of " .. Codec.Age(time() - scanned) .. (fromServer and ", from the server" or ""))
+        or "Scan the auction house to find deals" }
     end,
     badge = function()
       return { "Min profit", money(ns.MinProfit()) }
@@ -1744,8 +1745,9 @@ function refresh()
     entry.count:SetShown(count ~= nil)
     entry.pill:SetShown(count ~= nil)
   end
-  local scanned = ns.db.scanned[ns.RealmKey()]
-  window.lastScan:SetText(scanned and ("Last scan " .. tint("text", Codec.Age(time() - scanned))) or "No scan yet")
+  local scanned, fromServer = Database.NewestScan(ns.db, ns.RealmKey())
+  window.lastScan:SetText(scanned and ("Last scan " .. tint("text", Codec.Age(time() - scanned)) .. (fromServer and "\nfrom the server" or ""))
+    or "No scan yet")
   window.purse:SetText(money(Ledger.History(ns.db, time(), 1)[1] or 0))
   render()
 end
@@ -2370,6 +2372,7 @@ local function addRail()
   UI.Fill(rule, "line")
   window.lastScan = label(rail, "status", "muted")
   window.lastScan:SetPoint("TOPLEFT", rule, "BOTTOMLEFT", 14, -12)
+  window.lastScan:SetJustifyH("LEFT")
 
   window.reload = UI.Button(rail, "Reload", RAIL_WIDTH - 28, 26)
   window.reload:SetPoint("BOTTOMLEFT", 14, 13)

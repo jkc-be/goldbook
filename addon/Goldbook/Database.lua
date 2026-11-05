@@ -20,7 +20,7 @@ local PARK_MILLER = 2147483647
 --   prices[realmKey][itemKey]  = price record, see Codec.EncodePrice
 --   history[realmKey][itemKey] = the item's prices per day for KEPT_DAYS, see Codec.HistoryDay
 --   hours[realmKey][itemKey]   = the same per hour for the KEPT_HOURS up to the item's newest scan
---   scanned[realmKey]          = time of the newest scan
+--   scanned[realmKey]          = time of the newest scan here, see Database.NewestScan
 --   items[itemKey]             = "quality|name"
 --   vendor[itemID]             = what a vendor pays for one, see ns.SellPrice, 0 when it buys nothing
 --   merchant[itemID]           = the lowest gold price a merchant asks for one it sells without limit
@@ -421,6 +421,18 @@ function Database.MergeServer(db, data)
     end
   end
   return taken
+end
+
+-- The time of the newest scan the realm's prices are current to, and whether
+-- it is the server's: the later of the scan here and the server data merged
+-- last. Nil before either. The quick scan on opening the auction house reads
+-- `scanned` alone, so that it still runs for a player with only server prices.
+function Database.NewestScan(db, realmKey)
+  local here, server = db.scanned[realmKey], db.serverMerged[realmKey]
+  if server and (not here or server > here) then
+    return server, true
+  end
+  return here, false
 end
 
 -- Whether an item's price on the realm came from the server's data.
