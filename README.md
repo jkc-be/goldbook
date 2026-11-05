@@ -229,7 +229,8 @@ Once you are signed in, the app registers each WoW account with the server,
 saves a separate upload token for it, reuses it on later starts, and starts
 uploading. **Sync automatically** is on by default. It uploads after each game file write
 and checks again every 15 minutes, which you can change. With it off, nothing
-uploads until you click **Sync now**.
+uploads until you click **Sync now**. It leaves out beta and PTR game folders,
+such as `_classic_beta_` and `_ptr_`, because their realms are test copies.
 The default server address is <https://app.jkc-be.com/goldbook>; **Use the
 default server** under **Advanced** puts it back. If setup fails while offline,
 it retries every minute; **Sync now** retries immediately.

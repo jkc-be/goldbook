@@ -152,10 +152,26 @@ pub fn flavor_dirs(wow_dir: Option<&Path>) -> Vec<PathBuf> {
         .filter(|p| p.is_dir() && flavor(p))
         .collect()
 }
+// A beta or PTR keeps its SavedVariables after the test ends, and its realms
+// are not the live ones, so its data would only replace real data with stale.
+fn test_client(flavor: &Path) -> bool {
+    flavor
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| {
+            n.split('_').any(|tag| {
+                ["alpha", "beta", "ptr", "ptr2", "xptr"]
+                    .iter()
+                    .any(|test| tag.eq_ignore_ascii_case(test))
+            })
+        })
+}
 pub fn saved_variables_files(wow_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for flavor in flavor_dirs(wow_dir) {
-        files.extend(flavor_saved_variables(&flavor))
+        if !test_client(&flavor) {
+            files.extend(flavor_saved_variables(&flavor))
+        }
     }
     files.sort();
     files

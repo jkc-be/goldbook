@@ -243,6 +243,33 @@ fn linux_discovery_finds_proton_and_prefers_installed_flavors() {
         proton
     );
 }
+#[test]
+fn discovery_leaves_out_beta_and_ptr_clients() {
+    let wow = tempfile::tempdir().unwrap();
+    for flavor in [
+        "_retail_",
+        "_forever_",
+        "_classic_era_",
+        "_alpha_",
+        "_beta_",
+        "_ptr_",
+        "_ptr2_",
+        "_xptr_",
+        "_classic_beta_",
+        "_classic_ptr_",
+        "_classic_era_ptr_",
+    ] {
+        write_account(&wow.path().join(flavor), "ACCOUNT", "");
+    }
+    let flavors = saved_variables_files(Some(wow.path()))
+        .iter()
+        .map(|file| flavor_of(file).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        flavors,
+        ["_classic_era_", "_forever_", "_retail_"].map(|f| wow.path().join(f))
+    );
+}
 async fn server() -> (String, Arc<Mutex<Vec<Value>>>, tokio::task::JoinHandle<()>) {
     let received = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
