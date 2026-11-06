@@ -960,9 +960,11 @@ GoldbookServerData = data
     assert_eq!(
         *lines.lock().unwrap(),
         vec![
+            "server has no prices for Area 52-Alliance".to_owned(),
             format!(
                 "server prices for Faramon-Horde, PyrewoodVillage-Alliance written to {shown}: 3 items"
             ),
+            "server has no prices for Area 52-Alliance".to_owned(),
             format!(
                 "server prices for Faramon-Horde, PyrewoodVillage-Alliance unchanged in {shown}"
             ),
@@ -1001,9 +1003,20 @@ async fn server_data_needs_the_addon_folder_and_a_realm_the_server_knows() {
     let addon = flavor.join("Interface/AddOns/Goldbook");
     fs::create_dir_all(&addon).unwrap();
     fs::write(addon.join("ServerData.lua"), STUB).unwrap();
+    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log: Logger = {
+        let lines = lines.clone();
+        Arc::new(move |line| lines.lock().unwrap().push(line.to_owned()))
+    };
     assert_eq!(
-        write_server_data(&flavor, &api, &logger()).await.unwrap(),
-        ServerData::NoRealms
+        write_server_data(&flavor, &api, &log).await.unwrap(),
+        ServerData::NoPrices {
+            realms: vec!["Area 52-Alliance".to_owned()]
+        }
+    );
+    assert_eq!(
+        *lines.lock().unwrap(),
+        vec!["server has no prices for Area 52-Alliance".to_owned()]
     );
     assert_eq!(
         *mock.requests.lock().unwrap(),
@@ -1013,6 +1026,14 @@ async fn server_data_needs_the_addon_folder_and_a_realm_the_server_knows() {
         fs::read_to_string(addon.join("ServerData.lua")).unwrap(),
         STUB
     );
+    write_account(&flavor, "ONE", "GoldbookDB = {}");
+    lines.lock().unwrap().clear();
+    assert_eq!(
+        write_server_data(&flavor, &api, &log).await.unwrap(),
+        ServerData::NoRealms
+    );
+    assert_eq!(*lines.lock().unwrap(), Vec::<String>::new());
+    assert_eq!(mock.requests.lock().unwrap().len(), 1);
     task.abort();
 }
 #[tokio::test]
