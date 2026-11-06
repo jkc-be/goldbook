@@ -181,6 +181,8 @@ The server does not start when an entry is malformed, names a shard such as `CAM
 
 To find a house's API ID, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again). Configure the house that matches best. The IDs in the example above are the likely ones from [Which house a shard uses](#which-house-a-shard-uses), and are not confirmed.
 
+Before switching it on, `scripts/verify-battlenet-auctions.py "EU PvP/Horde=113" CAMWOWEU4Realm6PvP` checks one entry end to end, with the client ID and secret in the environment. It polls the house into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs the shard into a `ServerData.lua`, and restarts the server to show that the same snapshot is not stored twice.
+
 Every 10 minutes the server asks each configured house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too and stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
 
 The scans leave out:
