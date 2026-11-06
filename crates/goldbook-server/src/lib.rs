@@ -1,8 +1,10 @@
+pub mod auctions;
 mod auth;
 pub mod db;
 pub mod house;
 mod oauth;
 mod routes;
+pub use auctions::{AuctionConfig, Poller};
 pub use oauth::BattleNetConfig;
 
 use auth::{LoginLimits, Network};
@@ -32,6 +34,8 @@ const SESSION_SECONDS: i64 = 30 * 86400;
 pub struct Config {
     pub database: PathBuf,
     pub battlenet: Option<BattleNetConfig>,
+    // Polled from main.rs, not by the router.
+    pub auctions: Option<AuctionConfig>,
     pub web_dir: Option<PathBuf>,
     pub trusted_proxy: String,
     pub host: String,
@@ -42,6 +46,7 @@ impl Config {
         Self {
             database: database.into(),
             battlenet: None,
+            auctions: None,
             web_dir: None,
             trusted_proxy: String::new(),
             host: "127.0.0.1".into(),
@@ -52,6 +57,7 @@ impl Config {
         let mut c =
             Self::new(std::env::var("DATABASE").unwrap_or_else(|_| "data/goldbook.sqlite".into()));
         c.battlenet = BattleNetConfig::from_env()?;
+        c.auctions = AuctionConfig::from_env()?;
         c.host = std::env::var("HOST").unwrap_or(c.host);
         c.port = std::env::var("PORT")
             .map(|p| p.parse())

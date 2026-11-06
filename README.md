@@ -1219,6 +1219,10 @@ without them the server registers no upload tokens, so nothing new can upload.
 Its defaults are `127.0.0.1`, `8787`, and `data/goldbook.sqlite`. The server
 embeds the web assets.
 Set `WEB_DIR` to a folder to override them during development.
+With `GOLDBOOK_BATTLENET_HOUSES` and the same Battle.net client, the server
+polls WoW Forever auction snapshots, as
+[docs/ah-api/README.md](docs/ah-api/README.md#polling-from-the-server)
+describes.
 
 The server applies `server/migrations` once, in name order, on startup. The
 Rust port reuses all five existing migrations, their tracking table, and the

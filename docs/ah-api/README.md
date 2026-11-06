@@ -163,6 +163,33 @@ The [Reddit post](https://www.reddit.com/r/wowaddons/comments/1xofb73/how_to_acc
 - `item` also carries `context` and `modifiers`.
 - House 116 was not the only house that matched across rulesets. All of them do, apart from the cache differences described above.
 
+## Polling from the server
+
+The server can poll these snapshots itself and store each one as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_HOUSES` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token:
+
+```dotenv
+GOLDBOOK_BATTLENET_HOUSES="EU PvP/Horde=113,EU PvP/Alliance=110"
+```
+
+Each comma-separated entry is `<house>/<faction>=<API house ID>`:
+
+- The house is a server house name as `/api/realms` lists it, such as `EU PvP`. Its first word, `EU` or `US`, picks the API host and the namespace.
+- The faction is `Alliance` or `Horde`.
+- The API house ID is the `id` from the auctions index.
+
+The server does not start when an entry is malformed, names a shard such as `CAMWOWEU4Realm8PvP` instead of its house, starts with another region, or repeats a house and faction. It also does not start when the variable is set and the client ID or secret is missing.
+
+To find a house's API ID, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again). Configure the house that matches best. The IDs in the example above are the likely ones from [Which house a shard uses](#which-house-a-shard-uses), and are not confirmed.
+
+Every 10 minutes the server asks each configured house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too and stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
+
+The scans leave out:
+
+- Listings with `bonus_lists`, because the API's bonus IDs do not map to the addon's item keys. See [Item variants](#item-variants).
+- Listings without a buyout, as the in-game scanner does.
+- Blackwater houses, because a server house has only Alliance and Horde.
+- Item names. An item that no player has scanned has no name until one does.
+
 ## Open questions
 
 - Confirm that EU4 PvP Horde is house 113, using a scan taken within an hour after a snapshot's `Last-Modified`, and find the Alliance house with an Alliance scan.

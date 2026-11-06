@@ -4,12 +4,15 @@ use axum::{
     extract::ConnectInfo,
     http::{HeaderMap, Request},
 };
-use goldbook_server::{BattleNetConfig, Config, db, router};
+use goldbook_server::{AuctionConfig, BattleNetConfig, Config, Poller, db, router};
 use serde_json::{Value, json};
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tower::ServiceExt;
 
@@ -2719,4 +2722,312 @@ async fn the_first_start_moves_stored_forever_shards_into_their_house() {
         goldbook_server::house::Reconciled::default(),
         "a second start moves nothing"
     );
+}
+
+// A snapshot as Battle.net serves it: its Last-Modified as Battle.net writes
+// it, the same time as the IMF-fixdate a client sends back, and its two lists.
+struct Snapshot {
+    modified: &'static str,
+    since: &'static str,
+    regular: Value,
+    commodities: Value,
+}
+// The Battle.net API and token endpoint for EU house 113.
+struct Blizzard {
+    snapshot: Snapshot,
+    // The API accepts only `token-<revision>`, which the token endpoint grants.
+    revision: usize,
+    granted: usize,
+    honors_since: bool,
+    // The If-Modified-Since and Accept-Encoding of each request for house 113.
+    asked: Vec<(Option<String>, String)>,
+}
+fn first_snapshot() -> Snapshot {
+    Snapshot {
+        modified: "Fri, 6 Nov 2026 09:17:22 GMT",
+        since: "Fri, 06 Nov 2026 09:17:22 GMT",
+        regular: json!({"_links":{},"id":113,"name":"Horde","auctions":[
+            {"id":1,"item":{"id":2589},"buyout":120,"quantity":1,"time_left":"LONG"},
+            {"id":2,"item":{"id":2589},"buyout":100,"quantity":1,"time_left":"LONG"},
+            {"id":3,"item":{"id":2589},"buyout":101,"quantity":1,"time_left":"SHORT"},
+            {"id":4,"item":{"id":2589},"buyout":400,"bid":350,"quantity":1,"time_left":"LONG"},
+            {"id":5,"item":{"id":15477,"bonus_lists":[12725]},"buyout":300,"quantity":1,"time_left":"LONG"},
+            {"id":6,"item":{"id":15477},"buyout":500,"quantity":1,"time_left":"LONG"},
+            {"id":7,"item":{"id":9999},"bid":50,"quantity":1,"time_left":"LONG"}
+        ]}),
+        commodities: json!({"_links":{},"auctions":[
+            {"id":10,"item":{"id":4537},"quantity":20,"unit_price":50,"time_left":"VERY_LONG"},
+            {"id":11,"item":{"id":4537},"quantity":5,"unit_price":45,"time_left":"SHORT"},
+            {"id":12,"item":{"id":4537},"quantity":100,"unit_price":80,"time_left":"LONG"}
+        ]}),
+    }
+}
+fn second_snapshot() -> Snapshot {
+    Snapshot {
+        modified: "Fri, 6 Nov 2026 10:17:22 GMT",
+        since: "Fri, 06 Nov 2026 10:17:22 GMT",
+        regular: json!({"_links":{},"id":113,"name":"Horde","auctions":[
+            {"id":20,"item":{"id":2589},"buyout":95,"quantity":1,"time_left":"LONG"},
+            {"id":21,"item":{"id":2589},"buyout":90,"quantity":1,"time_left":"LONG"}
+        ]}),
+        commodities: json!({"_links":{},"auctions":[
+            {"id":22,"item":{"id":4537},"quantity":10,"unit_price":44,"time_left":"LONG"}
+        ]}),
+    }
+}
+async fn blizzard(
+    axum::extract::State(state): axum::extract::State<Arc<Mutex<Blizzard>>>,
+    request: Request<Body>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use std::io::Write;
+    let (parts, body) = request.into_parts();
+    let header = |name| {
+        parts
+            .headers
+            .get(name)
+            .map(|value: &axum::http::HeaderValue| value.to_str().unwrap().to_owned())
+    };
+    let body = to_bytes(body, 4096).await.unwrap();
+    let mut state = state.lock().unwrap();
+    if parts.uri.path() == "/token" {
+        assert_eq!(parts.method, "POST");
+        assert_eq!(
+            header("authorization").as_deref(),
+            Some("Basic Y2xpZW50OnNlY3JldA==")
+        );
+        assert_eq!(&body[..], b"grant_type=client_credentials");
+        state.granted += 1;
+        let token = format!("token-{}", state.revision);
+        return axum::Json(json!({"access_token":token,"token_type":"bearer","expires_in":86399}))
+            .into_response();
+    }
+    if header("authorization") != Some(format!("Bearer token-{}", state.revision)) {
+        return axum::http::StatusCode::UNAUTHORIZED.into_response();
+    }
+    assert_eq!(parts.uri.query(), Some("namespace=dynamic-forever-eu"));
+    let list = match parts.uri.path() {
+        "/data/wow/ruleset/1/auctions/113" => {
+            let since = header("if-modified-since");
+            state
+                .asked
+                .push((since.clone(), header("accept-encoding").unwrap_or_default()));
+            if state.honors_since && since.as_deref() == Some(state.snapshot.since) {
+                return axum::http::StatusCode::NOT_MODIFIED.into_response();
+            }
+            &state.snapshot.regular
+        }
+        "/data/wow/ruleset/1/auctions/113/commodities" => &state.snapshot.commodities,
+        _ => return axum::http::StatusCode::NOT_FOUND.into_response(),
+    };
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(list.to_string().as_bytes()).unwrap();
+    (
+        [
+            ("content-type", "application/json;charset=UTF-8"),
+            ("content-encoding", "gzip"),
+            ("last-modified", state.snapshot.modified),
+        ],
+        encoder.finish().unwrap(),
+    )
+        .into_response()
+}
+// A poller for `houses` against a loopback Battle.net that serves `snapshot`.
+async fn battlenet_poller(f: &Fixture, houses: &str) -> (Poller, Arc<Mutex<Blizzard>>) {
+    let state = Arc::new(Mutex::new(Blizzard {
+        snapshot: first_snapshot(),
+        revision: 1,
+        granted: 0,
+        honors_since: true,
+        asked: vec![],
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let api = Router::new().fallback(blizzard).with_state(state.clone());
+    tokio::spawn(async move { axum::serve(listener, api).await.unwrap() });
+    let mut config = AuctionConfig::parse(houses, "client", "secret")
+        .unwrap()
+        .unwrap();
+    config.token_endpoint = format!("{origin}/token");
+    config.eu_api = origin;
+    let database = f.database();
+    let poller = tokio::task::spawn_blocking(move || Poller::new(config, database).unwrap())
+        .await
+        .unwrap();
+    (poller, state)
+}
+// The blocking client must not run, or drop, on the async runtime.
+async fn poll(mut poller: Poller) -> Poller {
+    tokio::task::spawn_blocking(move || {
+        poller.poll_once();
+        poller
+    })
+    .await
+    .unwrap()
+}
+async fn stop(poller: Poller) {
+    tokio::task::spawn_blocking(move || drop(poller))
+        .await
+        .unwrap();
+}
+async fn horde_export(f: &Fixture) -> Value {
+    let (status, _, body) = call(
+        &f.app,
+        "GET",
+        "/api/export?realm=CAMWOWEU4Realm8PvP&faction=Horde",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    body
+}
+async fn stored_scans(f: &Fixture) -> Value {
+    call(&f.app, "GET", "/api/realms", Value::Null, &[]).await.2["realms"].clone()
+}
+
+#[tokio::test]
+async fn battlenet_snapshots_reach_the_export_once_each() {
+    let f = Fixture::new().await;
+    let (poller, blizzard) = battlenet_poller(&f, "EU PvP/Alliance=999,EU PvP/Horde=113").await;
+
+    let poller = poll(poller).await;
+    let export = horde_export(&f).await;
+    assert_eq!(export["scannedAt"], 1793956642);
+    assert_eq!(
+        export["items"],
+        json!({
+            "2589":{"name":null,"quality":null,"price":[100,4,4,1793956642,101,1793956642],"hours":[[498321,100,4,101]],"days":[[20763,100,4,101]]},
+            "4537":{"name":null,"quality":null,"price":[45,125,3,1793956642,50,1793956642],"hours":[[498321,45,125,50]],"days":[[20763,45,125,50]]},
+            "15477":{"name":null,"quality":null,"price":[500,1,1,1793956642,500,1793956642],"hours":[[498321,500,1,500]],"days":[[20763,500,1,500]]}
+        })
+    );
+    assert_eq!(
+        stored_scans(&f).await,
+        json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":1,"lastScan":1793956642}])
+    );
+
+    let poller = poll(poller).await;
+    // Another cached copy of the same snapshot, one listing apart, from a
+    // server that ignores If-Modified-Since.
+    {
+        let mut blizzard = blizzard.lock().unwrap();
+        blizzard.honors_since = false;
+        blizzard.snapshot.regular["auctions"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"id":8,"item":{"id":2589},"buyout":99,"quantity":1,"time_left":"LONG"}));
+    }
+    let poller = poll(poller).await;
+    assert_eq!(
+        stored_scans(&f).await,
+        json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":1,"lastScan":1793956642}])
+    );
+
+    blizzard.lock().unwrap().snapshot = second_snapshot();
+    let poller = poll(poller).await;
+    let poller = poll(poller).await;
+    assert_eq!(
+        stored_scans(&f).await,
+        json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":2,"lastScan":1793960242}])
+    );
+    let export = horde_export(&f).await;
+    assert_eq!(export["scannedAt"], 1793960242);
+    assert_eq!(
+        export["items"],
+        json!({
+            "2589":{"name":null,"quality":null,"price":[90,2,2,1793960242,90,1793960242],"hours":[[498321,100,4,101],[498322,90,2,90]],"days":[[20763,90,2,90]]},
+            "4537":{"name":null,"quality":null,"price":[44,10,1,1793960242,44,1793960242],"hours":[[498321,45,125,50],[498322,44,10,44]],"days":[[20763,44,10,44]]},
+            "15477":{"name":null,"quality":null,"price":[500,1,1,1793956642,500,1793956642],"hours":[[498321,500,1,500]],"days":[[20763,500,1,500]]}
+        })
+    );
+
+    let asked: Vec<_> = blizzard
+        .lock()
+        .unwrap()
+        .asked
+        .iter()
+        .map(|(since, encoding)| (since.clone(), encoding.contains("gzip")))
+        .collect();
+    let since = |at: &str| (Some(at.to_owned()), true);
+    assert_eq!(
+        asked,
+        [
+            (None, true),
+            since("Fri, 06 Nov 2026 09:17:22 GMT"),
+            since("Fri, 06 Nov 2026 09:17:22 GMT"),
+            since("Fri, 06 Nov 2026 09:17:22 GMT"),
+            since("Fri, 06 Nov 2026 10:17:22 GMT"),
+        ]
+    );
+    assert_eq!(blizzard.lock().unwrap().granted, 1);
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn a_refused_token_is_replaced_and_the_snapshot_still_stored() {
+    let f = Fixture::new().await;
+    let (poller, blizzard) = battlenet_poller(&f, "EU PvP/Horde=113").await;
+    let poller = poll(poller).await;
+    {
+        let mut blizzard = blizzard.lock().unwrap();
+        blizzard.revision = 2;
+        blizzard.snapshot = second_snapshot();
+    }
+    let poller = poll(poller).await;
+    let poller = poll(poller).await;
+    assert_eq!(
+        stored_scans(&f).await,
+        json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":2,"lastScan":1793960242}])
+    );
+    assert_eq!(blizzard.lock().unwrap().granted, 2);
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn a_players_newer_scan_keeps_its_prices_over_an_older_snapshot() {
+    let f = Fixture::new().await;
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm8PvP",
+            1793960000,
+            "browse",
+            json!([["2589", 95, 0, 7, 0]]),
+            json!({"2589":["Linen Cloth",1]}),
+        ),
+    )
+    .await;
+    let (poller, _blizzard) = battlenet_poller(&f, "EU PvP/Horde=113").await;
+    let poller = poll(poller).await;
+
+    let export = horde_export(&f).await;
+    assert_eq!(export["scannedAt"], 1793960000);
+    assert_eq!(
+        export["items"],
+        json!({
+            "2589":{"name":"Linen Cloth","quality":1,"price":[95,7,0,1793960000,101,1793956642],"hours":[[498321,100,4,101],[498322,95,7,0]],"days":[[20763,95,7,101]]},
+            "4537":{"name":null,"quality":null,"price":[45,125,3,1793956642,50,1793956642],"hours":[[498321,45,125,50]],"days":[[20763,45,125,50]]},
+            "15477":{"name":null,"quality":null,"price":[500,1,1,1793956642,500,1793956642],"hours":[[498321,500,1,500]],"days":[[20763,500,1,500]]}
+        })
+    );
+    let (_, _, prices) = call(
+        &f.app,
+        "GET",
+        "/api/prices?realm=CAMWOWEU4Realm8PvP&faction=Horde",
+        Value::Null,
+        &[],
+    )
+    .await;
+    let mut prices = listed(&prices);
+    prices.sort();
+    assert_eq!(
+        prices,
+        [
+            ("15477".to_owned(), 500, 1793956642),
+            ("2589".to_owned(), 95, 1793960000),
+            ("4537".to_owned(), 45, 1793956642),
+        ]
+    );
+    stop(poller).await;
 }
