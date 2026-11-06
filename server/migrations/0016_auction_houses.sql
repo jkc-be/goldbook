@@ -1,7 +1,7 @@
 -- Scans and seller snapshots are read by the auction house their realm
 -- belongs to. The migration knows no rule: every row starts in a house named
 -- after its realm, and house::reconcile moves rows at startup to the rule
--- SHARDING_AUCTION_HOUSES selects. A realm that is not a WoW Forever shard
+-- GOLDBOOK_SHARDING selects. A realm that is not a WoW Forever shard
 -- stays its own house under either rule, so nothing a client sees changes
 -- for it; scripts/verify-migration.py compares every answer with the
 -- baseline recorded before this migration.

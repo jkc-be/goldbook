@@ -8,14 +8,14 @@
 //! `of` is a fixed point, `of(of(r)) == of(r)`, so a house name answers for
 //! itself and the website can ask for what `/api/realms` listed. The default
 //! is `HouseRules::Forever`. Under `HouseRules::Off`, which
-//! `SHARDING_AUCTION_HOUSES=off` selects, every realm is its own house, so
+//! `GOLDBOOK_SHARDING=off` selects, every realm is its own house, so
 //! nothing stored or served differs from before this module existed. Faction
 //! is never folded into the house: the key everywhere is `(house, faction)`.
 
 use anyhow::{Result, bail};
 use rusqlite::{Connection, ToSql, TransactionBehavior, params, types::ToSqlOutput};
 
-/// The rule set `SHARDING_AUCTION_HOUSES` selects at startup.
+/// The rule set `GOLDBOOK_SHARDING` selects at startup.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HouseRules {
     /// Every realm is its own house.
@@ -35,7 +35,7 @@ impl HouseRules {
         match value.map(str::trim).unwrap_or("") {
             "" | "forever" => Ok(Self::Forever),
             "off" => Ok(Self::Off),
-            other => bail!("SHARDING_AUCTION_HOUSES must be unset, forever or off, not {other:?}"),
+            other => bail!("GOLDBOOK_SHARDING must be unset, forever or off, not {other:?}"),
         }
     }
 
@@ -203,7 +203,7 @@ mod tests {
             HouseRules::from_env(Some("Forever"))
                 .unwrap_err()
                 .to_string(),
-            "SHARDING_AUCTION_HOUSES must be unset, forever or off, not \"Forever\""
+            "GOLDBOOK_SHARDING must be unset, forever or off, not \"Forever\""
         );
     }
 }

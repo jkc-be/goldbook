@@ -855,7 +855,7 @@ GOLDBOOK_BIND=127.0.0.1
 | `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERTRESOLVER` | Traefik's HTTPS entrypoint and its certificate resolver. Without these lines they are `websecure` and `letsencrypt` |
 | `TRUSTED_PROXY` | Where Traefik connects from, see below |
 | `GOLDBOOK_BIND` | `127.0.0.1` keeps the plain HTTP port on the machine itself, for checks from there. Over plain HTTP the upload token is readable on the network |
-| `SHARDING_AUCTION_HOUSES` | Without the line the server pools WoW Forever shards by auction house, see [docs/server-data.md](docs/server-data.md). `off` makes every realm its own auction house |
+| `GOLDBOOK_SHARDING` | Without the line the server pools WoW Forever shards by auction house, see [docs/server-data.md](docs/server-data.md). `off` makes every realm its own auction house |
 
 To also serve Goldbook at `https://app.jkc-be.com/goldbook/`, add
 `GOLDBOOK_PATH_HOST=app.jkc-be.com` to the same env file and deploy again.
@@ -1215,7 +1215,7 @@ stock at its observation time. Use repeated searches to compare order books.
 `google-chrome` and ImageMagick's `magick`.
 
 The server reads `HOST`, `PORT`, `DATABASE`, `TRUSTED_PROXY`, and
-`SHARDING_AUCTION_HOUSES`. Battle.net
+`GOLDBOOK_SHARDING`. Battle.net
 sign-in reads `BNET_CLIENT_ID`, `BNET_CLIENT_SECRET`, and `GOLDBOOK_PUBLIC_URL`;
 without them the server registers no upload tokens, so nothing new can upload.
 Its defaults are `127.0.0.1`, `8787`, and `data/goldbook.sqlite`. The server
