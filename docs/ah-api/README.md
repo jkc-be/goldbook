@@ -121,7 +121,7 @@ To match the scanner, which stores `ceil(buyout / count)` per listing in `addon/
 
 ## Caching
 
-- The house routes and the auctions index send `Cache-Control: public, max-age=86400` and a `Last-Modified` that matches the snapshot time, 09:17:16 to 09:17:22 UTC in this run. Neither run saw a snapshot change. Later on 2026-11-06, house 113 changed at 14:24:04 and 15:24:05 UTC, and house 110 at 14:22:48 and 15:22:41, so a house's snapshot seems to change every hour, at a minute of its own.
+- The house routes and the auctions index send `Cache-Control: public, max-age=86400` and a `Last-Modified` that matches the snapshot time, 09:17:16 to 09:17:22 UTC in this run. Neither run saw a snapshot change. Later on 2026-11-06, house 113 changed at 14:24:04, 15:24:05, 16:24:29 and 17:24:27 UTC, and house 110 at 14:22:48, 15:22:41, 16:23:09 and 17:23:06, so a house's snapshot seems to change every hour, at a minute of its own.
 - Sending that `Last-Modified` back as `If-Modified-Since` returns 304 with an empty body. An older date returns 200.
 - No route sends an `ETag`.
 - The ruleset index and ruleset details send `max-age=30`, and their `Last-Modified` moves every 30 seconds.
@@ -192,9 +192,9 @@ The houses are built into `crates/goldbook-server/src/auctions.rs`:
 
 Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP` checks both houses end to end, with the client ID and secret in the environment. It polls them into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs both factions of the shard into a `ServerData.lua`, and restarts the server to show that the same snapshots are not stored twice.
 
-Every hour the server asks each house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too. Both lists carry the same `Last-Modified`; when they differ, because Blizzard published a snapshot between the two requests, the server waits 30 seconds and fetches both again once. It stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
+When it starts, and then at 30 minutes past each hour UTC, the server asks each house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too. Both lists carry the same `Last-Modified`; when they differ, because Blizzard published a snapshot between the two requests, the server waits 30 seconds and fetches both again once. It stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
 
-Snapshots seem to change about once an hour, at a minute that differs per house, so a snapshot reaches the server up to an hour after Blizzard publishes it. When two snapshots of a house fall between two polls, only the newer one is stored.
+Both EU PvP houses publish a few minutes before half past, so the poll at half past stores each snapshot about seven minutes after Blizzard publishes it. A snapshot that Blizzard publishes after half past waits for the next hour's poll. `AUCTION_POLL_MINUTE` in `crates/goldbook-core/src/schedule.rs` sets the minute. When two snapshots of a house fall between two polls, only the newer one is stored.
 
 The scans leave out:
 

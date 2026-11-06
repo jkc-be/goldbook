@@ -7,6 +7,9 @@ pub use market::{Listing, Summary, summarize};
 mod professions;
 pub use professions::{Profession, profession_items, professions};
 
+mod schedule;
+pub use schedule::{AUCTION_POLL_MINUTE, next_minute_past_hour};
+
 mod sellers;
 pub use sellers::{SellerOffer, SellerSnapshot, SellerSummary, parse_seller_snapshot};
 
