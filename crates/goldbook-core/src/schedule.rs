@@ -1,5 +1,7 @@
 /// Blizzard publishes the EU PvP houses' snapshots between :22 and :25 UTC.
 pub const AUCTION_POLL_MINUTE: u64 = 30;
+/// A poll takes seconds, but players' clocks can be minutes off the server's.
+pub const AUCTION_STORED_MINUTE: u64 = AUCTION_POLL_MINUTE + 5;
 
 /// The first Unix time after `now` that is `minute` minutes past a UTC hour.
 pub fn next_minute_past_hour(now: u64, minute: u64) -> u64 {
