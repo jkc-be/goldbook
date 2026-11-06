@@ -1,7 +1,7 @@
 //! The auction house a realm's scans belong to.
 //!
 //! A house is the Blizzard auction house that a realm's scans come from. WoW
-//! Forever shards of one cluster and ruleset share one, so their scans pool
+//! Forever shards of one region and ruleset share one, so their scans pool
 //! there. Every other realm is its own house for now. Faction is never folded
 //! into the house: the key everywhere is `(house, faction)`.
 //!
@@ -22,8 +22,8 @@ use rusqlite::{Connection, ToSql, TransactionBehavior, params, types::ToSqlOutpu
 pub struct House(String);
 
 impl House {
-    /// `CAMWOW<cluster>Realm<shard><kind>` belongs to
-    /// `CAMWOW<cluster>Realm<kind>`; every other realm is its own house.
+    /// A WoW Forever shard such as `CAMWOWEU4Realm8PvP` belongs to its region
+    /// and ruleset, `EU PvP`; every other realm is its own house.
     pub fn of(realm: &str) -> House {
         House(forever_shard(realm).unwrap_or_else(|| realm.to_owned()))
     }
@@ -37,19 +37,20 @@ impl ToSql for House {
     }
 }
 
-/// `CAMWOWEU4Realm8PvP` → `CAMWOWEU4RealmPvP`. None for any other shape,
-/// including a house name, which has no digits after `Realm`.
+/// `CAMWOWEU4Realm8PvP` → `EU PvP`, `CAMWOWEU4Realm3` → `EU Normal`. None for
+/// any other shape, including a house name.
 ///
-/// The pattern is inferred from two shard names and kept narrow on purpose:
-/// the cluster (`EU4`) and the kind (`PvP`) stay in the house, so a wrong
-/// guess under-pools and hides prices instead of showing another house's.
+/// Blizzard runs one auction house per region, ruleset and faction (issue
+/// #67), so the cluster digit and the shard number are dropped. Any other
+/// shape stays its own house, so a name this does not know hides prices
+/// instead of showing another house's.
 fn forever_shard(realm: &str) -> Option<String> {
     let rest = realm.strip_prefix("CAMWOW")?;
     let (cluster, after) = rest.split_once("Realm")?;
-    let letters = cluster.trim_end_matches(|c: char| c.is_ascii_digit());
-    if letters.is_empty()
-        || letters.len() == cluster.len()
-        || !letters.bytes().all(|b| b.is_ascii_alphabetic())
+    let region = cluster.trim_end_matches(|c: char| c.is_ascii_digit());
+    if region.is_empty()
+        || region.len() == cluster.len()
+        || !region.bytes().all(|b| b.is_ascii_alphabetic())
     {
         return None;
     }
@@ -57,7 +58,8 @@ fn forever_shard(realm: &str) -> Option<String> {
     if kind.len() == after.len() || !kind.bytes().all(|b| b.is_ascii_alphabetic()) {
         return None;
     }
-    Some(format!("CAMWOW{cluster}Realm{kind}"))
+    let ruleset = if kind.is_empty() { "Normal" } else { kind };
+    Some(format!("{region} {ruleset}"))
 }
 
 /// The rows `reconcile` moved to another house.
@@ -115,16 +117,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn forever_shards_of_one_cluster_and_kind_share_a_house() {
+    fn forever_shards_of_one_region_and_ruleset_share_a_house() {
         for (realm, house) in [
-            ("CAMWOWEU4Realm8PvP", "CAMWOWEU4RealmPvP"),
-            ("CAMWOWEU4Realm6PvP", "CAMWOWEU4RealmPvP"),
-            ("CAMWOWEU4Realm12PvP", "CAMWOWEU4RealmPvP"),
-            ("CAMWOWEU4Realm3", "CAMWOWEU4Realm"),
-            ("CAMWOWEU4Realm2RP", "CAMWOWEU4RealmRP"),
-            ("CAMWOWEU1Realm8PvP", "CAMWOWEU1RealmPvP"),
-            ("CAMWOWUS4Realm8PvP", "CAMWOWUS4RealmPvP"),
-            ("CAMWOWEU4Realm8PvE", "CAMWOWEU4RealmPvE"),
+            ("CAMWOWEU4Realm8PvP", "EU PvP"),
+            ("CAMWOWEU4Realm6PvP", "EU PvP"),
+            ("CAMWOWEU4Realm12PvP", "EU PvP"),
+            ("CAMWOWEU1Realm8PvP", "EU PvP"),
+            ("CAMWOWEU12Realm8PvP", "EU PvP"),
+            ("CAMWOWUS4Realm8PvP", "US PvP"),
+            ("CAMWOWEU4Realm2RP", "EU RP"),
+            ("CAMWOWEU4Realm8PvE", "EU PvE"),
+            ("CAMWOWEU4Realm3", "EU Normal"),
+            ("CAMWOWUS1Realm3", "US Normal"),
         ] {
             assert_eq!(House::of(realm).as_str(), house, "{realm}");
         }
@@ -154,8 +158,8 @@ mod tests {
     #[test]
     fn a_house_name_maps_to_itself() {
         for (realm, house) in [
-            ("CAMWOWEU4Realm8PvP", "CAMWOWEU4RealmPvP"),
-            ("CAMWOWEU4Realm3", "CAMWOWEU4Realm"),
+            ("CAMWOWEU4Realm8PvP", "EU PvP"),
+            ("CAMWOWUS4Realm3", "US Normal"),
             ("Faramon", "Faramon"),
         ] {
             assert_eq!(House::of(realm).as_str(), house, "{realm}");

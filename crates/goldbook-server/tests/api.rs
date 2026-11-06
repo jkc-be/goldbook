@@ -2443,10 +2443,10 @@ async fn a_never_scanned_forever_shard_reads_its_house() {
             ]
         })
     );
-    // The other faction, another cluster and another kind are other houses.
+    // The other faction, another region and another ruleset are other houses.
     for other in [
         "realm=CAMWOWEU4Realm6PvP&faction=Alliance",
-        "realm=CAMWOWEU5Realm6PvP&faction=Horde",
+        "realm=CAMWOWUS4Realm6PvP&faction=Horde",
         "realm=CAMWOWEU4Realm6PvE&faction=Horde",
     ] {
         for endpoint in ["export", "prices"] {
@@ -2477,19 +2477,32 @@ async fn a_never_scanned_forever_shard_reads_its_house() {
     let (_, _, realms) = call(&f.app, "GET", "/api/realms", Value::Null, &[]).await;
     assert_eq!(
         realms,
-        json!({"realms": [{"realm": "CAMWOWEU4RealmPvP", "faction": "Horde", "region": "EU", "scans": 2, "lastScan": 1760003600}]})
+        json!({"realms": [{"realm": "EU PvP", "faction": "Horde", "region": "EU", "scans": 2, "lastScan": 1760003600}]})
     );
+    // What /api/realms lists answers for itself, encoded as the website and
+    // as other clients send it, and so does a shard of another EU cluster.
+    for realm in ["EU+PvP", "EU%20PvP", "CAMWOWEU1Realm6PvP"] {
+        let (_, _, same) = call(
+            &f.app,
+            "GET",
+            &format!("/api/prices?realm={realm}&faction=Horde"),
+            Value::Null,
+            &[],
+        )
+        .await;
+        assert_eq!(same, prices, "{realm}");
+    }
     let (_, _, by_house) = call(
         &f.app,
         "GET",
-        "/api/prices?realm=CAMWOWEU4RealmPvP&faction=Horde",
+        "/api/export?realm=EU%20PvP&faction=Horde",
         Value::Null,
         &[],
     )
     .await;
     assert_eq!(
-        by_house, prices,
-        "what /api/realms lists answers for itself"
+        (&by_house["realm"], &by_house["scannedAt"]),
+        (&json!("EU PvP"), &json!(1760003600))
     );
 }
 #[tokio::test]
@@ -2672,16 +2685,9 @@ async fn the_first_start_moves_stored_forever_shards_into_their_house() {
         .collect();
     assert_eq!(
         realms,
-        [
-            ("CAMWOWEU4RealmPvP".to_owned(), 2),
-            ("Faramon".to_owned(), 1)
-        ]
+        [("EU PvP".to_owned(), 2), ("Faramon".to_owned(), 1)]
     );
-    for realm in [
-        "CAMWOWEU4Realm6PvP",
-        "CAMWOWEU4Realm8PvP",
-        "CAMWOWEU4RealmPvP",
-    ] {
+    for realm in ["CAMWOWEU4Realm6PvP", "CAMWOWEU4Realm8PvP", "EU%20PvP"] {
         assert_eq!(
             listed(&get(format!("/api/prices?realm={realm}&faction=Horde")).await),
             [
