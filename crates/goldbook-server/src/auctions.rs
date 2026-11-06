@@ -44,8 +44,8 @@ impl std::fmt::Display for Source {
     }
 }
 
-/// The houses polled for now. docs/ah-api/README.md finds these IDs likely,
-/// not confirmed.
+/// The houses polled for now. docs/ah-api/README.md confirms 113 against a
+/// player scan; 110 follows from the ID sets.
 const SOURCES: [Source; 2] = [
     Source {
         house: "EU PvP",

@@ -21,7 +21,7 @@ The python.org build of Python on macOS has no CA certificates. If a script fail
 - The ruleset in the URL does not select the market. All four rulesets list the same 15 houses and return the same listings for each, apart from one or two listings in three houses.
 - Regular listings always have `quantity` 1, commodity listings carry the stacks, and no item appears in both lists.
 - `If-Modified-Since` returns 304 when the snapshot has not changed.
-- Our Horde scans from `CAMWOWEU4Realm6PvP` and `CAMWOWEU4Realm8PvP` match house 113 best. This is likely but not confirmed, because the scans were 11 hours older than the snapshot.
+- EU4 PvP Horde, the shards `CAMWOWEU4Realm6PvP` and `CAMWOWEU4Realm8PvP`, is house 113. A scan taken 30 minutes before a snapshot has the same minimum as house 113 for 75% of its items.
 - The API's bonus IDs for item variants are not the suffix IDs the addon uses in its item keys. How to map one to the other is unknown.
 
 ## Routes
@@ -146,7 +146,21 @@ Both EU4 PvP shards give the same ranking, which fits with them sharing one auct
 
 A median of 0.18 means the two prices of a typical item are about 20% apart. On the roughly 905 items where houses 113 and 114 have different minimums, the scan matches 113 exactly 145 to 148 times and 114 79 times. As a control, the same comparison between the Alliance houses 110 and 111, which a Horde scan should match equally badly, gives 62 against 77.
 
-The scans were taken at 22:13 and 22:19 UTC on 2026-11-05, 11 hours before the snapshot, so prices had time to move. Read this as "EU4 PvP Horde is probably house 113". If it is, EU4 PvP Alliance would be 110 and its Blackwater house 116, but there are no Alliance scans to check that.
+The scans were taken at 22:13 and 22:19 UTC on 2026-11-05, 11 hours before the snapshot, so prices had time to move.
+
+A second run on 2026-11-06 compared the server's Horde scan of 14:53 UTC with the snapshots of 15:22 to 15:24 UTC. By then the server pooled both shards into `EU PvP`, so both shards gave the same scan:
+
+| House | Scan items found | Same minimum | Median \|ln(scan / house)\| |
+|---|---|---|---|
+| 113 | 99% | 75% | 0.00 |
+| 114 | 85% | 26% | 0.24 |
+| 111 | 79% | 23% | 0.34 |
+| 110 | 78% | 22% | 0.31 |
+| 119, 120, 123, 124 | 34 to 40% | 9 to 13% | 0.69 to 0.71 |
+| 116, 117 | 20 to 21% | 7 to 8% | 0.92 to 1.10 |
+| 121, 125 | 3% | 2 to 5% | 1.18 to 1.39 |
+
+On the 1,204 items where houses 113 and 114 have different minimums, the scan matches 113 exactly 784 times and 114 19 times. EU4 PvP Horde is house 113. EU4 PvP Alliance would then be 110 and its Blackwater house 116, from the ID sets, but there are no Alliance scans to check that.
 
 ## Item variants
 
@@ -174,7 +188,7 @@ The houses are built into `crates/goldbook-server/src/auctions.rs`:
 | EU PvP | Horde | 113 |
 | EU PvP | Alliance | 110 |
 
-These IDs are the likely ones from [Which house a shard uses](#which-house-a-shard-uses), and are not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
+[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for Horde. 110 for Alliance follows from the ID sets and is not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
 
 Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP` checks both houses end to end, with the client ID and secret in the environment. It polls them into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs both factions of the shard into a `ServerData.lua`, and restarts the server to show that the same snapshots are not stored twice.
 
@@ -191,7 +205,7 @@ The scans leave out:
 
 ## Open questions
 
-- Confirm that EU4 PvP Horde is house 113, using a scan taken within an hour after a snapshot's `Last-Modified`, and find the Alliance house with an Alliance scan.
+- Confirm that EU4 PvP Alliance is house 110, using an Alliance scan taken within an hour of a snapshot's `Last-Modified`.
 - Find which shards use the sets 111/114/117, 119/120/121 and 123/124/125, and what the empty set 112/115/118 is for.
 - Confirm over a day that every house's `Last-Modified` changes once an hour.
 - Find how API bonus IDs map to the addon's suffix IDs.
