@@ -104,6 +104,8 @@ The file does not hold the table as one constructor. It fills the table in funct
 
 The app writes `ServerData.lua` after a sync pass that uploaded without errors. In the background it does this at most once every 15 minutes for each game flavor, or once per sync interval when the interval is longer. **Sync now** and `goldbook-sync --once` write it after every pass whose uploads did not fail, whatever the interval.
 
+The app also writes the file for every game flavor at 35 minutes past each hour UTC, even when an upload failed. It does this when **Sync automatically** is on, and `goldbook-sync` does it when it runs without `--once`. The server polls Battle.net at 30 minutes past each hour (`AUCTION_POLL_MINUTE`). The five minutes between (`AUCTION_STORED_MINUTE`) leave time for that poll and for a computer clock that runs a few minutes off. The 15-minute limit then counts from this download.
+
 For each flavor folder, the app does the following:
 
 1. Reads every `WTF/Account/*/SavedVariables/Goldbook.lua` in the flavor. It collects the realm keys of `GoldbookDB.prices`, `GoldbookDB.scanned`, and the `realm` and `faction` of each entry in `GoldbookDB.characters`. It removes spaces from a character's realm, because older addon versions saved the realm's display name.
