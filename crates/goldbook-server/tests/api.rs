@@ -2985,6 +2985,20 @@ async fn a_refused_token_is_replaced_and_the_snapshot_still_stored() {
 }
 
 #[tokio::test]
+async fn an_upload_cannot_pass_for_a_battlenet_snapshot() {
+    let f = Fixture::new().await;
+    let mut claimed = scan();
+    claimed["realm"] = json!("EU PvP");
+    claimed["scanner"] = json!("Battle.net");
+    claimed["scannedAt"] = json!(4102444800_u64);
+    let (status, _, body) = call(&f.app, "POST", "/api/scans", claimed, &f.auth()).await;
+    assert_eq!(
+        (status, body),
+        (400, json!({"error":"scanner Battle.net is reserved"}))
+    );
+}
+
+#[tokio::test]
 async fn a_players_newer_scan_keeps_its_prices_over_an_older_snapshot() {
     let f = Fixture::new().await;
     upload(

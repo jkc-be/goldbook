@@ -21,7 +21,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const SCANNER: &str = "Battle.net";
+pub(crate) const SCANNER: &str = "Battle.net";
 const INTERVAL: Duration = Duration::from_secs(600);
 // The ruleset in the URL does not select the market, but each URL serves its
 // own cached copy, so every snapshot of a house comes through the same one.

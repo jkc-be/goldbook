@@ -261,6 +261,14 @@ fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Resul
 
 fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
     let scan = input.upload(goldbook_core::parse_scan_upload)?;
+    // The poller finds its newest snapshot by this scanner, so an upload
+    // dated later under it would hold the poller back until then.
+    if scan.scanner == crate::auctions::SCANNER {
+        return Err(Error::new(
+            400,
+            format!("scanner {} is reserved", crate::auctions::SCANNER),
+        ));
+    }
     let stored = db::store_scan(db, &scan)?;
     Ok(Reply::json(
         json!({"stored":stored,"items":scan.rows.len()}),
