@@ -121,7 +121,7 @@ To match the scanner, which stores `ceil(buyout / count)` per listing in `addon/
 
 ## Caching
 
-- The house routes and the auctions index send `Cache-Control: public, max-age=86400` and a `Last-Modified` that matches the snapshot time, 09:17:16 to 09:17:22 UTC in this run. Neither run saw a snapshot change, so how often snapshots change is not measured yet.
+- The house routes and the auctions index send `Cache-Control: public, max-age=86400` and a `Last-Modified` that matches the snapshot time, 09:17:16 to 09:17:22 UTC in this run. Neither run saw a snapshot change. Later on 2026-11-06, house 113 changed at 14:24:04 and 15:24:05 UTC, and house 110 at 14:22:48 and 15:22:41, so a house's snapshot seems to change every hour, at a minute of its own.
 - Sending that `Last-Modified` back as `If-Modified-Since` returns 304 with an empty body. An older date returns 200.
 - No route sends an `ETag`.
 - The ruleset index and ruleset details send `max-age=30`, and their `Last-Modified` moves every 30 seconds.
@@ -165,25 +165,22 @@ The [Reddit post](https://www.reddit.com/r/wowaddons/comments/1xofb73/how_to_acc
 
 ## Polling from the server
 
-The server can poll these snapshots itself and store each one as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_HOUSES` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token:
+The server can poll the EU PvP auction houses itself, for both factions, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. The server does not start when the variable has another value, or when it is set and the client ID or secret is missing.
 
-```dotenv
-GOLDBOOK_BATTLENET_HOUSES="EU PvP/Horde=113,EU PvP/Alliance=110"
-```
+The houses are built into `crates/goldbook-server/src/auctions.rs`:
 
-Each comma-separated entry is `<house>/<faction>=<API house ID>`:
+| Server house | Faction | API house |
+|---|---|---|
+| EU PvP | Horde | 113 |
+| EU PvP | Alliance | 110 |
 
-- The house is a server house name as `/api/realms` lists it, such as `EU PvP`. Its first word, `EU` or `US`, picks the API host and the namespace.
-- The faction is `Alliance` or `Horde`.
-- The API house ID is the `id` from the auctions index.
+These IDs are the likely ones from [Which house a shard uses](#which-house-a-shard-uses), and are not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
 
-The server does not start when an entry is malformed, names a shard such as `CAMWOWEU4Realm8PvP` instead of its house, starts with another region, or repeats a house and faction. It also does not start when the variable is set and the client ID or secret is missing.
+Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP` checks both houses end to end, with the client ID and secret in the environment. It polls them into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs both factions of the shard into a `ServerData.lua`, and restarts the server to show that the same snapshots are not stored twice.
 
-To find a house's API ID, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again). Configure the house that matches best. The IDs in the example above are the likely ones from [Which house a shard uses](#which-house-a-shard-uses), and are not confirmed.
+Every hour the server asks each house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too. Both lists carry the same `Last-Modified`; when they differ, because Blizzard published a snapshot between the two requests, the server fetches both again once. It stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
 
-Before switching it on, `scripts/verify-battlenet-auctions.py "EU PvP/Horde=113" CAMWOWEU4Realm6PvP` checks one entry end to end, with the client ID and secret in the environment. It polls the house into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs the shard into a `ServerData.lua`, and restarts the server to show that the same snapshot is not stored twice.
-
-Every 10 minutes the server asks each configured house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too and stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
+Snapshots seem to change about once an hour, at a minute that differs per house, so a snapshot reaches the server up to an hour after Blizzard publishes it. When two snapshots of a house fall between two polls, only the newer one is stored.
 
 The scans leave out:
 
@@ -196,6 +193,6 @@ The scans leave out:
 
 - Confirm that EU4 PvP Horde is house 113, using a scan taken within an hour after a snapshot's `Last-Modified`, and find the Alliance house with an Alliance scan.
 - Find which shards use the sets 111/114/117, 119/120/121 and 123/124/125, and what the empty set 112/115/118 is for.
-- Measure how often a house's `Last-Modified` changes.
+- Confirm over a day that every house's `Last-Modified` changes once an hour.
 - Find how API bonus IDs map to the addon's suffix IDs.
 - Repeat the run for US. The post reports the same house IDs there with different listings, and our client got 102,292 listings for US house 113.

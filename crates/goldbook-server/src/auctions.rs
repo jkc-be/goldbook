@@ -1,10 +1,10 @@
 //! Auction snapshots of WoW Forever houses from the Battle.net Game Data API,
 //! stored as full scans so that they reach clients like a player's upload.
 //!
-//! `GOLDBOOK_BATTLENET_HOUSES` names the houses to poll; unset, nothing here
+//! `GOLDBOOK_BATTLENET_AUCTIONS=1` switches polling on; unset, nothing here
 //! runs. docs/ah-api/README.md records what the API returns.
 
-use crate::{db, house::House};
+use crate::db;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use goldbook_core::{Listing, PriceRow, ScanUpload, summarize};
 use reqwest::{
@@ -15,182 +15,95 @@ use reqwest::{
 use rusqlite::{Connection, params};
 use serde::Deserialize;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     io::Read,
     path::PathBuf,
     time::{Duration, Instant},
 };
 
 pub(crate) const SCANNER: &str = "Battle.net";
-const INTERVAL: Duration = Duration::from_secs(600);
+// Snapshots change about once an hour.
+const INTERVAL: Duration = Duration::from_secs(3600);
 // The ruleset in the URL does not select the market, but each URL serves its
 // own cached copy, so every snapshot of a house comes through the same one.
 const RULESET: u32 = 1;
+const NAMESPACE: &str = "dynamic-forever-eu";
+const REGION: &str = "EU";
 const MAX_BODY: u64 = 128 * 1024 * 1024;
 const TOKEN_MARGIN: u64 = 300;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Region {
-    Eu,
-    Us,
-}
-impl Region {
-    fn of(house: &str) -> Option<Self> {
-        match house.split_whitespace().next()? {
-            "EU" => Some(Self::Eu),
-            "US" => Some(Self::Us),
-            _ => None,
-        }
-    }
-    fn label(self) -> &'static str {
-        match self {
-            Self::Eu => "EU",
-            Self::Us => "US",
-        }
-    }
-    fn namespace(self) -> &'static str {
-        match self {
-            Self::Eu => "dynamic-forever-eu",
-            Self::Us => "dynamic-forever-us",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Faction {
-    Alliance,
-    Horde,
-}
-impl Faction {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Alliance => "Alliance",
-            Self::Horde => "Horde",
-        }
-    }
-}
-
 /// One server house and faction, and the API house that lists its auctions.
-#[derive(Clone, Debug, PartialEq, Eq)]
 struct Source {
-    house: House,
-    faction: Faction,
-    region: Region,
-    house_id: u32,
+    house: &'static str,
+    faction: &'static str,
+    id: u32,
 }
 impl std::fmt::Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}/{} (house {})",
-            self.house.as_str(),
-            self.faction.as_str(),
-            self.house_id
-        )
+        write!(f, "{}/{} (house {})", self.house, self.faction, self.id)
     }
 }
+
+/// The houses polled for now. docs/ah-api/README.md finds these IDs likely,
+/// not confirmed.
+const SOURCES: [Source; 2] = [
+    Source {
+        house: "EU PvP",
+        faction: "Horde",
+        id: 113,
+    },
+    Source {
+        house: "EU PvP",
+        faction: "Alliance",
+        id: 110,
+    },
+];
 
 #[derive(Clone, Debug)]
 pub struct AuctionConfig {
     client_id: String,
     client_secret: String,
-    sources: Vec<Source>,
     // Tests point these at a loopback server.
     pub token_endpoint: String,
-    pub eu_api: String,
-    pub us_api: String,
+    pub api: String,
 }
 impl AuctionConfig {
     pub(crate) fn from_env() -> Result<Option<Self>> {
-        let [houses, id, secret] = [
-            "GOLDBOOK_BATTLENET_HOUSES",
+        let [switch, id, secret] = [
+            "GOLDBOOK_BATTLENET_AUCTIONS",
             "BNET_CLIENT_ID",
             "BNET_CLIENT_SECRET",
         ]
         .map(|name| std::env::var(name).unwrap_or_default());
-        Self::parse(&houses, &id, &secret)
+        Self::parse(&switch, &id, &secret)
     }
-    /// The houses to poll, from `<house>/<faction>=<API house ID>` entries
-    /// such as `EU PvP/Horde=113,EU PvP/Alliance=110`. None when `houses` is
-    /// blank.
-    pub fn parse(houses: &str, client_id: &str, client_secret: &str) -> Result<Option<Self>> {
-        if houses.trim().is_empty() {
-            return Ok(None);
+    /// The poller's settings when `switch` is `1`; None when it is blank.
+    pub fn parse(switch: &str, client_id: &str, client_secret: &str) -> Result<Option<Self>> {
+        match switch.trim() {
+            "" => return Ok(None),
+            "1" => {}
+            other => {
+                bail!("GOLDBOOK_BATTLENET_AUCTIONS is {other:?}; set it to 1 or leave it unset")
+            }
         }
         ensure!(
             !client_id.trim().is_empty() && !client_secret.trim().is_empty(),
-            "GOLDBOOK_BATTLENET_HOUSES needs BNET_CLIENT_ID and BNET_CLIENT_SECRET"
-        );
-        let mut sources = Vec::new();
-        let mut seen = BTreeSet::new();
-        for entry in crate::split(houses) {
-            let source = source(entry)
-                .with_context(|| format!("invalid GOLDBOOK_BATTLENET_HOUSES entry {entry:?}"))?;
-            ensure!(
-                seen.insert((source.house.as_str().to_owned(), source.faction)),
-                "GOLDBOOK_BATTLENET_HOUSES names {}/{} twice",
-                source.house.as_str(),
-                source.faction.as_str()
-            );
-            sources.push(source);
-        }
-        ensure!(
-            !sources.is_empty(),
-            "GOLDBOOK_BATTLENET_HOUSES names no house"
+            "GOLDBOOK_BATTLENET_AUCTIONS needs BNET_CLIENT_ID and BNET_CLIENT_SECRET"
         );
         Ok(Some(Self {
             client_id: client_id.into(),
             client_secret: client_secret.into(),
-            sources,
             token_endpoint: "https://oauth.battle.net/token".into(),
-            eu_api: "https://eu.api.blizzard.com".into(),
-            us_api: "https://us.api.blizzard.com".into(),
+            api: "https://eu.api.blizzard.com".into(),
         }))
     }
     fn auctions_url(&self, source: &Source, list: &str) -> String {
-        let api = match source.region {
-            Region::Eu => &self.eu_api,
-            Region::Us => &self.us_api,
-        };
         format!(
-            "{}/data/wow/ruleset/{RULESET}/auctions/{}{list}?namespace={}",
-            api.trim_end_matches('/'),
-            source.house_id,
-            source.region.namespace()
+            "{}/data/wow/ruleset/{RULESET}/auctions/{}{list}?namespace={NAMESPACE}",
+            self.api.trim_end_matches('/'),
+            source.id
         )
     }
-}
-fn source(entry: &str) -> Result<Source> {
-    let (market, id) = entry
-        .rsplit_once('=')
-        .ok_or_else(|| anyhow!("expected <house>/<faction>=<API house ID>"))?;
-    let (name, faction) = market
-        .rsplit_once('/')
-        .ok_or_else(|| anyhow!("expected <house>/<faction>=<API house ID>"))?;
-    let name = name.trim();
-    let house = House::of(name);
-    ensure!(
-        !name.is_empty() && house.as_str() == name,
-        "{name:?} is not a house name; did you mean {:?}?",
-        house.as_str()
-    );
-    let region =
-        Region::of(name).ok_or_else(|| anyhow!("{name:?} does not start with EU or US"))?;
-    let faction = match faction.trim() {
-        "Alliance" => Faction::Alliance,
-        "Horde" => Faction::Horde,
-        other => bail!("faction {other:?} is not Alliance or Horde"),
-    };
-    let house_id = id
-        .trim()
-        .parse()
-        .map_err(|_| anyhow!("API house ID {:?} is not a number", id.trim()))?;
-    Ok(Source {
-        house,
-        faction,
-        region,
-        house_id,
-    })
 }
 
 #[derive(Deserialize)]
@@ -266,7 +179,7 @@ struct Token {
     refresh_at: Instant,
 }
 
-/// Polls every configured house once per `poll_once`, and stores each new
+/// Polls every house in `SOURCES` once per `poll_once`, and stores each new
 /// snapshot as a full scan.
 pub struct Poller {
     config: AuctionConfig,
@@ -288,7 +201,7 @@ impl Poller {
         })
     }
     pub fn run(mut self) {
-        let sources: Vec<_> = self.config.sources.iter().map(Source::to_string).collect();
+        let sources: Vec<_> = SOURCES.iter().map(Source::to_string).collect();
         eprintln!(
             "battlenet auctions: polling {} every {} minutes",
             sources.join(", "),
@@ -309,8 +222,8 @@ impl Poller {
                 return;
             }
         };
-        for source in self.config.sources.clone() {
-            match self.poll(&mut db, &source) {
+        for source in &SOURCES {
+            match self.poll(&mut db, source) {
                 Ok(Some((at, items))) => eprintln!(
                     "battlenet auctions: stored {source} snapshot {at} with {items} items"
                 ),
@@ -322,40 +235,67 @@ impl Poller {
     fn poll(&mut self, db: &mut Connection, source: &Source) -> Result<Option<(u64, usize)>> {
         let stored: Option<i64> = db.query_row(
             "SELECT MAX(scanned_at) FROM scans WHERE house=?1 AND faction=?2 AND scanner=?3",
-            params![source.house, source.faction.as_str(), SCANNER],
+            params![source.house, source.faction, SCANNER],
             |row| row.get(0),
         )?;
         let stored = stored.and_then(|at| u64::try_from(at).ok());
-        let url = self.config.auctions_url(source, "");
-        let response = self.get(&url, stored)?;
+        // Both lists carry their snapshot's time. A snapshot published between
+        // the two requests would mix two snapshots into one scan, so the pair
+        // is fetched once more.
+        for _ in 0..2 {
+            let Some((snapshot, regular)) = self.list(source, "", stored)? else {
+                return Ok(None);
+            };
+            let Some((at, commodities)) = self.list(source, "/commodities", stored)? else {
+                continue;
+            };
+            if at != snapshot {
+                continue;
+            }
+            let scan = ScanUpload {
+                realm: source.house.into(),
+                faction: source.faction.into(),
+                region: REGION.into(),
+                scanned_at: snapshot,
+                mode: "replicate".into(),
+                scanner: SCANNER.into(),
+                build: String::new(),
+                rows: rows(regular, commodities),
+                items: BTreeMap::new(),
+            };
+            db::store_scan(db, &scan)?;
+            return Ok(Some((snapshot, scan.rows.len())));
+        }
+        bail!("its two lists came from different snapshots twice")
+    }
+    /// One list of the house and the time of its snapshot; None when the
+    /// snapshot is not newer than `since`.
+    fn list<T: serde::de::DeserializeOwned>(
+        &mut self,
+        source: &Source,
+        list: &str,
+        since: Option<u64>,
+    ) -> Result<Option<(u64, T)>> {
+        let url = self.config.auctions_url(source, list);
+        let response = self.get(&url, since)?;
         if response.status() == StatusCode::NOT_MODIFIED {
             return Ok(None);
         }
+        ensure!(
+            response.status().is_success(),
+            "{url} answered {}",
+            response.status()
+        );
         let snapshot = response
             .headers()
             .get(LAST_MODIFIED)
             .and_then(|value| value.to_str().ok())
             .and_then(parse_http_date)
             .ok_or_else(|| anyhow!("{url} sent no valid Last-Modified"))?;
-        if stored.is_some_and(|stored| stored >= snapshot) {
+        if since.is_some_and(|since| since >= snapshot) {
             return Ok(None);
         }
-        let regular = json(response, &url)?;
-        let url = self.config.auctions_url(source, "/commodities");
-        let commodities = json(self.get(&url, None)?, &url)?;
-        let scan = ScanUpload {
-            realm: source.house.as_str().into(),
-            faction: source.faction.as_str().into(),
-            region: source.region.label().into(),
-            scanned_at: snapshot,
-            mode: "replicate".into(),
-            scanner: SCANNER.into(),
-            build: String::new(),
-            rows: rows(regular, commodities),
-            items: BTreeMap::new(),
-        };
-        db::store_scan(db, &scan)?;
-        Ok(Some((snapshot, scan.rows.len())))
+        Ok(Some((snapshot, json(response, &url)?)))
     }
     /// GETs `url` with the cached token, and once more with a new token when
     /// Battle.net refuses the cached one.
@@ -550,18 +490,12 @@ mod tests {
     }
 
     #[test]
-    fn houses_parse_into_sources() {
-        let config = AuctionConfig::parse(
-            " EU PvP/Horde=113, EU PvP/Alliance = 110 ,US Normal/Horde=124,",
-            "id",
-            "secret",
-        )
-        .unwrap()
-        .unwrap();
-        let polled: Vec<_> = config
-            .sources
+    fn eu_pvp_is_polled_for_both_factions() {
+        let config = AuctionConfig::parse("1", "id", "secret").unwrap().unwrap();
+        let polled: Vec<_> = SOURCES
             .iter()
             .map(|source| {
+                assert_eq!(crate::house::House::of(source.house).as_str(), source.house);
                 (
                     source.to_string(),
                     config.auctions_url(source, "/commodities"),
@@ -579,110 +513,63 @@ mod tests {
                     "EU PvP/Alliance (house 110)".to_owned(),
                     "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/110/commodities?namespace=dynamic-forever-eu".to_owned()
                 ),
-                (
-                    "US Normal/Horde (house 124)".to_owned(),
-                    "https://us.api.blizzard.com/data/wow/ruleset/1/auctions/124/commodities?namespace=dynamic-forever-us".to_owned()
-                ),
             ]
         );
     }
 
     #[test]
-    fn polling_is_off_unless_houses_are_named() {
-        for houses in ["", "  "] {
-            assert!(AuctionConfig::parse(houses, "", "").unwrap().is_none());
+    fn polling_is_off_unless_switched_on() {
+        for switch in ["", "  "] {
+            assert!(AuctionConfig::parse(switch, "", "").unwrap().is_none());
             assert!(
-                AuctionConfig::parse(houses, "id", "secret")
+                AuctionConfig::parse(switch, "id", "secret")
                     .unwrap()
                     .is_none()
             );
         }
+        assert!(
+            AuctionConfig::parse(" 1 ", "id", "secret")
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
-    fn invalid_houses_stop_the_server() {
-        for (houses, id, secret, error) in [
+    fn an_invalid_switch_stops_the_server() {
+        for (switch, id, secret, error) in [
             (
-                "EU PvP/Horde=113",
+                "1",
                 "",
                 "",
-                "GOLDBOOK_BATTLENET_HOUSES needs BNET_CLIENT_ID and BNET_CLIENT_SECRET",
+                "GOLDBOOK_BATTLENET_AUCTIONS needs BNET_CLIENT_ID and BNET_CLIENT_SECRET",
             ),
             (
-                "EU PvP/Horde=113",
+                "1",
                 "id",
                 " ",
-                "GOLDBOOK_BATTLENET_HOUSES needs BNET_CLIENT_ID and BNET_CLIENT_SECRET",
+                "GOLDBOOK_BATTLENET_AUCTIONS needs BNET_CLIENT_ID and BNET_CLIENT_SECRET",
             ),
             (
-                "EU PvP/Horde",
+                "0",
                 "id",
                 "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"EU PvP/Horde\": expected <house>/<faction>=<API house ID>",
+                "GOLDBOOK_BATTLENET_AUCTIONS is \"0\"; set it to 1 or leave it unset",
             ),
             (
-                "EU PvP=113",
+                "true",
                 "id",
                 "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"EU PvP=113\": expected <house>/<faction>=<API house ID>",
+                "GOLDBOOK_BATTLENET_AUCTIONS is \"true\"; set it to 1 or leave it unset",
             ),
             (
-                "CAMWOWEU4Realm8PvP/Horde=113",
+                "EU PvP/Horde=113",
                 "id",
                 "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"CAMWOWEU4Realm8PvP/Horde=113\": \"CAMWOWEU4Realm8PvP\" is not a house name; did you mean \"EU PvP\"?",
-            ),
-            (
-                "/Horde=113",
-                "id",
-                "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"/Horde=113\": \"\" is not a house name; did you mean \"\"?",
-            ),
-            (
-                "Faramon/Horde=113",
-                "id",
-                "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"Faramon/Horde=113\": \"Faramon\" does not start with EU or US",
-            ),
-            (
-                "KR PvP/Horde=113",
-                "id",
-                "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"KR PvP/Horde=113\": \"KR PvP\" does not start with EU or US",
-            ),
-            (
-                "EU PvP/Neutral=116",
-                "id",
-                "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"EU PvP/Neutral=116\": faction \"Neutral\" is not Alliance or Horde",
-            ),
-            (
-                "EU PvP/horde=113",
-                "id",
-                "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"EU PvP/horde=113\": faction \"horde\" is not Alliance or Horde",
-            ),
-            (
-                "EU PvP/Horde=house",
-                "id",
-                "secret",
-                "invalid GOLDBOOK_BATTLENET_HOUSES entry \"EU PvP/Horde=house\": API house ID \"house\" is not a number",
-            ),
-            (
-                "EU PvP/Horde=113,EU PvP/Horde=114",
-                "id",
-                "secret",
-                "GOLDBOOK_BATTLENET_HOUSES names EU PvP/Horde twice",
-            ),
-            (
-                " , ",
-                "id",
-                "secret",
-                "GOLDBOOK_BATTLENET_HOUSES names no house",
+                "GOLDBOOK_BATTLENET_AUCTIONS is \"EU PvP/Horde=113\"; set it to 1 or leave it unset",
             ),
         ] {
-            let refused = AuctionConfig::parse(houses, id, secret).unwrap_err();
-            assert_eq!(format!("{refused:#}"), error, "{houses}");
+            let refused = AuctionConfig::parse(switch, id, secret).unwrap_err();
+            assert_eq!(format!("{refused:#}"), error, "{switch}");
         }
     }
 

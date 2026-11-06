@@ -2732,13 +2732,15 @@ struct Snapshot {
     regular: Value,
     commodities: Value,
 }
-// The Battle.net API and token endpoint for EU house 113.
+// The Battle.net API and token endpoint, with auctions for EU house 113 only.
 struct Blizzard {
     snapshot: Snapshot,
     // The API accepts only `token-<revision>`, which the token endpoint grants.
     revision: usize,
     granted: usize,
     honors_since: bool,
+    // How many more commodity requests still get the first snapshot's list.
+    stale_commodities: usize,
     // The If-Modified-Since and Accept-Encoding of each request for house 113.
     asked: Vec<(Option<String>, String)>,
 }
@@ -2806,7 +2808,7 @@ async fn blizzard(
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
     assert_eq!(parts.uri.query(), Some("namespace=dynamic-forever-eu"));
-    let list = match parts.uri.path() {
+    let (list, modified) = match parts.uri.path() {
         "/data/wow/ruleset/1/auctions/113" => {
             let since = header("if-modified-since");
             state
@@ -2815,9 +2817,16 @@ async fn blizzard(
             if state.honors_since && since.as_deref() == Some(state.snapshot.since) {
                 return axum::http::StatusCode::NOT_MODIFIED.into_response();
             }
-            &state.snapshot.regular
+            (state.snapshot.regular.clone(), state.snapshot.modified)
         }
-        "/data/wow/ruleset/1/auctions/113/commodities" => &state.snapshot.commodities,
+        "/data/wow/ruleset/1/auctions/113/commodities" if state.stale_commodities > 0 => {
+            state.stale_commodities -= 1;
+            let first = first_snapshot();
+            (first.commodities, first.modified)
+        }
+        "/data/wow/ruleset/1/auctions/113/commodities" => {
+            (state.snapshot.commodities.clone(), state.snapshot.modified)
+        }
         _ => return axum::http::StatusCode::NOT_FOUND.into_response(),
     };
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
@@ -2826,30 +2835,31 @@ async fn blizzard(
         [
             ("content-type", "application/json;charset=UTF-8"),
             ("content-encoding", "gzip"),
-            ("last-modified", state.snapshot.modified),
+            ("last-modified", modified),
         ],
         encoder.finish().unwrap(),
     )
         .into_response()
 }
-// A poller for `houses` against a loopback Battle.net that serves `snapshot`.
-async fn battlenet_poller(f: &Fixture, houses: &str) -> (Poller, Arc<Mutex<Blizzard>>) {
+// A poller against a loopback Battle.net that serves `snapshot`.
+async fn battlenet_poller(f: &Fixture) -> (Poller, Arc<Mutex<Blizzard>>) {
     let state = Arc::new(Mutex::new(Blizzard {
         snapshot: first_snapshot(),
         revision: 1,
         granted: 0,
         honors_since: true,
+        stale_commodities: 0,
         asked: vec![],
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let api = Router::new().fallback(blizzard).with_state(state.clone());
     tokio::spawn(async move { axum::serve(listener, api).await.unwrap() });
-    let mut config = AuctionConfig::parse(houses, "client", "secret")
+    let mut config = AuctionConfig::parse("1", "client", "secret")
         .unwrap()
         .unwrap();
     config.token_endpoint = format!("{origin}/token");
-    config.eu_api = origin;
+    config.api = origin;
     let database = f.database();
     let poller = tokio::task::spawn_blocking(move || Poller::new(config, database).unwrap())
         .await
@@ -2889,7 +2899,7 @@ async fn stored_scans(f: &Fixture) -> Value {
 #[tokio::test]
 async fn battlenet_snapshots_reach_the_export_once_each() {
     let f = Fixture::new().await;
-    let (poller, blizzard) = battlenet_poller(&f, "EU PvP/Alliance=999,EU PvP/Horde=113").await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
 
     let poller = poll(poller).await;
     let export = horde_export(&f).await;
@@ -2967,7 +2977,7 @@ async fn battlenet_snapshots_reach_the_export_once_each() {
 #[tokio::test]
 async fn a_refused_token_is_replaced_and_the_snapshot_still_stored() {
     let f = Fixture::new().await;
-    let (poller, blizzard) = battlenet_poller(&f, "EU PvP/Horde=113").await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
     let poller = poll(poller).await;
     {
         let mut blizzard = blizzard.lock().unwrap();
@@ -2981,6 +2991,33 @@ async fn a_refused_token_is_replaced_and_the_snapshot_still_stored() {
         json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":2,"lastScan":1793960242}])
     );
     assert_eq!(blizzard.lock().unwrap().granted, 2);
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn a_snapshot_published_between_the_two_lists_is_fetched_again() {
+    let f = Fixture::new().await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
+    {
+        let mut blizzard = blizzard.lock().unwrap();
+        blizzard.snapshot = second_snapshot();
+        blizzard.stale_commodities = 3;
+    }
+    let poller = poll(poller).await;
+    assert_eq!(stored_scans(&f).await, json!([]));
+
+    let poller = poll(poller).await;
+    assert_eq!(
+        stored_scans(&f).await,
+        json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":1,"lastScan":1793960242}])
+    );
+    assert_eq!(
+        horde_export(&f).await["items"],
+        json!({
+            "2589":{"name":null,"quality":null,"price":[90,2,2,1793960242,90,1793960242],"hours":[[498322,90,2,90]],"days":[[20763,90,2,90]]},
+            "4537":{"name":null,"quality":null,"price":[44,10,1,1793960242,44,1793960242],"hours":[[498322,44,10,44]],"days":[[20763,44,10,44]]}
+        })
+    );
     stop(poller).await;
 }
 
@@ -3012,7 +3049,7 @@ async fn a_players_newer_scan_keeps_its_prices_over_an_older_snapshot() {
         ),
     )
     .await;
-    let (poller, _blizzard) = battlenet_poller(&f, "EU PvP/Horde=113").await;
+    let (poller, _blizzard) = battlenet_poller(&f).await;
     let poller = poll(poller).await;
 
     let export = horde_export(&f).await;
