@@ -139,7 +139,8 @@ def local_environment(directory, port):
     """Use only local data and test credentials, regardless of the caller's shell."""
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("GOLDBOOK_", "BNET_"))
-                   and key not in ("WEB_DIR", "TRUSTED_PROXY", "UPLOAD_TOKEN", "SELF_REGISTRATION")}
+                   and key not in ("WEB_DIR", "TRUSTED_PROXY", "UPLOAD_TOKEN", "SELF_REGISTRATION",
+                                   "SHARDING_AUCTION_HOUSES")}
     environment.update(HOST="127.0.0.1", PORT=str(port),
                        DATABASE=str(directory / "goldbook.sqlite"),
                        BNET_CLIENT_ID="test-client", BNET_CLIENT_SECRET="test-secret",

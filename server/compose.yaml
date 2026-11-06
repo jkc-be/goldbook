@@ -15,7 +15,7 @@ services:
       TRUSTED_PROXY: "${TRUSTED_PROXY:-}"
       # Unset pools WoW Forever shards by auction house; "off" makes every
       # realm its own house. See crates/goldbook-server/src/house.rs.
-      GOLDBOOK_AUCTION_HOUSES: "${GOLDBOOK_AUCTION_HOUSES:-}"
+      SHARDING_AUCTION_HOUSES: "${SHARDING_AUCTION_HOUSES:-}"
     ports:
       - "${GOLDBOOK_BIND:-127.0.0.1}:${GOLDBOOK_PORT:-8787}:8787"
     volumes:

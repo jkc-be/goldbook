@@ -38,7 +38,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     /// Which realms share an auction house. `Forever` unless the deployment
-    /// sets `GOLDBOOK_AUCTION_HOUSES=off`.
+    /// sets `SHARDING_AUCTION_HOUSES=off`.
     pub houses: HouseRules,
 }
 impl Config {
@@ -63,7 +63,7 @@ impl Config {
             .unwrap_or(Ok(c.port))?;
         c.web_dir = std::env::var_os("WEB_DIR").map(PathBuf::from);
         c.trusted_proxy = std::env::var("TRUSTED_PROXY").unwrap_or_default();
-        c.houses = HouseRules::from_env(std::env::var("GOLDBOOK_AUCTION_HOUSES").ok().as_deref())?;
+        c.houses = HouseRules::from_env(std::env::var("SHARDING_AUCTION_HOUSES").ok().as_deref())?;
         Ok(c)
     }
 }

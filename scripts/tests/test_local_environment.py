@@ -19,6 +19,7 @@ class LocalEnvironmentTests(unittest.TestCase):
             "BNET_CLIENT_SECRET": "production-secret",
             "GOLDBOOK_PUBLIC_URL": "https://production.invalid",
             "GOLDBOOK_API": "https://production.invalid", "GOLDBOOK_TOKEN": "secret",
+            "SHARDING_AUCTION_HOUSES": "off",
         }
         with patch.dict(os.environ, inherited, clear=True):
             environment = local_environment(Path("/temporary/test"), 12345)
