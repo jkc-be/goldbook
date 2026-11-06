@@ -8,6 +8,41 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.4.2 - 2026-11-06
+
+### Addon
+
+- Book junk sold with the merchant's **Sell All Junk** button as vendor
+  sales in Accounting, at what the vendor paid. Its gold was left out, so
+  revenue could read lower than it was.
+- Deals, Movers and **Post at** now use the prices the Goldbook app brings
+  from the server when the server's scan is newer than yours, so a character
+  that never scanned its realm gets them too. The Goldbook window and the
+  auction house window then date the server's scan and say it came from the
+  server, instead of "No scan yet".
+- Training in Accounting no longer reads `Backstab (available)` on the
+  forever client. It shows the spell with its rank when the trainer gives
+  one, as it does on the other clients.
+
+### Desktop app
+
+- When the server has no prices for one of your realms yet, the status line
+  says so instead of "No new scans or character changes to upload."
+- The app and `goldbook-sync` no longer upload from beta and PTR game folders,
+  such as `_classic_beta_` and `_ptr_`. Their saved data stays behind after a
+  test ends, and uploading it put stale characters and scans on the server.
+- Update the Windows automatic updater's ZIP dependency to fix archive
+  extraction security issues. Update signatures are still checked before
+  installation.
+
+### Server
+
+- The server pools WoW Forever realms by auction house. A character on a
+  Forever realm that nobody scanned, such as `CAMWOWEU4Realm6PvP`, gets the
+  prices scanned on the other realms of its auction house after the app's
+  next sync and a `/reload`, and Prices on the website lists each auction
+  house once, as `EU PvP`, instead of each realm.
+
 ## 0.4.1 - 2026-10-30
 
 ### Addon
