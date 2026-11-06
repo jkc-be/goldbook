@@ -855,7 +855,7 @@ GOLDBOOK_BIND=127.0.0.1
 | `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERTRESOLVER` | Traefik's HTTPS entrypoint and its certificate resolver. Without these lines they are `websecure` and `letsencrypt` |
 | `TRUSTED_PROXY` | Where Traefik connects from, see below |
 | `GOLDBOOK_BIND` | `127.0.0.1` keeps the plain HTTP port on the machine itself, for checks from there. Over plain HTTP the upload token is readable on the network |
-| `GOLDBOOK_AUCTION_HOUSES` | `forever` pools WoW Forever shards by auction house, see [docs/server-data.md](docs/server-data.md). Without the line every realm is its own auction house |
+| `GOLDBOOK_AUCTION_HOUSES` | Without the line the server pools WoW Forever shards by auction house, see [docs/server-data.md](docs/server-data.md). `off` makes every realm its own auction house |
 
 To also serve Goldbook at `https://app.jkc-be.com/goldbook/`, add
 `GOLDBOOK_PATH_HOST=app.jkc-be.com` to the same env file and deploy again.

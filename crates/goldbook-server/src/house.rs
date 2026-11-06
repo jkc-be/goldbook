@@ -6,10 +6,11 @@
 //! shard name, later a new rule can name a Blizzard API house instead.
 //!
 //! `of` is a fixed point, `of(of(r)) == of(r)`, so a house name answers for
-//! itself and the website can ask for what `/api/realms` listed. Under
-//! `HouseRules::Off` every realm is its own house, so nothing stored or served
-//! differs from before this module existed. Faction is never folded into the
-//! house: the key everywhere is `(house, faction)`.
+//! itself and the website can ask for what `/api/realms` listed. The default
+//! is `HouseRules::Forever`. Under `HouseRules::Off`, which
+//! `GOLDBOOK_AUCTION_HOUSES=off` selects, every realm is its own house, so
+//! nothing stored or served differs from before this module existed. Faction
+//! is never folded into the house: the key everywhere is `(house, faction)`.
 
 use anyhow::{Result, bail};
 use rusqlite::{Connection, ToSql, TransactionBehavior, params, types::ToSqlOutput};
@@ -18,22 +19,23 @@ use rusqlite::{Connection, ToSql, TransactionBehavior, params, types::ToSqlOutpu
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HouseRules {
     /// Every realm is its own house.
-    #[default]
     Off,
     /// WoW Forever shards of one cluster and ruleset share a house:
     /// `CAMWOW<cluster>Realm<shard><kind>` maps to `CAMWOW<cluster>Realm<kind>`.
     /// Everything else is its own house.
+    #[default]
     Forever,
 }
 
 impl HouseRules {
-    /// Unset or blank is `Off`. Anything but `forever` refuses to start, so a
-    /// typo in the deployment is not a silent `Off`.
+    /// Unset or blank is the default, `Forever`. Anything but `forever` or
+    /// `off` refuses to start, so a typo in the deployment is not a silent
+    /// default.
     pub fn from_env(value: Option<&str>) -> Result<Self> {
         match value.map(str::trim).unwrap_or("") {
-            "" => Ok(Self::Off),
-            "forever" => Ok(Self::Forever),
-            other => bail!("GOLDBOOK_AUCTION_HOUSES must be unset or forever, not {other:?}"),
+            "" | "forever" => Ok(Self::Forever),
+            "off" => Ok(Self::Off),
+            other => bail!("GOLDBOOK_AUCTION_HOUSES must be unset, forever or off, not {other:?}"),
         }
     }
 
@@ -187,17 +189,21 @@ mod tests {
 
     #[test]
     fn the_environment_selects_the_rules() {
-        assert_eq!(HouseRules::from_env(None).unwrap(), HouseRules::Off);
-        assert_eq!(HouseRules::from_env(Some(" ")).unwrap(), HouseRules::Off);
+        assert_eq!(HouseRules::from_env(None).unwrap(), HouseRules::Forever);
+        assert_eq!(
+            HouseRules::from_env(Some(" ")).unwrap(),
+            HouseRules::Forever
+        );
         assert_eq!(
             HouseRules::from_env(Some("forever")).unwrap(),
             HouseRules::Forever
         );
+        assert_eq!(HouseRules::from_env(Some("off")).unwrap(), HouseRules::Off);
         assert_eq!(
             HouseRules::from_env(Some("Forever"))
                 .unwrap_err()
                 .to_string(),
-            "GOLDBOOK_AUCTION_HOUSES must be unset or forever, not \"Forever\""
+            "GOLDBOOK_AUCTION_HOUSES must be unset, forever or off, not \"Forever\""
         );
     }
 }

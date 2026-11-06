@@ -37,8 +37,8 @@ pub struct Config {
     pub trusted_proxy: String,
     pub host: String,
     pub port: u16,
-    /// Which realms share an auction house. `Off` unless the deployment sets
-    /// `GOLDBOOK_AUCTION_HOUSES`, so by default the server answers as before.
+    /// Which realms share an auction house. `Forever` unless the deployment
+    /// sets `GOLDBOOK_AUCTION_HOUSES=off`.
     pub houses: HouseRules,
 }
 impl Config {
@@ -50,7 +50,7 @@ impl Config {
             trusted_proxy: String::new(),
             host: "127.0.0.1".into(),
             port: 8787,
-            houses: HouseRules::Off,
+            houses: HouseRules::default(),
         }
     }
     pub fn from_env() -> anyhow::Result<Self> {
