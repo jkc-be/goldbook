@@ -24,8 +24,9 @@ local MAIL_ATTACHMENTS = ATTACHMENTS_MAX_RECEIVE or 16
 -- What a window makes of gold no claim explains, while it is open and GRACE
 -- after: the side to book, or "skip" when another booking covers it.
 local WINDOWS = {
-  -- Sales are booked from the buyback list (Trades.Merchant), and purchases
-  -- and buybacks leave claims, so a loss left over is a repair.
+  -- Sales are booked from the buyback list (Trades.Merchant), junk sold all
+  -- at once from the bags (Core), and purchases and buybacks leave claims,
+  -- so a loss left over is a repair.
   merchant = { gain = "skip", loss = "repair" },
   loot = { gain = "loot" },
   -- Booked from the trade window once the trade completes.
@@ -327,6 +328,20 @@ local function positive(copper)
   return copper and copper > 0 and copper or nil
 end
 
+-- What GetTrainerServiceInfo says of a service besides its rank. Older
+-- clients give the rank second; the forever client gives one of these second
+-- and the rank fifth.
+local TRAINER_CATEGORIES = { available = true, unavailable = true, used = true, header = true }
+
+local function trainerService(index)
+  local name, second, _, _, fifth = ask(GetTrainerServiceInfo, index)
+  local rank = TRAINER_CATEGORIES[second] and fifth or second
+  if name and type(rank) == "string" and rank ~= "" then
+    return name .. " (" .. rank .. ")"
+  end
+  return name
+end
+
 -- What happens after each of these calls, which the client answers later.
 -- A missing one is left alone, so a client without it books that gold as
 -- other.
@@ -354,10 +369,10 @@ local HOOKS = {
     end
   end,
   BuyTrainerService = function(index)
-    local name, rank = ask(GetTrainerServiceInfo, index)
+    local service = trainerService(index)
     local cost = positive(ask(GetTrainerServiceCost, index))
-    if cost and name then
-      claim({ side = "training", sign = -1, amount = cost, item = name .. (rank and rank ~= "" and (" (" .. rank .. ")") or "") })
+    if cost and service then
+      claim({ side = "training", sign = -1, amount = cost, item = service })
     end
   end,
   ConfirmTalentWipe = function()
