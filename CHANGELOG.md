@@ -8,22 +8,6 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
-## 0.5.1 - 2026-11-06
-
-### Desktop app
-
-- With **Sync automatically** on, the app downloads the server's prices at 35
-  minutes past each hour UTC, five minutes after the server fetches new
-  prices from Battle.net. `goldbook-sync` does the same. The addon takes them
-  at the next `/reload`.
-
-### Server
-
-- Battle.net prices for the WoW Forever EU PvP auction houses reach the
-  website within minutes of Blizzard publishing them. The server now fetches
-  them at 30 minutes past each hour UTC. Before, they could arrive up to an
-  hour later.
-
 ## 0.5.0 - 2026-11-06
 
 Goldbook now uses the blizzard API to fetch prices (currently only for EU PVP realms).

@@ -1718,7 +1718,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-core"
-version = "0.5.1"
+version = "0.5.0"
 dependencies = [
  "hex",
  "serde",
@@ -1728,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-desktop"
-version = "0.5.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1762,7 +1762,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-server"
-version = "0.5.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "goldbook-sync"
-version = "0.5.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
