@@ -14,8 +14,9 @@ local Database = ns.Database
 -- the same mails again each time it opens, so a trade is booked once: an
 -- invoice that matches a booked trade to within SAME_MAIL seconds is that
 -- trade. A sale to a vendor shows up in the merchant's buyback list with what
--- the vendor paid; see Trades.Merchant. Every other entry comes from
--- Accounting.
+-- the vendor paid; see Trades.Merchant. Junk sold with the merchant's Sell All
+-- Junk button does not, and Core books it from the bags. Every other entry
+-- comes from Accounting.
 local Trades = {}
 ns.Trades = Trades
 

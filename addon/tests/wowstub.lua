@@ -789,6 +789,9 @@ function GetMerchantItemCostInfo()
   return 0
 end
 function BuyMerchantItem() end
+-- The merchant's Sell All Junk button. What it sells never reaches the buyback list.
+C_MerchantFrame = {}
+function C_MerchantFrame.SellAllJunkItems() end
 -- Stub.buyback[index] = { name, count, price, link }.
 Stub.buyback = {}
 function GetNumBuybackItems()
