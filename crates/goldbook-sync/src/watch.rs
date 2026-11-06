@@ -1,6 +1,5 @@
 use crate::{Logger, ServerData, SyncOptions, SyncResult, flavor_of, sync_file, write_server_data};
 use anyhow::Result;
-use goldbook_core::{AUCTION_STORED_MINUTE, next_minute_past_hour};
 use notify::{RecursiveMode, Watcher};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -9,7 +8,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 use tokio::{
     sync::{mpsc, watch},
@@ -52,25 +51,20 @@ impl WatchHandle {
         Ok(results)
     }
     pub async fn refresh_server_data(&self) -> Vec<(PathBuf, Result<ServerData>)> {
-        refresh_every_flavor(&self.options, &self.refreshed).await
+        let flavors = self
+            .options
+            .files
+            .iter()
+            .filter_map(|file| flavor_of(&file.file))
+            .collect::<BTreeSet<_>>();
+        let mut results = Vec::new();
+        for flavor in flavors {
+            claim_refresh(&self.refreshed, &flavor, Duration::ZERO);
+            let result = write_server_data(&flavor, &self.options.api, &self.options.log).await;
+            results.push((flavor, result));
+        }
+        results
     }
-}
-async fn refresh_every_flavor(
-    options: &WatchOptions,
-    refreshed: &Refreshed,
-) -> Vec<(PathBuf, Result<ServerData>)> {
-    let flavors = options
-        .files
-        .iter()
-        .filter_map(|file| flavor_of(&file.file))
-        .collect::<BTreeSet<_>>();
-    let mut results = Vec::new();
-    for flavor in flavors {
-        claim_refresh(refreshed, &flavor, Duration::ZERO);
-        let result = write_server_data(&flavor, &options.api, &options.log).await;
-        results.push((flavor, result));
-    }
-    results
 }
 // Claims before the refresh awaits, so two account files of one flavor do not both fetch.
 fn claim_refresh(refreshed: &Refreshed, flavor: &Path, interval: Duration) -> bool {
@@ -189,25 +183,6 @@ pub fn watch_files(options: WatchOptions) -> Result<WatchHandle> {
                 let mut deadline = tokio::time::Instant::now() + wait;
                 loop {
                     tokio::select! {_ = stopped.changed()=>{if *stopped.borrow(){return}},event=rx.recv(),if !rx.is_closed()=>{if event.is_some(){deadline=tokio::time::Instant::now()+Duration::from_secs(2)}},_ = tokio::time::sleep_until(deadline)=>break}
-                }
-            }
-        });
-    }
-    if options.interval.is_some() {
-        let options = options.clone();
-        let refreshed = refreshed.clone();
-        let mut stopped = stop.subscribe();
-        tokio::spawn(async move {
-            loop {
-                let now = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default();
-                let next = next_minute_past_hour(now.as_secs(), AUCTION_STORED_MINUTE);
-                tokio::select! {
-                    _ = stopped.changed() => if *stopped.borrow() { return },
-                    _ = tokio::time::sleep(Duration::from_secs(next) - now) => {
-                        refresh_every_flavor(&options, &refreshed).await;
-                    }
                 }
             }
         });

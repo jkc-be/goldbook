@@ -251,10 +251,7 @@ After a sync pass whose uploads succeed, the app also downloads the server's
 prices and history for each realm your SavedVariables name, including other
 players' scans. It writes them to `Interface/AddOns/Goldbook/ServerData.lua`
 in each game folder, at most once every 15 minutes, and **Sync now** writes
-them again. With **Sync automatically** on, the app also downloads them at 35
-minutes past each hour UTC, five minutes after the server fetches the new
-Battle.net prices.
-The game loads the file at login and at `/reload`, and the addon
+them again. The game loads the file at login and at `/reload`, and the addon
 then takes every price newer than its own and fills the days and hours its
 history lacks. Tooltips say "from the server" for those prices. The app never writes SavedVariables. [Server data for the addon](docs/server-data.md) describes
 the endpoint, the file, and the rules for using it in the addon.

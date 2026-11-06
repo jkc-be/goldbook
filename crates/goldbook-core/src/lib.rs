@@ -8,7 +8,7 @@ mod professions;
 pub use professions::{Profession, profession_items, professions};
 
 mod schedule;
-pub use schedule::{AUCTION_POLL_MINUTE, AUCTION_STORED_MINUTE, next_minute_past_hour};
+pub use schedule::{AUCTION_POLL_MINUTE, next_minute_past_hour};
 
 mod sellers;
 pub use sellers::{SellerOffer, SellerSnapshot, SellerSummary, parse_seller_snapshot};
