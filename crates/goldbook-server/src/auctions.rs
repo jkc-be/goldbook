@@ -6,7 +6,9 @@
 
 use crate::db;
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use goldbook_core::{Listing, PriceRow, ScanUpload, summarize};
+use goldbook_core::{
+    AUCTION_POLL_MINUTE, Listing, PriceRow, ScanUpload, next_minute_past_hour, summarize,
+};
 use reqwest::{
     StatusCode,
     blocking::{Client, Response},
@@ -18,12 +20,10 @@ use std::{
     collections::BTreeMap,
     io::Read,
     path::PathBuf,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 pub(crate) const SCANNER: &str = "Battle.net";
-// Snapshots change about once an hour.
-const INTERVAL: Duration = Duration::from_secs(3600);
 // The ruleset in the URL does not select the market, but each URL serves its
 // own cached copy, so every snapshot of a house comes through the same one.
 const RULESET: u32 = 1;
@@ -205,13 +205,16 @@ impl Poller {
     pub fn run(mut self) {
         let sources: Vec<_> = SOURCES.iter().map(Source::to_string).collect();
         eprintln!(
-            "battlenet auctions: polling {} every {} minutes",
-            sources.join(", "),
-            INTERVAL.as_secs() / 60
+            "battlenet auctions: polling {} now and at {AUCTION_POLL_MINUTE} minutes past each hour",
+            sources.join(", ")
         );
         loop {
             self.poll_once();
-            std::thread::sleep(INTERVAL);
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default();
+            let next = next_minute_past_hour(now.as_secs(), AUCTION_POLL_MINUTE);
+            std::thread::sleep(Duration::from_secs(next) - now);
         }
     }
     /// One pass over the houses. A house that fails is logged and the pass
