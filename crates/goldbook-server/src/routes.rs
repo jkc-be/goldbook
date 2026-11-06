@@ -1,7 +1,5 @@
 use crate::{
-    App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header,
-    house::{House, HouseRules},
-    now,
+    App, Error, Input, Reply, Result, SESSION_SECONDS, db, hash, header, house::House, now,
 };
 use axum::http::Method;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -71,13 +69,12 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
         return Err(Error::new(404, "not found"));
     }
     let mut db = db::connect(&app.config.database)?;
-    let rules = app.config.houses;
     match route {
         ("POST", "/api/installations") => register_installation(&input, app, &mut db),
-        ("POST", "/api/scans") => upload_scan(&input, &mut db, rules),
-        ("POST", "/api/sellers") => upload_sellers(&input, &mut db, rules),
-        ("POST", "/api/sellers/batch") => upload_seller_batch(&input, &mut db, rules),
-        ("GET", "/api/sellers") => sellers(&input, &db, rules),
+        ("POST", "/api/scans") => upload_scan(&input, &mut db),
+        ("POST", "/api/sellers") => upload_sellers(&input, &mut db),
+        ("POST", "/api/sellers/batch") => upload_seller_batch(&input, &mut db),
+        ("GET", "/api/sellers") => sellers(&input, &db),
         ("POST", "/api/account") => upload_account(&input, &mut db),
         ("POST", "/api/login") => authenticate(&input, app, &mut db, input.json()?, None),
         ("POST", "/api/desktop-login") => {
@@ -137,12 +134,12 @@ pub(super) fn respond(input: Input, app: &App) -> Result<Reply> {
         ("GET", "/api/professions") => Ok(Reply::json(
             json!({"professions": goldbook_core::professions()}),
         )),
-        ("GET", "/api/prices") => prices(&input, &db, rules),
-        ("GET", "/api/deals") => deals(&input, &db, rules),
-        ("GET", "/api/movers") => movers(&input, &db, rules),
-        ("GET", "/api/history") => history(&input, &db, rules),
-        ("GET", "/api/trends") => trends(&input, &db, rules),
-        ("GET", "/api/export") => export(&input, &db, rules),
+        ("GET", "/api/prices") => prices(&input, &db),
+        ("GET", "/api/deals") => deals(&input, &db),
+        ("GET", "/api/movers") => movers(&input, &db),
+        ("GET", "/api/history") => history(&input, &db),
+        ("GET", "/api/trends") => trends(&input, &db),
+        ("GET", "/api/export") => export(&input, &db),
         ("GET", "/api/account") => characters(&input, &db),
         ("GET", "/api/character") => character(&input, &db),
         ("GET", "/api/trades") => trades(&input, &db),
@@ -159,10 +156,10 @@ fn required<'a>(input: &'a Input, name: &str) -> Result<&'a str> {
 }
 /// The house and faction a read answers for, from the `realm` and `faction`
 /// the client asked for. The only place a realm becomes a house.
-fn market(input: &Input, rules: HouseRules) -> Result<(House, &str)> {
+fn market(input: &Input) -> Result<(House, &str)> {
     let realm = required(input, "realm")?;
     let faction = required(input, "faction")?;
-    Ok((rules.of(realm), faction))
+    Ok((House::of(realm), faction))
 }
 fn integer(input: &Input, name: &str, fallback: i64, maximum: i64) -> Result<i64> {
     let Some(value) = input.query.get(name) else {
@@ -262,9 +259,9 @@ fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Resul
     Ok(reply)
 }
 
-fn upload_scan(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<Reply> {
+fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
     let scan = input.upload(goldbook_core::parse_scan_upload)?;
-    let house = rules.of(&scan.realm);
+    let house = House::of(&scan.realm);
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     // The fingerprint keeps the realm, so a retry still deduplicates and two
     // shards of one house never collide.
@@ -299,18 +296,18 @@ fn upload_scan(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<
         json!({"stored":inserted==1,"items":scan.rows.len()}),
     ))
 }
-fn upload_sellers(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<Reply> {
+fn upload_sellers(input: &Input, db: &mut Connection) -> Result<Reply> {
     let snapshot = input.upload(goldbook_core::parse_seller_snapshot)?;
     let inserted = db.execute(
         "INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload,house) VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(fingerprint) DO NOTHING",
         params![snapshot.fingerprint(), snapshot.realm, snapshot.faction, snapshot.item_key,
             snapshot.scanned_at as i64, serde_json::to_string(&snapshot).map_err(|e| Error::new(400, e.to_string()))?,
-            rules.of(&snapshot.realm)],
+            House::of(&snapshot.realm)],
     )?;
     Ok(Reply::json(json!({"stored": inserted == 1})))
 }
 
-fn upload_seller_batch(input: &Input, db: &mut Connection, rules: HouseRules) -> Result<Reply> {
+fn upload_seller_batch(input: &Input, db: &mut Connection) -> Result<Reply> {
     let snapshots = input.upload(|value| {
         let values = value.as_array().ok_or("seller batch must be an array")?;
         if values.is_empty() || values.len() > goldbook_core::MAX_SELLER_BATCH {
@@ -335,7 +332,7 @@ fn upload_seller_batch(input: &Input, db: &mut Connection, rules: HouseRules) ->
                 snapshot.item_key,
                 snapshot.scanned_at as i64,
                 serde_json::to_string(snapshot).map_err(|e| Error::new(400, e.to_string()))?,
-                rules.of(&snapshot.realm)
+                House::of(&snapshot.realm)
             ])?;
         }
     }
@@ -345,8 +342,8 @@ fn upload_seller_batch(input: &Input, db: &mut Connection, rules: HouseRules) ->
     ))
 }
 
-fn sellers(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
-    let (house, faction) = market(input, rules)?;
+fn sellers(input: &Input, db: &Connection) -> Result<Reply> {
+    let (house, faction) = market(input)?;
     let key = required(input, "itemKey")?;
     let selected = input.query.get("snapshot").map(String::as_str);
     let payload: Option<String> = db.query_row(
@@ -414,8 +411,8 @@ impl<'a> Filter<'a> {
         self.search.is_empty() && self.selected.is_none() && self.quality.is_none()
     }
 }
-fn prices(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
-    let (house, faction) = market(input, rules)?;
+fn prices(input: &Input, db: &Connection) -> Result<Reply> {
+    let (house, faction) = market(input)?;
     // q is checked before sort and order, and the other filters after them.
     let search = search(input)?;
     let (sort, sort_join) = match input
@@ -634,8 +631,8 @@ fn page<T>(items: Vec<T>, limit: i64, offset: i64) -> Vec<T> {
         .take(limit as usize)
         .collect()
 }
-fn deals(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
-    let (house, faction) = market(input, rules)?;
+fn deals(input: &Input, db: &Connection) -> Result<Reply> {
+    let (house, faction) = market(input)?;
     let filter = Filter::parse(input, search(input)?)?;
     // The addon's DEFAULT_MIN_PROFIT.
     let min_profit = integer(input, "minProfit", 1000, 9007199254740991)?;
@@ -663,8 +660,8 @@ fn deals(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
         "items": page(deals, limit, offset),
     })))
 }
-fn movers(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
-    let (house, faction) = market(input, rules)?;
+fn movers(input: &Input, db: &Connection) -> Result<Reply> {
+    let (house, faction) = market(input)?;
     let filter = Filter::parse(input, search(input)?)?;
     let risers = match input
         .query
@@ -699,8 +696,8 @@ fn movers(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
         "items": page(movers, limit, offset),
     })))
 }
-fn history(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
-    let (house, faction) = market(input, rules)?;
+fn history(input: &Input, db: &Connection) -> Result<Reply> {
+    let (house, faction) = market(input)?;
     let key = required(input, "itemKey")?;
     let mut points = db::query(
         db,
@@ -720,8 +717,8 @@ fn history(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
     item["points"] = json!(points);
     Ok(Reply::json(item))
 }
-fn trends(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
-    let (house, faction) = market(input, rules)?;
+fn trends(input: &Input, db: &Connection) -> Result<Reply> {
+    let (house, faction) = market(input)?;
     let mut keys = Vec::new();
     for key in required(input, "items")?.split(',') {
         if !keys.contains(&key) {
@@ -776,9 +773,9 @@ struct ExportItem {
     hours: Vec<[i64; 4]>,
     days: Vec<[i64; 4]>,
 }
-fn export(input: &Input, db: &Connection, rules: HouseRules) -> Result<Reply> {
+fn export(input: &Input, db: &Connection) -> Result<Reply> {
     let realm = required(input, "realm")?;
-    let (house, faction) = market(input, rules)?;
+    let (house, faction) = market(input)?;
     let newest: Option<i64> = db.query_row(
         "SELECT MAX(scanned_at) FROM scans WHERE house=?1 AND faction=?2",
         params![house, faction],
