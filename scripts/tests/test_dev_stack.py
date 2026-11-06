@@ -43,6 +43,31 @@ class DevStackTests(unittest.TestCase):
         for port in config['services']['traefik']['ports']:
             self.assertEqual(port['host_ip'], '127.0.0.1')
 
+    def test_auction_houses_come_from_env_local_and_not_the_shell(self):
+        def houses(result):
+            return json.loads(result.stdout)['services']['goldbook']['environment']['GOLDBOOK_AUCTION_HOUSES']
+
+        with tempfile.TemporaryDirectory() as temporary:
+            env_local = Path(temporary) / '.env.local'
+            with patch.dict(DEV['local_settings'].__globals__, ENV_LOCAL=env_local), \
+                    patch.dict(os.environ, {'GOLDBOOK_AUCTION_HOUSES': 'forever'}):
+                shell = DEV['compose']('config', '--format', 'json', capture_output=True, text=True)
+                env_local.write_text('GOLDBOOK_AUCTION_HOUSES=off\n')
+                local = DEV['compose']('config', '--format', 'json', capture_output=True, text=True)
+        self.assertEqual(houses(shell), '')
+        self.assertEqual(houses(local), 'off')
+
+    def test_env_local_refuses_other_settings(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            env_local = Path(temporary) / '.env.local'
+            env_local.write_text('GOLDBOOK_AUCTION_HOUSES=off\nUPLOAD_TOKEN=production-secret\n')
+            with patch.dict(DEV['local_settings'].__globals__, ENV_LOCAL=env_local), \
+                    self.assertRaises(SystemExit) as refused:
+                DEV['compose']('config', '--format', 'json', capture_output=True, text=True)
+        self.assertEqual(str(refused.exception),
+                         f'{env_local} sets only BNET_CLIENT_ID, BNET_CLIENT_SECRET, GOLDBOOK_PUBLIC_URL, '
+                         'GOLDBOOK_AUCTION_HOUSES, not UPLOAD_TOKEN.')
+
     def test_database_copy_preserves_source_and_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

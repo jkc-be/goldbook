@@ -108,10 +108,16 @@ BNET_CLIENT_SECRET=<client secret>
 GOLDBOOK_PUBLIC_URL=http://localhost:8080/goldbook
 ```
 
-`make dev` refuses any other setting in it, so a copied production `.env`
-loads nothing else. Then, as on the server, click **Sign in with Battle.net**
+`make dev` refuses any other setting in it, apart from the
+`GOLDBOOK_AUCTION_HOUSES` line below, so a copied production `.env` loads
+nothing else. Then, as on the server, click **Sign in with Battle.net**
 in the app to start uploading.
 Delete the file and run `make dev` again to turn it off.
+
+A `GOLDBOOK_AUCTION_HOUSES` line in the same file sets the local server's
+auction house rule, as on a deployed server; see
+[docs/server-data.md](docs/server-data.md). `make dev` reads it only from this
+file, not from the shell.
 
 Data persists in ignored `data/dev/`. For real market data, copy an existing
 SQLite database on the first start:

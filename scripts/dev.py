@@ -15,11 +15,11 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'data/dev'
 ENV_LOCAL = ROOT / 'server/.env.local'
-BATTLENET = ('BNET_CLIENT_ID', 'BNET_CLIENT_SECRET', 'GOLDBOOK_PUBLIC_URL')
+LOCAL_SETTINGS = ('BNET_CLIENT_ID', 'BNET_CLIENT_SECRET', 'GOLDBOOK_PUBLIC_URL', 'GOLDBOOK_AUCTION_HOUSES')
 
 
-def battlenet_settings():
-    """The Battle.net client from the ignored server/.env.local, or none without the file."""
+def local_settings():
+    """Battle.net and auction house settings from the ignored server/.env.local, or none without the file."""
     if not ENV_LOCAL.exists():
         return {}
     settings = {}
@@ -27,10 +27,10 @@ def battlenet_settings():
         name, equals, value = line.strip().partition('=')
         if equals and not name.startswith('#'):
             settings[name.strip()] = value.strip().strip('"\'')
-    # Only the Battle.net client, so a copied production .env cannot load anything else.
-    unknown = sorted(set(settings) - set(BATTLENET))
+    # Only these, so a copied production .env cannot load anything else.
+    unknown = sorted(set(settings) - set(LOCAL_SETTINGS))
     if unknown:
-        raise SystemExit(f'{ENV_LOCAL} sets only {", ".join(BATTLENET)}, not {", ".join(unknown)}.')
+        raise SystemExit(f'{ENV_LOCAL} sets only {", ".join(LOCAL_SETTINGS)}, not {", ".join(unknown)}.')
     return settings
 
 
@@ -41,7 +41,7 @@ def compose(*args, **kwargs):
                TRAEFIK_NETWORK='goldbook-dev-traefik', TRUSTED_PROXY='172.30.254.2/32',
                GOLDBOOK_IMAGE='goldbook-local', GOLDBOOK_DATA=str(DATA),
                GOLDBOOK_USER=f'{os.getuid()}:{os.getgid()}')
-    env.update(battlenet_settings())
+    env.update(local_settings())
     command = ['docker', 'compose', '-p', 'goldbook-dev', '--env-file', os.devnull]
     for name in ('compose.yaml', 'compose.traefik.yaml', 'compose.path.yaml', 'compose.local.yaml'):
         command += ['-f', str(ROOT / 'server' / name)]
