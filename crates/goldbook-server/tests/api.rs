@@ -2420,8 +2420,8 @@ async fn a_never_scanned_forever_shard_reads_its_house() {
                 "marketScan": {"id": 1, "scannedAt": 1760000000, "mode": "replicate", "itemCount": 2, "scanner": "Feretuse"},
                 "total": 2,
                 "items": [
-                    {"itemKey": "7070", "name": "Elemental Water", "quality": 1, "minBuyout": 300, "marketValue": 320, "quantity": 5, "numAuctions": 2, "scannedAt": 1760000000},
-                    {"itemKey": "2589", "name": "Linen Cloth", "quality": 1, "minBuyout": 100, "marketValue": 125, "quantity": 10, "numAuctions": 0, "scannedAt": 1760003600}
+                    {"itemKey": "7070", "name": "Elemental Water", "quality": 1, "minBuyout": 300, "marketValue": 320, "marketScannedAt": 1760000000, "quantity": 5, "numAuctions": 2, "scannedAt": 1760000000},
+                    {"itemKey": "2589", "name": "Linen Cloth", "quality": 1, "minBuyout": 100, "marketValue": 125, "marketScannedAt": 1760000000, "quantity": 10, "numAuctions": 0, "scannedAt": 1760003600}
                 ]
             })
         )
@@ -2860,6 +2860,7 @@ async fn battlenet_poller(f: &Fixture) -> (Poller, Arc<Mutex<Blizzard>>) {
         .unwrap();
     config.token_endpoint = format!("{origin}/token");
     config.api = origin;
+    config.retry_pause = std::time::Duration::ZERO;
     let database = f.database();
     let poller = tokio::task::spawn_blocking(move || Poller::new(config, database).unwrap())
         .await
@@ -3022,17 +3023,119 @@ async fn a_snapshot_published_between_the_two_lists_is_fetched_again() {
 }
 
 #[tokio::test]
-async fn an_upload_cannot_pass_for_a_battlenet_snapshot() {
+async fn variants_keep_the_market_value_players_measured_after_a_snapshot() {
+    let f = Fixture::new().await;
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm8PvP",
+            1793950000,
+            "replicate",
+            json!([["15477:584", 700, 600, 1, 1], ["2589", 120, 110, 3, 2]]),
+            json!({"15477:584":["Bandit Cinch of the Monkey",2],"2589":["Linen Cloth",1]}),
+        ),
+    )
+    .await;
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm8PvP",
+            1793960000,
+            "browse",
+            json!([["15477:584", 650, 0, 1, 0], ["2589", 95, 0, 7, 0]]),
+            json!({}),
+        ),
+    )
+    .await;
+    async fn market(f: &Fixture) -> Vec<(String, i64, i64, Value)> {
+        let (status, _, body) = call(
+            &f.app,
+            "GET",
+            "/api/prices?realm=CAMWOWEU4Realm8PvP&faction=Horde&sort=market&order=desc",
+            Value::Null,
+            &[],
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+        body["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                (
+                    item["itemKey"].as_str().unwrap().to_owned(),
+                    item["minBuyout"].as_i64().unwrap(),
+                    item["marketValue"].as_i64().unwrap(),
+                    item["marketScannedAt"].clone(),
+                )
+            })
+            .collect()
+    }
+    assert_eq!(
+        market(&f).await,
+        [
+            ("15477:584".to_owned(), 650, 600, json!(1793950000)),
+            ("2589".to_owned(), 95, 110, json!(1793950000)),
+        ]
+    );
+
+    let (poller, _blizzard) = battlenet_poller(&f).await;
+    let poller = poll(poller).await;
+    assert_eq!(
+        market(&f).await,
+        [
+            ("15477:584".to_owned(), 650, 600, json!(1793950000)),
+            ("15477".to_owned(), 500, 500, json!(1793956642)),
+            ("2589".to_owned(), 95, 101, json!(1793956642)),
+            ("4537".to_owned(), 45, 50, json!(1793956642)),
+        ]
+    );
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn an_upload_cannot_pass_for_a_battlenet_snapshot_while_polling() {
     let f = Fixture::new().await;
     let mut claimed = scan();
     claimed["realm"] = json!("EU PvP");
     claimed["scanner"] = json!("Battle.net");
     claimed["scannedAt"] = json!(4102444800_u64);
-    let (status, _, body) = call(&f.app, "POST", "/api/scans", claimed, &f.auth()).await;
+    let (status, _, body) = call(&f.app, "POST", "/api/scans", claimed.clone(), &f.auth()).await;
+    assert_eq!(
+        (status, body),
+        (200, json!({"stored":true,"items":2})),
+        "polling is off, so uploads are as before"
+    );
+
+    let mut config = battlenet(f.database());
+    config.auctions = AuctionConfig::parse("1", "client", "secret").unwrap();
+    let polling = router(config).unwrap();
+    claimed["scannedAt"] = json!(4102444801_u64);
+    let (status, _, body) = call(&polling, "POST", "/api/scans", claimed, &f.auth()).await;
     assert_eq!(
         (status, body),
         (400, json!({"error":"scanner Battle.net is reserved"}))
     );
+
+    let (poller, _blizzard) = battlenet_poller(&f).await;
+    let poller = poll(poller).await;
+    let (_, _, body) = call(
+        &f.app,
+        "GET",
+        "/api/history?realm=EU%20PvP&faction=Horde&itemKey=4537",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(
+        body["points"].as_array().map(|points| points
+            .iter()
+            .map(|point| point["scannedAt"].clone())
+            .collect::<Vec<_>>()),
+        Some(vec![json!(1793956642)]),
+        "the future-dated upload does not hold the poller back: {body}"
+    );
+    stop(poller).await;
 }
 
 #[tokio::test]

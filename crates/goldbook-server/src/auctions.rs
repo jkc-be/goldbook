@@ -63,9 +63,10 @@ const SOURCES: [Source; 2] = [
 pub struct AuctionConfig {
     client_id: String,
     client_secret: String,
-    // Tests point these at a loopback server.
+    // Tests point these at a loopback server, and do not pause.
     pub token_endpoint: String,
     pub api: String,
+    pub retry_pause: Duration,
 }
 impl AuctionConfig {
     pub(crate) fn from_env() -> Result<Option<Self>> {
@@ -77,13 +78,13 @@ impl AuctionConfig {
         .map(|name| std::env::var(name).unwrap_or_default());
         Self::parse(&switch, &id, &secret)
     }
-    /// The poller's settings when `switch` is `1`; None when it is blank.
+    /// The poller's settings when `switch` is `1`; None when it is `0` or blank.
     pub fn parse(switch: &str, client_id: &str, client_secret: &str) -> Result<Option<Self>> {
         match switch.trim() {
-            "" => return Ok(None),
+            "" | "0" => return Ok(None),
             "1" => {}
             other => {
-                bail!("GOLDBOOK_BATTLENET_AUCTIONS is {other:?}; set it to 1 or leave it unset")
+                bail!("GOLDBOOK_BATTLENET_AUCTIONS is {other:?}; set it to 1 for on, or 0 for off")
             }
         }
         ensure!(
@@ -95,6 +96,7 @@ impl AuctionConfig {
             client_secret: client_secret.into(),
             token_endpoint: "https://oauth.battle.net/token".into(),
             api: "https://eu.api.blizzard.com".into(),
+            retry_pause: Duration::from_secs(30),
         }))
     }
     fn auctions_url(&self, source: &Source, list: &str) -> String {
@@ -234,15 +236,19 @@ impl Poller {
     }
     fn poll(&mut self, db: &mut Connection, source: &Source) -> Result<Option<(u64, usize)>> {
         let stored: Option<i64> = db.query_row(
-            "SELECT MAX(scanned_at) FROM scans WHERE house=?1 AND faction=?2 AND scanner=?3",
+            "SELECT MAX(scanned_at) FROM scans WHERE house=?1 AND faction=?2 AND scanner=?3 AND scanned_at<=unixepoch()",
             params![source.house, source.faction, SCANNER],
             |row| row.get(0),
         )?;
         let stored = stored.and_then(|at| u64::try_from(at).ok());
         // Both lists carry their snapshot's time. A snapshot published between
         // the two requests would mix two snapshots into one scan, so the pair
-        // is fetched once more.
-        for _ in 0..2 {
+        // is fetched once more, after a pause in case the two URLs' caches
+        // turn over a few seconds apart.
+        for attempt in 0..2 {
+            if attempt > 0 {
+                std::thread::sleep(self.config.retry_pause);
+            }
             let Some((snapshot, regular)) = self.list(source, "", stored)? else {
                 return Ok(None);
             };
@@ -519,7 +525,7 @@ mod tests {
 
     #[test]
     fn polling_is_off_unless_switched_on() {
-        for switch in ["", "  "] {
+        for switch in ["", "  ", "0"] {
             assert!(AuctionConfig::parse(switch, "", "").unwrap().is_none());
             assert!(
                 AuctionConfig::parse(switch, "id", "secret")
@@ -550,22 +556,16 @@ mod tests {
                 "GOLDBOOK_BATTLENET_AUCTIONS needs BNET_CLIENT_ID and BNET_CLIENT_SECRET",
             ),
             (
-                "0",
-                "id",
-                "secret",
-                "GOLDBOOK_BATTLENET_AUCTIONS is \"0\"; set it to 1 or leave it unset",
-            ),
-            (
                 "true",
                 "id",
                 "secret",
-                "GOLDBOOK_BATTLENET_AUCTIONS is \"true\"; set it to 1 or leave it unset",
+                "GOLDBOOK_BATTLENET_AUCTIONS is \"true\"; set it to 1 for on, or 0 for off",
             ),
             (
                 "EU PvP/Horde=113",
                 "id",
                 "secret",
-                "GOLDBOOK_BATTLENET_AUCTIONS is \"EU PvP/Horde=113\"; set it to 1 or leave it unset",
+                "GOLDBOOK_BATTLENET_AUCTIONS is \"EU PvP/Horde=113\"; set it to 1 for on, or 0 for off",
             ),
         ] {
             let refused = AuctionConfig::parse(switch, id, secret).unwrap_err();

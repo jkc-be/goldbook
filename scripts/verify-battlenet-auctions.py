@@ -61,7 +61,7 @@ def blizzard(bearer, url, since=None):
 def expected_minimums(regular, commodities):
     """Each plain item's lowest unit price, computed apart from the server's code."""
     low = {}
-    for listing, unit in [(a, math.ceil(a.get("buyout", 0) / a["quantity"])) for a in regular.get("auctions", [])] + \
+    for listing, unit in [(a, math.ceil(a.get("buyout", 0) / max(a["quantity"], 1))) for a in regular.get("auctions", [])] + \
                          [(a, a["unit_price"]) for a in commodities.get("auctions", [])]:
         if not unit or listing["item"].get("bonus_lists"):
             continue
@@ -142,7 +142,9 @@ def main():
             wait_for(directory / "server.log", "battlenet auctions: polling")
             time.sleep(30)
             log = (directory / "server.log").read_text()
-            assert "battlenet auctions: stored" not in log and "failed" not in log, log
+            assert "failed" not in log, log
+            again = [(faction, int(at)) for faction, _, at in STORED.findall(log) if int(at) <= checked[faction][1]]
+            assert not again, f"stored a snapshot twice: {again}"
 
     for faction, (house, snapshot, items, since) in sorted(checked.items(), reverse=True):
         print(f"Verified EU PvP/{faction} from house {house}: snapshot {snapshot} stored once with {items} items, "
