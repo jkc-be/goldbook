@@ -23,6 +23,7 @@ local function addPrices(tooltip, link)
   local record = Database.Lookup(ns.db, realmKey, key)
   local vendor = Database.Vendor(ns.db, key) or ns.SellPrice(link) or 0
   local stocked = Database.MerchantSells(ns.db, key)
+  local newestScan = Database.NewestScan(ns.db, realmKey)
   if not record and vendor == 0 then
     return
   end
@@ -50,7 +51,7 @@ local function addPrices(tooltip, link)
       row("Usual over " .. #record.days .. " days", usual)
     end
     if not stocked then
-      row("Post at", Advisor.PostPrice(record, vendor, ns.db.scanned[realmKey]))
+      row("Post at", Advisor.PostPrice(record, vendor, newestScan))
     end
   end
   if vendor > 0 then
@@ -65,7 +66,7 @@ local function addPrices(tooltip, link)
     end
   end
 
-  local deal = record and Advisor.Deal(record, vendor, ns.db.scanned[realmKey], stocked)
+  local deal = record and Advisor.Deal(record, vendor, newestScan, stocked)
   if deal then
     local target = deal.kind == "vendor" and "a vendor pays " or "resells for "
     local scope = deal.units and (" on " .. deal.units .. (deal.units == 1 and " unit" or " units")) or " each"

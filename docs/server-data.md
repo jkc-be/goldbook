@@ -125,7 +125,7 @@ The rule needs no version comparison. The app writes the file, so a newer one is
 - Server names fill only the items that `GoldbookDB.items` lacks.
 - The merge is idempotent. A second merge of the same file after `/reload` changes nothing, because every entry it would copy is already there or lost to a newer local one. The addon skips a realm whose `scannedAt` equals the one it merged last, kept in `serverMerged[realmKey]`.
 - The addon marks a price it took from the server with the server's `seen` in `fromServer[realmKey][itemKey]`. The tooltip then says "from the server" after the age of the price, and the item view's Listed card says "From the server". A local scan of the item clears the mark. Chat says how many prices the addon took, when it took any.
-- Merging the server data does not change `scanned`, the time of the newest scan here, so the quick scan when the auction house opens still runs.
+- Merging the server data does not change `scanned`, the time of the newest scan here, so the quick scan when the auction house opens still runs. Deals, Movers and **Post at** take the newest scan from `Database.NewestScan` instead, the later of `scanned` and `serverMerged[realmKey]`. The scan times in the window and the auction house window come from it too, and say "from the server" when it is the server's scan.
 
 ## Limitations
 

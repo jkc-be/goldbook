@@ -293,7 +293,7 @@ refresh = function()
   local scanning = Scanner.state ~= "idle"
   local busy = House.Busy() or Rules.running or scanning
   window.status:SetText(scanMessage or (Rules.running and Rules.message or (view == "queue" and not House.Review() and Rules.message
-    or view == "deals" and "Deals from your latest scan. Verify live prices before buying." or House.message)))
+    or view == "deals" and "Deals from the latest scan. Verify live prices before buying." or House.message)))
   window.balance:SetText("Available gold  " .. money(GetMoney()))
   for mode, tab in pairs(window.tabs) do
     tab:SetEnabled(not scanning and (not busy or (not Rules.running and not House.Transacting())))
@@ -302,9 +302,10 @@ refresh = function()
   window.search:SetShown(view == "browse" or view == "deals")
   window.search.caption:SetShown(view == "browse" or view == "deals")
   window.search.caption:SetText(view == "deals" and "Search deals" or "Search scan prices")
-  local scanned = ns.db.scanned[ns.RealmKey()]
+  local scanned, fromServer = ns.Database.NewestScan(ns.db, ns.RealmKey())
   window.scanTime:SetShown(view == "browse" or view == "deals")
-  window.scanTime:SetText((scanned and ("Last scan: " .. date("%d %b %H:%M", scanned) .. " (" .. Codec.Age(time() - scanned) .. ")")
+  window.scanTime:SetText((scanned and ("Last scan: " .. date("%d %b %H:%M", scanned) .. " (" .. Codec.Age(time() - scanned)
+    .. (fromServer and ", from the server" or "") .. ")")
     or "Last scan: never") .. "\nRun at least a Quick scan for a fresh reference.")
   window.searchButton:SetShown(view == "browse")
   window.searchButton:SetEnabled(House.open and not busy)
@@ -367,7 +368,7 @@ refresh = function()
     or view == "sell" and "No auctionable bag stacks."
     or view == "owned" and "No auctions to display."
     or view == "browse" and House.context ~= "browse" and "No current listings. Try another item or refresh your scan."
-    or not ns.db.scanned[ns.RealmKey()] and "No scan yet. Run at least a Quick scan to see reference prices."
+    or not ns.Database.NewestScan(ns.db, ns.RealmKey()) and "No scan yet. Run at least a Quick scan to see reference prices."
     or "No matching scan prices. Clear filters or run a Quick scan.")
   window.page:SetText(#listing == 0 and "0 items" or ((offset + 1) .. "–" .. math.min(#listing, offset + visibleRows) .. " of " .. #listing))
   window.previous:SetEnabled(offset > 0)
