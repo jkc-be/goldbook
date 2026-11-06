@@ -2,7 +2,7 @@
 publish = false
 license-file = "../../LICENSE"
 name = "goldbook-core"
-version = "0.5.0"
+version = "0.5.1"
 edition.workspace = true
 rust-version.workspace = true
 [dependencies]
