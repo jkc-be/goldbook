@@ -400,12 +400,15 @@ def main():
         for account in transcript["sync-state"]["accounts"].values():
             del account["tokenHash"]
         # Prices now lists every item scanned on the realm, each at its newest
-        # price with its scan's time, and counts them all; tests/api.rs checks
-        # that. Here the newest scan's items keep the original answers.
+        # price with its scan's time and its market value's, and counts them
+        # all; tests/api.rs checks that. Here the newest scan's items keep the
+        # original answers.
         for label, answer in transcript.items():
             body = answer.get("body") if isinstance(answer, dict) else None
             if isinstance(body, dict) and {"items", "scan", "total"} <= body.keys():
                 newest = body["scan"]["scannedAt"]
+                for item in body["items"]:
+                    item.pop("marketScannedAt", None)
                 body["items"] = [item for item in body["items"] if item.pop("scannedAt") == newest]
                 body["total"] = expected[label]["body"]["total"]
         rendered = json.dumps(transcript, indent=2, sort_keys=True) + "\n"

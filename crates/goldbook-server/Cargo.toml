@@ -14,7 +14,7 @@ flate2.workspace = true
 goldbook-core.workspace = true
 hex.workspace = true
 rand.workspace = true
-reqwest = { workspace = true, features = ["blocking", "json", "form"] }
+reqwest = { workspace = true, features = ["blocking", "json", "form", "gzip"] }
 rusqlite = { version = "0.40.2", features = ["bundled", "functions"] }
 serde.workspace = true
 serde_json.workspace = true

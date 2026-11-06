@@ -924,7 +924,7 @@ function priceRow(item, market, trends) {
   const marketCell = element("td", { className: "number market" }, [item.marketValue > 0 ? money(item.marketValue) : ""]);
   if (market.borrowed) {
     marketCell.title =
-      item.marketValue > 0 ? `From the full scan of ${when(market.scannedAt)}` : `Not in the full scan of ${when(market.scannedAt)}`;
+      item.marketValue > 0 ? `From the full scan of ${when(item.marketScannedAt ?? market.scannedAt)}` : `Not in the full scan of ${when(market.scannedAt)}`;
   }
   const row = element("tr", {}, [
     element("td", { className: "item" }, [open]),
