@@ -8,6 +8,23 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.5.0 - 2026-11-06
+
+Goldbook now uses the blizzard API to fetch prices (currently only for EU PVP realms).
+
+### Addon
+
+- On WoW Forever, the price list, `/gb item` and `/gb status` name the
+  auction house the shards share, such as `EU PvP-Horde`, as the desktop app
+  does, instead of the shard, such as `CAMWOWEU4Realm6PvP-Horde`.
+
+### Server
+
+- The server can fetch the WoW Forever EU PvP auction prices of both factions
+  from Battle.net every hour and store each snapshot as a full scan, so the
+  website and the addon's server data have prices when nobody scanned
+  recently. It is off until `GOLDBOOK_BATTLENET_AUCTIONS=1` is set.
+
 ## 0.4.2 - 2026-11-06
 
 ### Addon
