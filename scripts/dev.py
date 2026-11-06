@@ -15,7 +15,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'data/dev'
 ENV_LOCAL = ROOT / 'server/.env.local'
-LOCAL_SETTINGS = ('BNET_CLIENT_ID', 'BNET_CLIENT_SECRET', 'GOLDBOOK_PUBLIC_URL', 'GOLDBOOK_AUCTION_HOUSES')
+LOCAL_SETTINGS = ('BNET_CLIENT_ID', 'BNET_CLIENT_SECRET', 'GOLDBOOK_PUBLIC_URL', 'GOLDBOOK_SHARDING')
 
 
 def local_settings():
