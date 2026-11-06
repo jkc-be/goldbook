@@ -2479,8 +2479,8 @@ async fn a_never_scanned_forever_shard_reads_its_house() {
         realms,
         json!({"realms": [{"realm": "EU PvP", "faction": "Horde", "region": "EU", "scans": 2, "lastScan": 1760003600}]})
     );
-    // What /api/realms lists answers for itself, encoded as the website and
-    // as other clients send it, and so does a shard of another EU cluster.
+    // What /api/realms lists answers for itself, with the space sent as `+`
+    // as the website sends it or as `%20`, and so does another EU cluster.
     for realm in ["EU+PvP", "EU%20PvP", "CAMWOWEU1Realm6PvP"] {
         let (_, _, same) = call(
             &f.app,
