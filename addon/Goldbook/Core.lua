@@ -26,6 +26,12 @@ function ns.RealmKey()
   return Database.RealmKey(identity.realm, identity.faction)
 end
 
+-- The auction house and faction the prices here are for, as the player reads them.
+function ns.MarketName()
+  local identity = loginIdentity or Scanner.Identity()
+  return Database.RealmKey(Database.House(identity.realm), identity.faction)
+end
+
 -- "Name-Realm", as gold, the bank, the logout snapshot and accounting are filed.
 local function characterKey()
   local identity = loginIdentity or Scanner.Identity()
@@ -249,7 +255,7 @@ local COMMANDS = {
     if found then
       ns.UI.ShowItem(found.key)
     else
-      ns.Print("No item priced on " .. ns.RealmKey() .. " matches \"" .. argument .. "\". Type /gb item <link or name>.")
+      ns.Print("No item priced on " .. ns.MarketName() .. " matches \"" .. argument .. "\". Type /gb item <link or name>.")
     end
   end,
   autoscan = function()
@@ -289,7 +295,7 @@ local COMMANDS = {
       known = known + 1
     end
     local last = ns.db.scans[#ns.db.scans]
-    ns.Print("Version " .. ns.VERSION .. ". " .. known .. " items priced on " .. ns.RealmKey() .. ", " .. #ns.db.scans .. " scans queued for sync.")
+    ns.Print("Version " .. ns.VERSION .. ". " .. known .. " items priced on " .. ns.MarketName() .. ", " .. #ns.db.scans .. " scans queued for sync.")
     local books = 0
     for _ in pairs(ns.db.sellerScans) do books = books + 1 end
     ns.Print(books .. " order book snapshots saved locally. Type /reload with the desktop app open to sync.")

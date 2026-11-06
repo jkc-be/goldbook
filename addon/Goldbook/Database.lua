@@ -169,6 +169,18 @@ function Database.RealmKey(realm, faction)
   return realm .. "-" .. faction
 end
 
+-- The auction house a realm trades on, named as the server and the app name
+-- it: WoW Forever shards of one region and ruleset share one, so
+-- CAMWOWEU4Realm8PvP is "EU PvP" and CAMWOWEU4Realm3 "EU Normal". Any other
+-- realm is its own. Prices stay filed under the realm.
+function Database.House(realm)
+  local region, ruleset = realm:match("^CAMWOW(%a+)%d+Realm%d+(%a*)$")
+  if not region then
+    return realm
+  end
+  return region .. " " .. (ruleset ~= "" and ruleset or "Normal")
+end
+
 function Database.SetItem(db, key, name, quality)
   db.items[key] = quality .. "|" .. name
 end
