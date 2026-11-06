@@ -178,7 +178,7 @@ def main():
                          '["realm"] = "CAMWOWEU4Realm6PvP", ["faction"] = "Horde" } }, ["items"] = {}, ["scans"] = {} }\n')
         helpers["run"]([SYNC, "install", "--wow", forever / "wow"])
         with helpers["server"](forever, None, ROOT / "target/debug/goldbook-server",
-                               settings=lambda port: {"GOLDBOOK_AUCTION_HOUSES": "forever"}) as api:
+                               settings=lambda port: {"GOLDBOOK_SHARDING": "forever"}) as api:
             url = f"http://127.0.0.1:{api.port}"
             scan = dict(realm="CAMWOWEU4Realm8PvP", faction="Horde", region="EU", scannedAt=1760003600, mode="browse",
                         scanner="Someone", build="1.60.1.70790", rows=[["2589", 110, 0, 42, 0]], items={"2589": ["Linen Cloth", 1]})

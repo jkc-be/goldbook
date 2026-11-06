@@ -2800,7 +2800,9 @@ async fn a_restart_moves_scans_to_the_running_rule_and_back() {
         "a second start with the same rule moves nothing"
     );
 
-    let split = router(battlenet(f.database())).unwrap();
+    let mut split = battlenet(f.database());
+    split.houses = HouseRules::Off;
+    let split = router(split).unwrap();
     assert_eq!(
         realms(&split).await,
         [
