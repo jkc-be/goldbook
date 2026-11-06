@@ -13,9 +13,6 @@ services:
       BNET_CLIENT_SECRET: "${BNET_CLIENT_SECRET:-}"
       GOLDBOOK_PUBLIC_URL: "${GOLDBOOK_PUBLIC_URL:-}"
       TRUSTED_PROXY: "${TRUSTED_PROXY:-}"
-      # Unset pools WoW Forever shards by auction house; "off" makes every
-      # realm its own house. See crates/goldbook-server/src/house.rs.
-      GOLDBOOK_SHARDING: "${GOLDBOOK_SHARDING:-}"
     ports:
       - "${GOLDBOOK_BIND:-127.0.0.1}:${GOLDBOOK_PORT:-8787}:8787"
     volumes:

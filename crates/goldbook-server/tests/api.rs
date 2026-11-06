@@ -4,7 +4,7 @@ use axum::{
     extract::ConnectInfo,
     http::{HeaderMap, Request},
 };
-use goldbook_server::{BattleNetConfig, Config, HouseRules, db, router};
+use goldbook_server::{BattleNetConfig, Config, db, router};
 use serde_json::{Value, json};
 use std::{
     net::SocketAddr,
@@ -24,11 +24,11 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
-        Self::build(HouseRules::Off, |_| {}).await
+        Self::build(|_| {}).await
     }
     // A server over a database that `seed` prepared before the server's first
     // start, as a deployment's database was before this server version.
-    async fn build(houses: HouseRules, seed: impl FnOnce(&Path)) -> Self {
+    async fn build(seed: impl FnOnce(&Path)) -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let directory = std::env::temp_dir().join(format!(
             "goldbook-server-test-{}-{}",
@@ -38,9 +38,7 @@ impl Fixture {
         std::fs::create_dir_all(&directory).unwrap();
         let database = directory.join("goldbook.sqlite");
         seed(&database);
-        let mut config = battlenet(database.clone());
-        config.houses = houses;
-        let app = router(config).unwrap();
+        let app = router(battlenet(database.clone())).unwrap();
         let player = register(&app, &database, "player").await;
         let friend = register(&app, &database, "friend").await;
         Self {
@@ -1452,7 +1450,7 @@ async fn static_head_and_error_contracts_are_preserved() {
 #[tokio::test]
 async fn upgrading_a_python_database_preserves_ids_prices_and_retry_identity() {
     // The schema immediately before Python's fingerprint migration, with a scan.
-    let f = Fixture::build(HouseRules::Off, |database| {
+    let f = Fixture::build(|database| {
         migrated_until(database, "0005").execute_batch("INSERT INTO scans VALUES (7,'Faramon','Horde','EU',1760000000,'replicate','Sultan','1.60.1.70338',2,1760000010); INSERT INTO prices VALUES (7,'2589',110,125,42,3),(7,'7070',300,320,5,2);").unwrap();
     })
     .await;
@@ -2309,7 +2307,7 @@ async fn prices_list_every_scanned_item_at_its_newest_price() {
 #[tokio::test]
 async fn upgrading_fills_the_newest_price_of_every_scanned_item() {
     // Scans stored before the newest-price table, the newer one first by id.
-    let f = Fixture::build(HouseRules::Off, |database| {
+    let f = Fixture::build(|database| {
         migrated_until(database, "0015").execute_batch("INSERT INTO scans (id,realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint) VALUES (1,'Faramon','Horde','EU',1760100000,'browse','Sultan','1.60.1.70338',1,1760100010,'a'),(2,'Faramon','Horde','EU',1760000000,'browse','Sultan','1.60.1.70338',2,1760100020,'b'); INSERT INTO prices VALUES (1,'2589',150,0,40,3),(2,'2589',110,0,42,3),(2,'7070',300,0,5,2);").unwrap();
     })
     .await;
@@ -2343,7 +2341,7 @@ async fn upload(f: &Fixture, scan: Value) {
 // The reported case: two shards of one WoW Forever house, scans on one only.
 #[tokio::test]
 async fn a_never_scanned_forever_shard_reads_its_house() {
-    let f = Fixture::build(HouseRules::Forever, |_| {}).await;
+    let f = Fixture::new().await;
     upload(
         &f,
         forever_scan(
@@ -2496,7 +2494,7 @@ async fn a_never_scanned_forever_shard_reads_its_house() {
 }
 #[tokio::test]
 async fn shards_of_one_house_list_each_item_once_at_its_newest_price() {
-    let f = Fixture::build(HouseRules::Forever, |_| {}).await;
+    let f = Fixture::new().await;
     let names = json!({"2589":["Linen Cloth",1],"7070":["Elemental Water",1],"14047":["Runecloth",1],"2592":["Wool Cloth",1]});
     for (realm, at, rows) in [
         (
@@ -2595,65 +2593,8 @@ async fn shards_of_one_house_list_each_item_once_at_its_newest_price() {
     );
 }
 #[tokio::test]
-async fn without_the_flag_every_realm_is_its_own_house() {
-    let f = Fixture::new().await;
-    upload(
-        &f,
-        forever_scan(
-            "CAMWOWEU4Realm8PvP",
-            1760000000,
-            "browse",
-            json!([["2589", 110, 0, 42, 0]]),
-            json!({"2589":["Linen Cloth",1]}),
-        ),
-    )
-    .await;
-    let (status, _, body) = call(
-        &f.app,
-        "GET",
-        "/api/export?realm=CAMWOWEU4Realm6PvP&faction=Horde",
-        Value::Null,
-        &[],
-    )
-    .await;
-    assert_eq!(
-        (status, body),
-        (404, json!({"error": "no scans for this realm and faction"}))
-    );
-    let (_, _, export) = call(
-        &f.app,
-        "GET",
-        "/api/export?realm=CAMWOWEU4Realm8PvP&faction=Horde",
-        Value::Null,
-        &[],
-    )
-    .await;
-    assert_eq!(
-        export,
-        json!({
-            "realm": "CAMWOWEU4Realm8PvP",
-            "faction": "Horde",
-            "scannedAt": 1760000000,
-            "items": {
-                "2589": {
-                    "name": "Linen Cloth",
-                    "quality": 1,
-                    "price": [110, 42, 0, 1760000000, 0, 0],
-                    "hours": [[488888, 110, 42, 0]],
-                    "days": [[20370, 110, 42, 0]]
-                }
-            }
-        })
-    );
-    let (_, _, realms) = call(&f.app, "GET", "/api/realms", Value::Null, &[]).await;
-    assert_eq!(
-        realms,
-        json!({"realms": [{"realm": "CAMWOWEU4Realm8PvP", "faction": "Horde", "region": "EU", "scans": 1, "lastScan": 1760000000}]})
-    );
-}
-#[tokio::test]
 async fn seller_snapshots_answer_by_house() {
-    let f = Fixture::build(HouseRules::Forever, |_| {}).await;
+    let f = Fixture::new().await;
     for (realm, at) in [
         ("CAMWOWEU4Realm8PvP", 1760000000),
         ("CAMWOWEU4Realm6PvP", 1760003600),
@@ -2695,139 +2636,81 @@ async fn seller_snapshots_answer_by_house() {
     .await;
     assert_eq!(none, json!({"snapshot": null}));
 }
-// Toggling the flag between starts converges the stored houses both ways, and
-// a start with the rule unchanged moves nothing.
+// A deployment's database from before auction houses, where every row is its
+// realm's own: the first start moves the Forever shards into their house and
+// leaves other realms alone, and a later start moves nothing.
 #[tokio::test]
-async fn a_restart_moves_scans_to_the_running_rule_and_back() {
-    let f = Fixture::new().await;
-    upload(
-        &f,
-        forever_scan(
-            "CAMWOWEU4Realm8PvP",
+async fn the_first_start_moves_stored_forever_shards_into_their_house() {
+    let f = Fixture::build(|database| {
+        migrated_until(database, "0016").execute_batch(r#"
+            INSERT INTO scans (id,realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint) VALUES
+              (1,'CAMWOWEU4Realm8PvP','Horde','EU',1760000000,'browse','Feretuse','1.60.1.70790',2,1760000010,'a'),
+              (2,'CAMWOWEU4Realm6PvP','Horde','EU',1760003600,'browse','Feretuse','1.60.1.70790',1,1760003610,'b'),
+              (3,'Faramon','Horde','EU',1760000000,'browse','Sultan','1.60.1.70338',1,1760000010,'c');
+            INSERT INTO prices VALUES (1,'2589',120,0,30,0),(1,'7070',300,0,5,0),(2,'2589',90,0,20,0),(3,'2589',110,0,42,3);
+            INSERT INTO latest_prices VALUES ('CAMWOWEU4Realm8PvP','Horde','2589',1),('CAMWOWEU4Realm8PvP','Horde','7070',1),('CAMWOWEU4Realm6PvP','Horde','2589',2),('Faramon','Horde','2589',3);
+            INSERT INTO seller_snapshots VALUES
+              ('d','CAMWOWEU4Realm8PvP','Horde','2589',1760000000,'{"realm":"CAMWOWEU4Realm8PvP","faction":"Horde","itemKey":"2589","scannedAt":1760000000,"offers":[]}'),
+              ('e','Faramon','Horde','2589',1760007200,'{"realm":"Faramon","faction":"Horde","itemKey":"2589","scannedAt":1760007200,"offers":[]}');
+        "#).unwrap();
+    })
+    .await;
+    let get = |target: String| {
+        let app = f.app.clone();
+        async move { call(&app, "GET", &target, Value::Null, &[]).await.2 }
+    };
+    let realms: Vec<_> = get("/api/realms".into()).await["realms"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["realm"].as_str().unwrap().to_owned(),
+                r["scans"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        realms,
+        [
+            ("CAMWOWEU4RealmPvP".to_owned(), 2),
+            ("Faramon".to_owned(), 1)
+        ]
+    );
+    for realm in [
+        "CAMWOWEU4Realm6PvP",
+        "CAMWOWEU4Realm8PvP",
+        "CAMWOWEU4RealmPvP",
+    ] {
+        assert_eq!(
+            listed(&get(format!("/api/prices?realm={realm}&faction=Horde")).await),
+            [
+                ("2589".to_owned(), 90, 1760003600),
+                ("7070".to_owned(), 300, 1760000000)
+            ],
+            "{realm}"
+        );
+        assert_eq!(
+            get(format!(
+                "/api/sellers?realm={realm}&faction=Horde&itemKey=2589"
+            ))
+            .await["snapshot"]["scannedAt"],
             1760000000,
-            "browse",
-            json!([["2589", 120, 0, 30, 0], ["7070", 300, 0, 5, 0]]),
-            json!({"2589":["Linen Cloth",1],"7070":["Elemental Water",1]}),
-        ),
-    )
-    .await;
-    upload(
-        &f,
-        forever_scan(
-            "CAMWOWEU4Realm6PvP",
-            1760003600,
-            "browse",
-            json!([["2589", 90, 0, 20, 0]]),
-            json!({}),
-        ),
-    )
-    .await;
-    let snapshot = json!({"realm":"CAMWOWEU4Realm8PvP","faction":"Horde","itemKey":"2589","scannedAt":1760000000,"offers":[]});
-    assert_eq!(
-        call(&f.app, "POST", "/api/sellers", snapshot, &f.auth())
-            .await
-            .2,
-        json!({"stored": true})
-    );
-    let realms = |app: &Router| {
-        let app = app.clone();
-        async move {
-            call(&app, "GET", "/api/realms", Value::Null, &[]).await.2["realms"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|r| {
-                    (
-                        r["realm"].as_str().unwrap().to_owned(),
-                        r["scans"].as_i64().unwrap(),
-                    )
-                })
-                .collect::<Vec<_>>()
-        }
-    };
-    let prices = |app: &Router, realm: &str| {
-        let (app, target) = (
-            app.clone(),
-            format!("/api/prices?realm={realm}&faction=Horde"),
+            "{realm}"
         );
-        async move { listed(&call(&app, "GET", &target, Value::Null, &[]).await.2) }
-    };
-    let sellers = |app: &Router, realm: &str| {
-        let (app, target) = (
-            app.clone(),
-            format!("/api/sellers?realm={realm}&faction=Horde&itemKey=2589"),
-        );
-        async move {
-            call(&app, "GET", &target, Value::Null, &[]).await.2["snapshot"]["scannedAt"].clone()
-        }
-    };
+    }
     assert_eq!(
-        realms(&f.app).await,
-        [
-            ("CAMWOWEU4Realm6PvP".to_owned(), 1),
-            ("CAMWOWEU4Realm8PvP".to_owned(), 1)
-        ]
+        listed(&get("/api/prices?realm=Faramon&faction=Horde".into()).await),
+        [("2589".to_owned(), 110, 1760000000)]
     );
     assert_eq!(
-        prices(&f.app, "CAMWOWEU4Realm6PvP").await,
-        [("2589".to_owned(), 90, 1760003600)]
-    );
-    assert_eq!(sellers(&f.app, "CAMWOWEU4Realm6PvP").await, Value::Null);
-
-    let mut pooled = battlenet(f.database());
-    pooled.houses = HouseRules::Forever;
-    let pooled = router(pooled).unwrap();
-    assert_eq!(realms(&pooled).await, [("CAMWOWEU4RealmPvP".to_owned(), 2)]);
-    assert_eq!(
-        prices(&pooled, "CAMWOWEU4Realm6PvP").await,
-        [
-            ("7070".to_owned(), 300, 1760000000),
-            ("2589".to_owned(), 90, 1760003600)
-        ]
-    );
-    assert_eq!(
-        prices(&pooled, "CAMWOWEU4Realm8PvP").await,
-        prices(&pooled, "CAMWOWEU4Realm6PvP").await
-    );
-    assert_eq!(
-        sellers(&pooled, "CAMWOWEU4Realm6PvP").await,
-        json!(1760000000)
+        get("/api/sellers?realm=Faramon&faction=Horde&itemKey=2589".into()).await["snapshot"]["scannedAt"],
+        1760007200
     );
     let mut db = db::connect(&f.database()).unwrap();
     assert_eq!(
-        goldbook_server::house::reconcile(&mut db, HouseRules::Forever).unwrap(),
+        goldbook_server::house::reconcile(&mut db).unwrap(),
         goldbook_server::house::Reconciled::default(),
-        "a second start with the same rule moves nothing"
-    );
-
-    let mut split = battlenet(f.database());
-    split.houses = HouseRules::Off;
-    let split = router(split).unwrap();
-    assert_eq!(
-        realms(&split).await,
-        [
-            ("CAMWOWEU4Realm6PvP".to_owned(), 1),
-            ("CAMWOWEU4Realm8PvP".to_owned(), 1)
-        ]
-    );
-    assert_eq!(
-        prices(&split, "CAMWOWEU4Realm6PvP").await,
-        [("2589".to_owned(), 90, 1760003600)]
-    );
-    assert_eq!(
-        prices(&split, "CAMWOWEU4Realm8PvP").await,
-        [
-            ("7070".to_owned(), 300, 1760000000),
-            ("2589".to_owned(), 120, 1760000000)
-        ]
-    );
-    assert_eq!(sellers(&split, "CAMWOWEU4Realm6PvP").await, Value::Null);
-    assert_eq!(
-        sellers(&split, "CAMWOWEU4Realm8PvP").await,
-        json!(1760000000)
-    );
-    assert_eq!(
-        goldbook_server::house::reconcile(&mut db, HouseRules::Off).unwrap(),
-        goldbook_server::house::Reconciled::default()
+        "a second start moves nothing"
     );
 }
