@@ -261,39 +261,9 @@ fn register_installation(input: &Input, app: &App, db: &mut Connection) -> Resul
 
 fn upload_scan(input: &Input, db: &mut Connection) -> Result<Reply> {
     let scan = input.upload(goldbook_core::parse_scan_upload)?;
-    let house = House::of(&scan.realm);
-    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    // The fingerprint keeps the realm, so a retry still deduplicates and two
-    // shards of one house never collide.
-    let inserted = tx.execute("INSERT INTO scans (realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint,house) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,unixepoch(),?9,?10) ON CONFLICT(fingerprint) DO NOTHING",params![scan.realm,scan.faction,scan.region,scan.scanned_at as i64,scan.mode,scan.scanner,scan.build,scan.rows.len() as i64,scan.fingerprint(),house])?;
-    let id = tx.last_insert_rowid();
-    {
-        let mut items = tx.prepare("INSERT INTO items (item_key,name,quality) VALUES (?1,?2,?3) ON CONFLICT(item_key) DO UPDATE SET name=excluded.name,quality=excluded.quality WHERE items.name IS NOT excluded.name OR items.quality IS NOT excluded.quality")?;
-        for (key, (name, quality)) in &scan.items {
-            items.execute(params![key, name, *quality as i64])?;
-        }
-        if inserted == 1 {
-            let mut prices = tx.prepare("INSERT INTO prices (scan_id,item_key,min_buyout,market_value,quantity,num_auctions) VALUES (?1,?2,?3,?4,?5,?6)")?;
-            for (key, min, market, quantity, auctions) in &scan.rows {
-                prices.execute(params![
-                    id,
-                    key,
-                    *min as i64,
-                    *market as i64,
-                    *quantity as i64,
-                    *auctions as i64
-                ])?;
-            }
-            // A scan uploaded late does not replace a newer price.
-            tx.execute(
-                "INSERT INTO latest_prices (house,faction,item_key,scan_id) SELECT ?2,?3,item_key,scan_id FROM prices WHERE scan_id=?1 ON CONFLICT(house,faction,item_key) DO UPDATE SET scan_id=excluded.scan_id WHERE (SELECT scanned_at,id FROM scans WHERE id=excluded.scan_id) > (SELECT scanned_at,id FROM scans WHERE id=latest_prices.scan_id)",
-                params![id, house, scan.faction],
-            )?;
-        }
-    }
-    tx.commit()?;
+    let stored = db::store_scan(db, &scan)?;
     Ok(Reply::json(
-        json!({"stored":inserted==1,"items":scan.rows.len()}),
+        json!({"stored":stored,"items":scan.rows.len()}),
     ))
 }
 fn upload_sellers(input: &Input, db: &mut Connection) -> Result<Reply> {
