@@ -8,6 +8,20 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.5.2 - 2026-11-07
+
+### Addon
+
+- Alt+click on an item in Goldbook's auction house window opens its price
+  history, as the item's tooltip says. It used to select the row and load
+  its live listings instead.
+- **Post auction**, **Review purchase**, **Buy now** and **Cancel auction**
+  in Goldbook's auction house window work in WoW: Forever. The game blocked
+  them with "Interface action failed because of an AddOn", and Goldbook
+  waited for a confirmation that never came.
+- A cancelled auction now shows "Auction cancelled" instead of "No
+  confirmation received" after 20 seconds.
+
 ## 0.5.1 - 2026-11-06
 
 ### Desktop app
