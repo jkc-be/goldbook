@@ -23,6 +23,12 @@ return function(Stub)
   local function record(name, ...)
     server.calls[#server.calls + 1] = { name = name, args = { ... } }
   end
+  -- WoW: Forever refuses a protected auction call when the button that was
+  -- clicked is already disabled at the time of the call, as an "Interface
+  -- action failed".
+  local function refused()
+    if Stub.clicked and Stub.clicked.enabled == false then record("blocked"); return true end
+  end
   function HideUIPanel(frame) frame:Hide() end
   function AH.CloseAuctionHouse()
     record("close")
@@ -62,18 +68,25 @@ return function(Stub)
     return false
   end
   function AH.GetCancelCost() return server.cancelCost or 0 end
-  function AH.CancelAuction(id) record("cancel", id) end
+  function AH.CancelAuction(id) if not refused() then record("cancel", id) end end
   function AH.CalculateCommodityDeposit() return server.deposit or 100 end
   function AH.CalculateItemDeposit() return server.deposit or 100 end
   function AH.StartCommoditiesPurchase(id, quantity)
+    if refused() then return end
     record("quote", id, quantity)
     if not server.silent then C_Timer.After(0.1, function() Stub.fire("COMMODITY_PRICE_UPDATED", unpack(server.quote)) end) end
   end
   function AH.CancelCommoditiesPurchase() record("release-quote") end
-  function AH.ConfirmCommoditiesPurchase(id, quantity) record("buy-commodity", id, quantity) end
-  function AH.PlaceBid(id, total) record("buy-item", id, total) end
-  function AH.PostCommodity(location, duration, quantity, price) record("post-commodity", location, duration, quantity, price); return server.warning end
-  function AH.PostItem(location, duration, quantity, bid, buyout) record("post-item", location, duration, quantity, bid, buyout); return server.warning end
+  function AH.ConfirmCommoditiesPurchase(id, quantity) if not refused() then record("buy-commodity", id, quantity) end end
+  function AH.PlaceBid(id, total) if not refused() then record("buy-item", id, total) end end
+  function AH.PostCommodity(location, duration, quantity, price)
+    if refused() then return end
+    record("post-commodity", location, duration, quantity, price); return server.warning
+  end
+  function AH.PostItem(location, duration, quantity, bid, buyout)
+    if refused() then return end
+    record("post-item", location, duration, quantity, bid, buyout); return server.warning
+  end
   function server.count(name)
     local count = 0
     for _, call in ipairs(server.calls) do if call.name == name then count = count + 1 end end

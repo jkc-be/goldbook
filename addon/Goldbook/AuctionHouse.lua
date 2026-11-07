@@ -68,6 +68,9 @@ local function available()
   return true
 end
 
+-- A click makes its protected auction call before begin(). begin repaints the
+-- window, which disables the button that was clicked, and WoW: Forever blocks
+-- the call after that.
 local function begin(phase, message)
   serial = serial + 1
   local token = serial
@@ -308,8 +311,8 @@ function House.ReviewBuy(offer, quantity)
     for _, row in ipairs(House.offers) do totalAvailable = totalAvailable + row.quantity end
     if not integer(quantity, 1, totalAvailable) then return fail("Enter a quantity within the loaded listings.") end
     review = { kind = "commodity", name = item.name, itemID = item.itemKey.itemID, quantity = quantity }
-    begin("quote", "Requesting the current total for " .. quantity .. " " .. item.name .. "...")
     invoke(function() AH.StartCommoditiesPurchase(review.itemID, quantity) end)
+    begin("quote", "Requesting the current total for " .. quantity .. " " .. item.name .. "...")
   else
     local info = currentOffer(offer.auctionID)
     if not info or info.buyoutAmount ~= offer.total or info.quantity ~= offer.quantity
@@ -370,17 +373,16 @@ function House.Confirm()
   if not cost or cost > GetMoney() then return fail("You do not have enough gold.") end
   if plan.kind == "commodity" then
     if GetTime() >= plan.expires then return fail("The price quote expired. Review the purchase again.") end
-    begin("buy", "Waiting for the purchase confirmation...")
     invoke(function() AH.ConfirmCommoditiesPurchase(plan.itemID, plan.quantity) end)
+    begin("buy", "Waiting for the purchase confirmation...")
   elseif plan.kind == "item" then
     local info = currentOffer(plan.auctionID)
     if not info or info.buyoutAmount ~= plan.total or info.quantity ~= plan.quantity
       or info.containsOwnerItem or info.containsAccountItem then return fail("The listing changed. Search again.") end
-    begin("buy", "Waiting for the purchase confirmation...")
     invoke(function() AH.PlaceBid(plan.auctionID, plan.total) end)
+    begin("buy", "Waiting for the purchase confirmation...")
   elseif plan.kind == "post" then
     if not postValid(plan) or deposit(plan) ~= plan.deposit then return fail("The stack or deposit changed. Review the post again.") end
-    begin("post", "Waiting for the posting confirmation...")
     local params, sellFrame
     if plan.item.commodity then
       params = { plan.item.location, plan.duration, plan.quantity, plan.unitPrice }
@@ -393,6 +395,7 @@ function House.Confirm()
       if plan.item.commodity then return AH.PostCommodity(unpack(params, 1, 4)) end
       return AH.PostItem(unpack(params, 1, 5))
     end)
+    begin("post", "Waiting for the posting confirmation...")
     if needsConfirmation and sellFrame and sellFrame.CachePendingPost then
       sellFrame:CachePendingPost(unpack(params, 1, plan.item.commodity and 4 or 5))
       notify("Complete the posting warning in the game's auction house.")
@@ -401,8 +404,8 @@ function House.Confirm()
     if not AH.CanCancelAuction(plan.auctionID) or (AH.GetCancelCost(plan.auctionID) or 0) ~= plan.total then
       return fail("The cancellation changed. Refresh your auctions.")
     end
-    begin("cancel", "Waiting for the cancellation confirmation...")
     invoke(function() AH.CancelAuction(plan.auctionID) end)
+    begin("cancel", "Waiting for the cancellation confirmation...")
   end
   return true
 end
@@ -465,7 +468,8 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
   elseif event == "AUCTION_HOUSE_PURCHASE_COMPLETED" and House.phase == "buy" and review.auctionID == arg1 then
     completed("Purchase confirmed. Collect your items from the mailbox.")
   elseif event == "AUCTION_HOUSE_AUCTION_CREATED" and House.phase == "post" then completed("Auction posted.")
-  elseif event == "AUCTION_CANCELED" and House.phase == "cancel" and review.auctionID == arg1 then
+  -- WoW: Forever sends the auction house's ID with this event, not the auction's.
+  elseif event == "AUCTION_CANCELED" and House.phase == "cancel" then
     completed("Auction cancelled. Returned items arrive by mail.")
   elseif (event == "COMMODITY_PURCHASE_FAILED" and House.phase == "buy")
     or (event == "AUCTION_HOUSE_POST_ERROR" and House.phase == "post")

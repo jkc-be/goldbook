@@ -14,7 +14,9 @@ local function eq(actual, expected, label)
 end
 local function click(widget)
   assert(widget.enabled ~= false, "button is disabled: " .. (widget.label and widget.label.text or ""))
+  Stub.clicked = widget
   widget.scripts.OnClick(widget)
+  Stub.clicked = nil
 end
 local function search(id)
   House.Dismiss()
@@ -96,8 +98,9 @@ eq(House.Review(), nil, "expired quote is removed")
 eq(server.count("buy-commodity"), 0, "expiry does not purchase")
 House.ReviewBuy(House.offers[1], 4)
 Stub.advance(0.2)
+click(panel.review.confirm)
 House.Confirm()
-House.Confirm()
+eq(server.count("blocked"), 0, "the quote and the purchase run while their buttons are enabled")
 eq(server.count("buy-commodity"), 1, "double click purchases once")
 Stub.fire("COMMODITY_PURCHASE_SUCCEEDED")
 eq(House.phase, "idle", "purchase completes on server event")
@@ -114,6 +117,14 @@ House.ReviewBuy(House.offers[1], 1)
 Stub.money = 0
 eq(House.Confirm(), false, "insufficient gold")
 Stub.money = 5000000
+search(1206)
+House.ReviewBuy(House.offers[1], 1)
+local bought = House.Review().auctionID
+click(panel.review.confirm)
+eq(server.count("blocked"), 0, "the buyout runs while its button is enabled")
+eq(server.count("buy-item"), 1, "item listing bought from its button")
+Stub.fire("AUCTION_HOUSE_PURCHASE_COMPLETED", bought)
+eq(House.phase, "idle", "item purchase completes on server event")
 
 House.SetMode("sell")
 House.Select(House.rows[1])
@@ -139,12 +150,12 @@ House.ReviewCancel()
 server.cancelCost = 100
 eq(House.Confirm(), false, "changed cancellation cost refused")
 House.ReviewCancel()
-House.Confirm()
+click(panel.review.confirm)
+eq(server.count("blocked"), 0, "the cancellation runs while its button is enabled")
 eq(server.count("cancel"), 1, "cancellation submitted once")
-Stub.fire("AUCTION_CANCELED", 999)
-eq(House.phase, "cancel", "unrelated cancellation ignored")
-Stub.fire("AUCTION_CANCELED", 201)
-eq(House.phase, "idle", "matching cancellation accepted")
+-- WoW: Forever names the auction house (113), not the auction, in the event.
+Stub.fire("AUCTION_CANCELED", 113)
+eq(House.phase, "idle", "cancellation confirmed by the auction house's event")
 
 search(2770)
 House.ReviewBuy(House.offers[1], 4)
@@ -203,6 +214,7 @@ click(panel.rows[1])
 click(panel.action)
 eq(House.phase, "ready", "queue action is reviewed")
 click(panel.review.confirm)
+eq(server.count("blocked"), 0, "the post runs while its button is still enabled")
 eq(server.count("post-commodity"), 2, "queue confirm posts")
 Stub.bags[0][1].stackCount = 8
 Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 301)
