@@ -14,7 +14,9 @@ local function eq(actual, expected, label)
 end
 local function click(widget)
   assert(widget.enabled ~= false, "button is disabled: " .. (widget.label and widget.label.text or ""))
+  Stub.clicked = widget
   widget.scripts.OnClick(widget)
+  Stub.clicked = nil
 end
 local function search(id)
   House.Dismiss()
@@ -194,6 +196,7 @@ click(panel.rows[1])
 click(panel.action)
 eq(House.phase, "ready", "queue action is reviewed")
 click(panel.review.confirm)
+eq(server.count("blocked"), 0, "the post runs while its button is still enabled")
 eq(server.count("post-commodity"), 2, "queue confirm posts")
 Stub.bags[0][1].stackCount = 8
 Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 301)

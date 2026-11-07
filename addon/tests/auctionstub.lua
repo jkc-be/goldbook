@@ -72,8 +72,19 @@ return function(Stub)
   function AH.CancelCommoditiesPurchase() record("release-quote") end
   function AH.ConfirmCommoditiesPurchase(id, quantity) record("buy-commodity", id, quantity) end
   function AH.PlaceBid(id, total) record("buy-item", id, total) end
-  function AH.PostCommodity(location, duration, quantity, price) record("post-commodity", location, duration, quantity, price); return server.warning end
-  function AH.PostItem(location, duration, quantity, bid, buyout) record("post-item", location, duration, quantity, bid, buyout); return server.warning end
+  -- WoW: Forever refuses a post when the button that was clicked is already
+  -- disabled at the time of the call, as an "Interface action failed".
+  local function refused()
+    if Stub.clicked and Stub.clicked.enabled == false then record("blocked"); return true end
+  end
+  function AH.PostCommodity(location, duration, quantity, price)
+    if refused() then return end
+    record("post-commodity", location, duration, quantity, price); return server.warning
+  end
+  function AH.PostItem(location, duration, quantity, bid, buyout)
+    if refused() then return end
+    record("post-item", location, duration, quantity, bid, buyout); return server.warning
+  end
   function server.count(name)
     local count = 0
     for _, call in ipairs(server.calls) do if call.name == name then count = count + 1 end end
