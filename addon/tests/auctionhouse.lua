@@ -144,10 +144,9 @@ House.ReviewCancel()
 click(panel.review.confirm)
 eq(server.count("blocked"), 0, "the cancellation runs while its button is enabled")
 eq(server.count("cancel"), 1, "cancellation submitted once")
-Stub.fire("AUCTION_CANCELED", 999)
-eq(House.phase, "cancel", "unrelated cancellation ignored")
-Stub.fire("AUCTION_CANCELED", 201)
-eq(House.phase, "idle", "matching cancellation accepted")
+-- WoW: Forever names the auction house (113), not the auction, in the event.
+Stub.fire("AUCTION_CANCELED", 113)
+eq(House.phase, "idle", "cancellation confirmed by the auction house's event")
 
 search(2770)
 House.ReviewBuy(House.offers[1], 4)
