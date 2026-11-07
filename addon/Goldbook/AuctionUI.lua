@@ -147,6 +147,14 @@ local function rows(source)
   return listing
 end
 
+-- The item a row's tooltip shows, which Alt+click opens the price history of.
+local function rowLink(item)
+  if item.link then return item.link end
+  if item.key then return Codec.ItemString(item.key) end
+  local key = item.itemKey or (item.item and item.item.itemKey) or (House.selected and House.selected.itemKey)
+  return key and ("item:" .. key.itemID)
+end
+
 local function selectRow(row)
   if House.Busy() or Rules.running or Scanner.state ~= "idle" then return end
   if row.variants then
@@ -473,14 +481,20 @@ local function addRow(tableFrame, index)
   row.count = label(row, "", 380, 6, 60, "number")
   row.price = label(row, "", 450, 6, 185, "number")
   row.price:SetJustifyH("RIGHT")
-  row:SetScript("OnClick", function(self) selectRow(self.item) end)
+  row:SetScript("OnClick", function(self)
+    local link = self.item and rowLink(self.item)
+    if link and IsAltKeyDown() and ns.db.settings.altClick ~= false then
+      UI.ShowItem(link)
+    else
+      selectRow(self.item)
+    end
+  end)
   row:SetScript("OnEnter", function(self)
     local item = self.item
-    if not item then return end
-    local key = item.itemKey or (item.item and item.item.itemKey) or (House.selected and House.selected.itemKey)
-    if key or item.key then
+    local link = item and rowLink(item)
+    if link then
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetHyperlink(item.link or (item.key and Codec.ItemString(item.key)) or ("item:" .. key.itemID))
+      GameTooltip:SetHyperlink(link)
       if item.cached and item.seen then GameTooltip:AddLine("Scan price seen " .. Codec.Age(time() - item.seen), 0.7, 0.7, 0.7) end
       GameTooltip:Show()
     end
