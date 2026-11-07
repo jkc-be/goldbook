@@ -468,7 +468,8 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
   elseif event == "AUCTION_HOUSE_PURCHASE_COMPLETED" and House.phase == "buy" and review.auctionID == arg1 then
     completed("Purchase confirmed. Collect your items from the mailbox.")
   elseif event == "AUCTION_HOUSE_AUCTION_CREATED" and House.phase == "post" then completed("Auction posted.")
-  elseif event == "AUCTION_CANCELED" and House.phase == "cancel" and review.auctionID == arg1 then
+  -- WoW: Forever sends the auction house's ID with this event, not the auction's.
+  elseif event == "AUCTION_CANCELED" and House.phase == "cancel" then
     completed("Auction cancelled. Returned items arrive by mail.")
   elseif (event == "COMMODITY_PURCHASE_FAILED" and House.phase == "buy")
     or (event == "AUCTION_HOUSE_POST_ERROR" and House.phase == "post")
