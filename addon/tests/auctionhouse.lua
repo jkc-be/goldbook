@@ -68,6 +68,15 @@ eq(panel.scanTime.text:find(date("%d %b %H:%M", savedScan), 1, true) ~= nil, tru
 Stub.fire("ITEM_KEY_ITEM_INFO_RECEIVED", { itemID = 2770 })
 eq(#House.rows, 2, "background metadata does not replace cached results")
 eq(panel.rows[1].icon.texture, 134566, "browse shows the item icon")
+local queries = #Stub.ah.queries
+Stub.alt = true
+click(panel.rows[1])
+Stub.alt = false
+eq(GoldbookWindow and GoldbookWindow.shown, true, "Alt+click on a price opens Goldbook's window")
+eq((GoldbookWindow.head.title.text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")), "Copper Ore", "Alt+click shows the clicked item")
+eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[5].text, "DAY ↓ CHANGE", "Alt+click shows its price history")
+eq(#Stub.ah.queries, queries, "Alt+click does not load live listings")
+GoldbookWindow:Hide()
 click(panel.rows[1])
 Stub.advance(1)
 eq(#Stub.ah.queries, browseCalls + 1, "opening an item resolves its current variant")
