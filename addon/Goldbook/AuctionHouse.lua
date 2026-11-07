@@ -380,7 +380,6 @@ function House.Confirm()
     invoke(function() AH.PlaceBid(plan.auctionID, plan.total) end)
   elseif plan.kind == "post" then
     if not postValid(plan) or deposit(plan) ~= plan.deposit then return fail("The stack or deposit changed. Review the post again.") end
-    begin("post", "Waiting for the posting confirmation...")
     local params, sellFrame
     if plan.item.commodity then
       params = { plan.item.location, plan.duration, plan.quantity, plan.unitPrice }
@@ -389,10 +388,13 @@ function House.Confirm()
       params = { plan.item.location, plan.duration, plan.quantity, nil, plan.unitPrice }
       sellFrame = AuctionHouseFrame and AuctionHouseFrame.ItemSellFrame
     end
+    -- WoW: Forever blocks the post when this click has already repainted the
+    -- window, which disables the button that was clicked. Post first.
     local needsConfirmation = invoke(function()
       if plan.item.commodity then return AH.PostCommodity(unpack(params, 1, 4)) end
       return AH.PostItem(unpack(params, 1, 5))
     end)
+    begin("post", "Waiting for the posting confirmation...")
     if needsConfirmation and sellFrame and sellFrame.CachePendingPost then
       sellFrame:CachePendingPost(unpack(params, 1, plan.item.commodity and 4 or 5))
       notify("Complete the posting warning in the game's auction house.")
