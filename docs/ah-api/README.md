@@ -2,6 +2,8 @@
 
 This page records what the Battle.net Game Data API returned for WoW Forever's EU auction houses in a test run on 2026-11-06. It backs [issue #67](https://github.com/jkc-be/goldbook/issues/67), which plans a server poller for these snapshots. Blizzard has not documented the Forever routes, so everything here is observed behavior and can change without notice.
 
+For the shape of the responses and what one snapshot holds, see [Battle.net auction data](../battlenet-api/README.md).
+
 The run used the server's Battle.net client (`BNET_CLIENT_ID`, client-credentials grant) against `https://eu.api.blizzard.com` with the namespace `dynamic-forever-eu`. It made two full passes, at 09:45 and 09:50 UTC. Both passes read the same auction snapshot, whose `Last-Modified` was 09:17 UTC. Requests made in both passes got the same results.
 
 ## Run it again
