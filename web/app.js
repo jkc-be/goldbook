@@ -850,7 +850,12 @@ function drawSellers(data, place) {
     const select = element("select", { id: "order-book-snapshot" }, history.map((snapshot, index) =>
       element("option", { value: snapshot.id, selected: snapshot.id === id,
         textContent: `#${history.length - index} · ${when(snapshot.scannedAt)}${index === 0 ? " · latest" : ""}` })));
-    select.onchange = () => run(async () => show(await fetchBook(select.value)));
+    select.onchange = () => run(async () => {
+      const snapshot = await fetchBook(select.value);
+      // Each Battle.net snapshot replaces the item's polled book, so the chosen one can be gone.
+      if (snapshot) show(snapshot);
+      else drawSellers(await latestOnly("sellers", api("/api/sellers", { realm, faction, itemKey, history: 1 })), place);
+    });
     children.push(element("label", { className: "order-book-history" }, [
       `Observation (${history.length.toLocaleString("en")} saved)`, element("span", { className: "chip" }, [select]),
     ]));
