@@ -133,14 +133,14 @@ struct CommodityListing {
     unit_price: u64,
 }
 
-/// A house's two lists as scan rows, keyed by plain item ID. The API's bonus
+/// A house's two lists as buyout listings by plain item ID. The API's bonus
 /// IDs are not the addon's suffixes, so a variant with `bonus_lists` would mix
 /// its price into the base item's; it is left out, as is a listing without a
 /// buyout.
-fn rows(
+fn listings(
     regular: Auctions<RegularListing>,
     commodities: Auctions<CommodityListing>,
-) -> Vec<PriceRow> {
+) -> BTreeMap<u64, Vec<Listing>> {
     let regular = regular.auctions.into_iter().map(|listing| {
         let price = listing
             .buyout
@@ -162,9 +162,14 @@ fn rows(
         }
     }
     items
-        .into_iter()
+}
+
+/// Each item's listings as the row a full scan would upload.
+fn rows(items: &BTreeMap<u64, Vec<Listing>>) -> Vec<PriceRow> {
+    items
+        .iter()
         .filter_map(|(id, listings)| {
-            let row = summarize(listings)?;
+            let row = summarize(listings.clone())?;
             Some((
                 id.to_string(),
                 row.min,
@@ -261,6 +266,7 @@ impl Poller {
             if at != snapshot {
                 continue;
             }
+            let items = listings(regular, commodities);
             let scan = ScanUpload {
                 realm: source.house.into(),
                 faction: source.faction.into(),
@@ -269,7 +275,7 @@ impl Poller {
                 mode: "replicate".into(),
                 scanner: SCANNER.into(),
                 build: String::new(),
-                rows: rows(regular, commodities),
+                rows: rows(&items),
                 items: BTreeMap::new(),
             };
             db::store_scan(db, &scan)?;
@@ -449,10 +455,10 @@ mod tests {
     use super::*;
 
     fn convert(regular: &str, commodities: &str) -> Vec<PriceRow> {
-        rows(
+        rows(&listings(
             serde_json::from_str(regular).unwrap(),
             serde_json::from_str(commodities).unwrap(),
-        )
+        ))
     }
 
     // The market values are what addon/Goldbook/Stats.lua computes for the
