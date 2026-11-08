@@ -2,12 +2,14 @@
 """Verify the Battle.net auction poller live: real API -> server -> export -> sync -> ServerData.lua.
 
 Needs the server's Battle.net client in BNET_CLIENT_ID and BNET_CLIENT_SECRET,
-and network access. Polls the EU PvP houses of both factions, then restarts
-the server on the same database to show that unchanged snapshots are not
-stored twice.
+and network access. Polls every house the server polls, then restarts the
+server on the same database to show that unchanged snapshots are not stored
+twice. Each SHARD stands for the server house it pools into, and every polled
+house needs one; the shard need not exist, since the server reads only its
+house.
 
-    scripts/verify-battlenet-auctions.py [SHARD]
-    scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP
+    scripts/verify-battlenet-auctions.py [SHARD...]
+    scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP CAMWOWEU4Realm8PvE
 """
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -31,7 +33,17 @@ SERVER = ROOT / "target/debug/goldbook-server"
 SYNC = ROOT / "target/debug/goldbook-sync"
 DUMP = runpy.run_path(str(ROOT / "scripts/verify-server-data.py"))["DUMP"]
 API = "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/{}{}?namespace=dynamic-forever-eu"
-STORED = re.compile(r"battlenet auctions: stored EU PvP/(\w+) \(house (\d+)\) snapshot (\d+) with")
+POLLED = re.compile(r"battlenet auctions: polling (.+) now and at")
+SOURCE = re.compile(r"(\w+ \w+)/(\w+) \(house (\d+)\)")
+STORED = re.compile(r"battlenet auctions: stored (\w+ \w+)/(\w+) \(house (\d+)\) snapshot (\d+) with")
+
+
+def house_of(shard):
+    """The server house a WoW Forever shard pools into, as house.rs names it."""
+    match = re.fullmatch(r"CAMWOW([A-Z]+)\d+Realm\d+([A-Za-z]*)", shard)
+    if not match:
+        sys.exit(f"{shard} is not a WoW Forever shard name")
+    return f"{match[1]} {match[2] or 'Normal'}"
 
 
 def token(client, secret):
@@ -82,7 +94,7 @@ def wait_for(log, needle, count=1, seconds=300):
 
 
 def main():
-    shard = sys.argv[1] if len(sys.argv) > 1 else "CAMWOWEU4Realm6PvP"
+    shards = {house_of(shard): shard for shard in sys.argv[1:] or ["CAMWOWEU4Realm6PvP", "CAMWOWEU4Realm8PvE"]}
     client, secret = os.environ.get("BNET_CLIENT_ID"), os.environ.get("BNET_CLIENT_SECRET")
     if not client or not secret:
         sys.exit("BNET_CLIENT_ID and BNET_CLIENT_SECRET must be set")
@@ -96,17 +108,22 @@ def main():
         (flavor / "Interface/AddOns").mkdir(parents=True)
         saved = flavor / "WTF/Account/TEST#1/SavedVariables/Goldbook.lua"
         saved.parent.mkdir(parents=True)
-        characters = ", ".join(f'["{faction}tester-{shard}"] = {{ ["name"] = "{faction}tester", ["realm"] = "{shard}", '
-                               f'["faction"] = "{faction}" }}' for faction in ("Horde", "Alliance"))
-        saved.write_text(f'GoldbookDB = {{ ["characters"] = {{ {characters} }}, ["items"] = {{}}, ["scans"] = {{}} }}\n')
         helpers["run"]([SYNC, "install", "--wow", directory / "wow"])
 
         with helpers["server"](directory, None, SERVER, settings) as server:
-            log = wait_for(directory / "server.log", "battlenet auctions: stored", 2)
-            stored = {faction: (house, int(snapshot)) for faction, house, snapshot in STORED.findall(log)}
-            assert sorted(stored) == ["Alliance", "Horde"], log
+            polled = SOURCE.findall(POLLED.search(wait_for(directory / "server.log", "battlenet auctions: polling"))[1])
+            missing = sorted({house for house, _, _ in polled} - shards.keys())
+            if missing:
+                sys.exit(f"name a shard of {', '.join(missing)} too")
+            log = wait_for(directory / "server.log", "battlenet auctions: stored", len(polled))
+            stored = {(house, faction): (api, int(snapshot)) for house, faction, api, snapshot in STORED.findall(log)}
+            assert sorted(stored) == sorted((house, faction) for house, faction, _ in polled), log
+            characters = ", ".join(f'["{faction}tester-{shards[house]}"] = {{ ["name"] = "{faction}tester", '
+                                   f'["realm"] = "{shards[house]}", ["faction"] = "{faction}" }}' for house, faction in stored)
+            saved.write_text(f'GoldbookDB = {{ ["characters"] = {{ {characters} }}, ["items"] = {{}}, ["scans"] = {{}} }}\n')
             checked = {}
-            for faction, (house, snapshot) in stored.items():
+            for (house_name, faction), (house, snapshot) in stored.items():
+                shard = shards[house_name]
                 query = urllib.parse.urlencode({"realm": shard, "faction": faction})
                 export = server.request("GET", f"/api/export?{query}")[0]["body"]
                 assert export["scannedAt"] == snapshot, (faction, export["scannedAt"], snapshot)
@@ -124,7 +141,7 @@ def main():
 
                 since = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(snapshot))
                 assert blizzard(bearer, API.format(house, ""), since)[0] == 304, f"no 304 for {since} from house {house}"
-                checked[faction] = (house, snapshot, len(expected), since)
+                checked[house_name, faction] = (house, snapshot, len(expected), since)
 
             output = helpers["run"]([SYNC, "--wow", directory / "wow", "--api", f"http://127.0.0.1:{server.port}",
                                      "--token", server.token, "--state", directory / "state.json", "--once"])
@@ -132,7 +149,8 @@ def main():
             script.write_text(DUMP)
             lines = helpers["run"](["luajit", script, addon / "ServerData.lua"]).splitlines()
             written_for = next((line for line in output.splitlines() if line.startswith("server prices for ")), "")
-            for faction, (house, snapshot, items, _) in checked.items():
+            for (house_name, faction), (house, snapshot, items, _) in checked.items():
+                shard = shards[house_name]
                 assert f"{shard}-{faction}" in written_for.split(" written to ")[0], output
                 assert f"scannedAt\t{shard}-{faction}\t{snapshot}" in lines, (faction, lines[:5])
                 written = sum(line.startswith(f"prices\t{shard}-{faction}\t") for line in lines)
@@ -143,13 +161,14 @@ def main():
             time.sleep(30)
             log = (directory / "server.log").read_text()
             assert "failed" not in log, log
-            again = [(faction, int(at)) for faction, _, at in STORED.findall(log) if int(at) <= checked[faction][1]]
+            again = [(house, faction, int(at)) for house, faction, _, at in STORED.findall(log)
+                     if int(at) <= checked[house, faction][1]]
             assert not again, f"stored a snapshot twice: {again}"
 
-    for faction, (house, snapshot, items, since) in sorted(checked.items(), reverse=True):
-        print(f"Verified EU PvP/{faction} from house {house}: snapshot {snapshot} stored once with {items} items, "
-              f"every minimum matches the API, Battle.net answers 304 to {since!r}, and {shard}-{faction} gets the "
-              "prices in ServerData.lua.")
+    for (house_name, faction), (house, snapshot, items, since) in checked.items():
+        print(f"Verified {house_name}/{faction} from house {house}: snapshot {snapshot} stored once with {items} "
+              f"items, every minimum matches the API, Battle.net answers 304 to {since!r}, and "
+              f"{shards[house_name]}-{faction} gets the prices in ServerData.lua.")
     print("A restarted server stores nothing new.")
 
 
