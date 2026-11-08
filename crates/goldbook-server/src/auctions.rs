@@ -1,20 +1,22 @@
 //! Auction snapshots of WoW Forever houses from the Battle.net Game Data API,
-//! stored as full scans so that they reach clients like a player's upload.
+//! stored as full scans and order books so that they reach clients like a
+//! player's upload.
 //!
 //! `GOLDBOOK_BATTLENET_AUCTIONS=1` switches polling on; unset, nothing here
 //! runs. docs/ah-api/README.md records what the API returns.
 
-use crate::db;
+use crate::{db, house::House};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use goldbook_core::{
-    AUCTION_POLL_MINUTE, Listing, PriceRow, ScanUpload, next_minute_past_hour, summarize,
+    AUCTION_POLL_MINUTE, Listing, PriceRow, ScanUpload, SellerOffer, SellerSnapshot,
+    next_minute_past_hour, summarize,
 };
 use reqwest::{
     StatusCode,
     blocking::{Client, Response},
     header::{IF_MODIFIED_SINCE, LAST_MODIFIED},
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, TransactionBehavior, params};
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
@@ -181,13 +183,78 @@ fn rows(items: &BTreeMap<u64, Vec<Listing>>) -> Vec<PriceRow> {
         .collect()
 }
 
+/// Each item's listings as its order book at `scanned_at`, one offer per unit
+/// price. The API names no sellers, so no offer has owners, as when the addon
+/// uploads stock whose owner it does not know.
+fn books(
+    source: &Source,
+    scanned_at: u64,
+    items: &BTreeMap<u64, Vec<Listing>>,
+) -> Vec<SellerSnapshot> {
+    items
+        .iter()
+        .map(|(id, listings)| {
+            let mut levels: BTreeMap<u64, u64> = BTreeMap::new();
+            for listing in listings {
+                *levels.entry(listing.price).or_default() += listing.count;
+            }
+            SellerSnapshot {
+                realm: source.house.into(),
+                faction: source.faction.into(),
+                item_key: id.to_string(),
+                scanned_at,
+                offers: levels
+                    .into_iter()
+                    .map(|(unit_price, quantity)| SellerOffer {
+                        unit_price,
+                        quantity,
+                        owners: vec![],
+                        total_owners: 0,
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+/// Stores each book in place of its item's previous polled book. A polled
+/// book's realm is its house, a name no shard reports, so `realm = house`
+/// tells it apart from a player's upload, which is never replaced.
+fn store_books(db: &mut Connection, books: &[SellerSnapshot]) -> Result<()> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    {
+        let mut replace = tx.prepare("DELETE FROM seller_snapshots WHERE house=?1 AND realm=?1 AND faction=?2 AND item_key=?3 AND fingerprint<>?4")?;
+        let mut insert = tx.prepare("INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload,house) VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(fingerprint) DO NOTHING")?;
+        for book in books {
+            let fingerprint = book.fingerprint();
+            replace.execute(params![
+                book.realm,
+                book.faction,
+                book.item_key,
+                fingerprint
+            ])?;
+            insert.execute(params![
+                fingerprint,
+                book.realm,
+                book.faction,
+                book.item_key,
+                book.scanned_at as i64,
+                serde_json::to_string(book)?,
+                House::of(&book.realm)
+            ])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 struct Token {
     value: String,
     refresh_at: Instant,
 }
 
 /// Polls every house in `SOURCES` once per `poll_once`, and stores each new
-/// snapshot as a full scan.
+/// snapshot as a full scan and an order book per item.
 pub struct Poller {
     config: AuctionConfig,
     database: PathBuf,
@@ -267,6 +334,10 @@ impl Poller {
                 continue;
             }
             let items = listings(regular, commodities);
+            // The books go first: when storing the scan fails after them, the
+            // next poll fetches this snapshot again, while books missing
+            // behind a stored scan would wait for the next snapshot.
+            store_books(db, &books(source, snapshot, &items))?;
             let scan = ScanUpload {
                 realm: source.house.into(),
                 faction: source.faction.into(),
