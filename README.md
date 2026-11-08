@@ -1191,6 +1191,11 @@ Complete item and commodity searches also record books, including searches in
 Auctionator. Quick scans and older price scans contain only price summaries;
 their full order books cannot be reconstructed.
 
+Houses that the server polls from Battle.net get a book for each item listed
+with a buyout, from every snapshot Battle.net publishes, about once an hour,
+with no player scan. Battle.net names no sellers, so these books have no
+seller names.
+
 The web panel shows best ask, price levels, cumulative sell-side depth and the
 observation time. WoW auctions do not provide a standing buy-order book.
 Bid-only listings are excluded. The graph describes the recorded snapshot,
