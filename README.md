@@ -1223,8 +1223,8 @@ Its defaults are `127.0.0.1`, `8787`, and `data/goldbook.sqlite`. The server
 embeds the web assets.
 Set `WEB_DIR` to a folder to override them during development.
 With `GOLDBOOK_BATTLENET_AUCTIONS=1` and the same Battle.net client, the
-server polls the WoW Forever EU PvP auction houses when it starts and then at
-30 minutes past each hour UTC, as
+server polls the WoW Forever EU PvP auction houses of both factions and the EU
+PvE Horde house when it starts and then at 30 minutes past each hour UTC, as
 [docs/ah-api/README.md](docs/ah-api/README.md#polling-from-the-server)
 describes.
 

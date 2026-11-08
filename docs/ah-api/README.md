@@ -24,6 +24,7 @@ The python.org build of Python on macOS has no CA certificates. If a script fail
 - Regular listings always have `quantity` 1, commodity listings carry the stacks, and no item appears in both lists.
 - `If-Modified-Since` returns 304 when the snapshot has not changed.
 - EU4 PvP Horde, the shards `CAMWOWEU4Realm6PvP` and `CAMWOWEU4Realm8PvP`, is house 113. A scan taken 30 minutes before a snapshot has the same minimum as house 113 for 75% of its items.
+- EU PvE Horde is house 114. A scan taken 52 minutes before a snapshot has the same minimum as house 114 for 74% of its items.
 - The API's bonus IDs for item variants are not the suffix IDs the addon uses in its item keys. How to map one to the other is unknown.
 
 ## Routes
@@ -124,6 +125,7 @@ To match the scanner, which stores `ceil(buyout / count)` per listing in `addon/
 ## Caching
 
 - The house routes and the auctions index send `Cache-Control: public, max-age=86400` and a `Last-Modified` that matches the snapshot time, 09:17:16 to 09:17:22 UTC in this run. Neither run saw a snapshot change. Later on 2026-11-06, house 113 changed at 14:24:04, 15:24:05, 16:24:29 and 17:24:27 UTC, and house 110 at 14:22:48, 15:22:41, 16:23:09 and 17:23:06, so a house's snapshot seems to change every hour, at a minute of its own.
+- The two lists of a house can carry `Last-Modified` times a second apart for one snapshot. On 2026-11-08, house 110's regular list said 09:12:13 and its commodity list 09:12:12 on every request. The poller expects equal times, so it skipped that snapshot.
 - Sending that `Last-Modified` back as `If-Modified-Since` returns 304 with an empty body. An older date returns 200.
 - No route sends an `ETag`.
 - The ruleset index and ruleset details send `max-age=30`, and their `Last-Modified` moves every 30 seconds.
@@ -164,6 +166,19 @@ A second run on 2026-11-06 compared the server's Horde scan of 14:53 UTC with th
 
 On the 1,204 items where houses 113 and 114 have different minimums, the scan matches 113 exactly 784 times and 114 19 times. EU4 PvP Horde is house 113. EU4 PvP Alliance would then be 110 and its Blackwater house 116, from the ID sets, but there are no Alliance scans to check that.
 
+A third run on 2026-11-08 compared the server's newest `EU PvE` Horde scan, taken at 08:20 UTC, with the snapshots of 09:12 UTC:
+
+| House | Scan items found | Same minimum | Median \|ln(scan / house)\| |
+|---|---|---|---|
+| 114 | 98% | 74% | 0.00 |
+| 113 | 91% | 23% | 0.22 |
+| 110, 111 | 84% | 19 to 22% | 0.29 to 0.33 |
+| 119, 120, 123, 124 | 38 to 45% | 10 to 13% | 0.69 |
+| 116, 117 | 32 to 33% | 10% | 0.80 to 0.88 |
+| 121, 125 | 4 to 5% | 3 to 4% | 1.08 to 1.11 |
+
+On the 1,941 items where houses 114 and 113 have different minimums, the scan matches 114 exactly 1,266 times and 113 32 times. EU PvE Horde is house 114. From the ID sets, EU PvE Alliance would be 111 and its Blackwater house 117, but there are no Alliance scans to check that.
+
 ## Item variants
 
 The addon keys a variant as `itemID:suffix` (`Codec.ItemKey` in `addon/Goldbook/Codec.lua`). The API marks variants with `bonus_lists`. The two use different numbers: the API's bonus IDs ranged from 12688 to 12920, and the suffixes in production's `CAMWOWEU4Realm8PvP` scans range from 14296 to 14473. None of the 3,778 variant keys in that export appears as an item and bonus ID pair in the API. A fixed offset of about 1580 lines up some of them, but neighbouring offsets fit almost as well, so it proves nothing.
@@ -181,7 +196,7 @@ The [Reddit post](https://www.reddit.com/r/wowaddons/comments/1xofb73/how_to_acc
 
 ## Polling from the server
 
-The server can poll the EU PvP auction houses itself, for both factions, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. `0` or nothing leaves it off. The server does not start when the variable has another value, or when it is `1` and the client ID or secret is missing.
+The server can poll the EU PvP auction houses of both factions and the EU PvE Horde house itself, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. `0` or nothing leaves it off. The server does not start when the variable has another value, or when it is `1` and the client ID or secret is missing.
 
 The houses are built into `crates/goldbook-server/src/auctions.rs`:
 
@@ -189,14 +204,15 @@ The houses are built into `crates/goldbook-server/src/auctions.rs`:
 |---|---|---|
 | EU PvP | Horde | 113 |
 | EU PvP | Alliance | 110 |
+| EU PvE | Horde | 114 |
 
-[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for Horde. 110 for Alliance follows from the ID sets and is not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
+[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for EU PvP Horde and 114 for EU PvE Horde. 110 for EU PvP Alliance follows from the ID sets and is not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
 
-Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP` checks both houses end to end, with the client ID and secret in the environment. It polls them into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs both factions of the shard into a `ServerData.lua`, and restarts the server to show that the same snapshots are not stored twice.
+Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP CAMWOWEU4Realm8PvE` checks every polled house end to end, with the client ID and secret in the environment. It takes one shard of each server house; the shard need not exist, because the server pools it into its house by name. It polls the houses into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs each polled house and faction into a `ServerData.lua` under its shard, and restarts the server to show that the same snapshots are not stored twice.
 
 When it starts, and then at 30 minutes past each hour UTC, the server asks each house for its regular list through ruleset 1, with the time of the newest snapshot it stored as `If-Modified-Since`. When the snapshot is new, it fetches the commodity list too. Both lists carry the same `Last-Modified`; when they differ, because Blizzard published a snapshot between the two requests, the server waits 30 seconds and fetches both again once. It stores both as one full scan, timed at the snapshot's `Last-Modified`, with the scanner `Battle.net`. The scan reaches the website, `/api/export` and the addon's `ServerData.lua` like a player's upload, and a player's scan that is newer keeps its prices. The server logs each stored snapshot and each failure in one line. A house that fails is tried again in the next pass.
 
-Both EU PvP houses publish a few minutes before half past, so the poll at half past stores each snapshot about seven minutes after Blizzard publishes it. A snapshot that Blizzard publishes after half past waits for the next hour's poll. `AUCTION_POLL_MINUTE` in `crates/goldbook-core/src/schedule.rs` sets the minute. When two snapshots of a house fall between two polls, only the newer one is stored.
+The houses have published before half past: from 22 to 25 minutes past on 2026-11-06, and at 12 minutes past on 2026-11-08. The poll at half past stores each snapshot between 5 and 18 minutes after Blizzard publishes it. A snapshot that Blizzard publishes after half past waits for the next hour's poll. `AUCTION_POLL_MINUTE` in `crates/goldbook-core/src/schedule.rs` sets the minute. When two snapshots of a house fall between two polls, only the newer one is stored.
 
 The scans leave out:
 
@@ -208,7 +224,8 @@ The scans leave out:
 ## Open questions
 
 - Confirm that EU4 PvP Alliance is house 110, using an Alliance scan taken within an hour of a snapshot's `Last-Modified`.
-- Find which shards use the sets 111/114/117, 119/120/121 and 123/124/125, and what the empty set 112/115/118 is for.
+- Confirm that EU PvE Alliance is house 111, using an Alliance scan taken within an hour of a snapshot's `Last-Modified`.
+- Find which shards use the sets 119/120/121 and 123/124/125, and what the empty set 112/115/118 is for.
 - Confirm over a day that every house's `Last-Modified` changes once an hour.
 - Find how API bonus IDs map to the addon's suffix IDs.
 - Repeat the run for US. The post reports the same house IDs there with different listings, and our client got 102,292 listings for US house 113.
