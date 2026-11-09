@@ -67,14 +67,11 @@ const SOURCES: [Source; 3] = [
     },
 ];
 
-/// The namespaces of the item API that name an item, tried in order, and the
-/// source each name records. Classic Era sometimes differs from Forever (7062
-/// is COMMON there and UNCOMMON in Forever), so it only names what Forever
-/// does not know.
-const NAME_SOURCES: [(&str, &str); 2] = [
-    ("static-forever-eu", "battlenet-forever"),
-    ("static-classic1x-eu", "battlenet-classic-era"),
-];
+/// The item API's WoW Forever namespace, and the source its names record.
+/// Classic Era's namespace is not asked, because it rates some items a
+/// quality lower than Forever and the players' clients do.
+const NAME_NAMESPACE: &str = "static-forever-eu";
+const NAME_SOURCE: &str = "battlenet-forever";
 /// The item API's quality types in the order of the addon's
 /// `Enum.ItemQuality`, the numbers `items.quality` stores.
 const QUALITIES: [&str; 8] = [
@@ -96,6 +93,9 @@ pub struct AuctionConfig {
     pub token_endpoint: String,
     pub api: String,
     pub retry_pause: Duration,
+    /// How long one pass may spend naming items, so that the next hour's poll
+    /// starts on time. The next pass names the rest.
+    pub naming_budget: Duration,
 }
 impl AuctionConfig {
     pub(crate) fn from_env() -> Result<Option<Self>> {
@@ -126,6 +126,7 @@ impl AuctionConfig {
             token_endpoint: "https://oauth.battle.net/token".into(),
             api: "https://eu.api.blizzard.com".into(),
             retry_pause: Duration::from_secs(30),
+            naming_budget: Duration::from_secs(20 * 60),
         }))
     }
     fn auctions_url(&self, source: &Source, list: &str) -> String {
@@ -135,9 +136,9 @@ impl AuctionConfig {
             source.id
         )
     }
-    fn item_url(&self, namespace: &str, item: &str) -> String {
+    fn item_url(&self, item: &str) -> String {
         format!(
-            "{}/data/wow/item/{item}?namespace={namespace}&locale=en_US",
+            "{}/data/wow/item/{item}?namespace={NAME_NAMESPACE}&locale=en_US",
             self.api.trim_end_matches('/')
         )
     }
@@ -367,46 +368,42 @@ impl Poller {
         }
         self.name_items(&db);
     }
-    /// Names each unnamed item from the first of `NAME_SOURCES` that knows it,
-    /// storing each name as it is found. The first failure ends the pass. The
-    /// next pass looks up whatever is still unnamed, including the items no
-    /// namespace knows.
+    /// Names each unnamed item that Forever's item API knows, storing each
+    /// name as it is found. The first failure ends the pass, and so does
+    /// `naming_budget`. The next pass looks up whatever is still unnamed,
+    /// including the items Forever does not know.
     fn name_items(&mut self, db: &Connection) {
-        let mut named = [0; NAME_SOURCES.len()];
-        let mut nowhere = 0;
+        let deadline = Instant::now() + self.config.naming_budget;
+        let (mut named, mut nowhere, mut left) = (0, 0, 0);
         let outcome = unnamed_items(db).and_then(|items| {
-            'items: for item in items {
-                for (count, (namespace, source)) in named.iter_mut().zip(NAME_SOURCES) {
-                    if let Some((name, quality)) = self.item_name(namespace, &item)? {
-                        // A player's name stored during the lookup stays.
-                        db.execute("INSERT INTO items (item_key,name,quality,source) VALUES (?1,?2,?3,?4) ON CONFLICT(item_key) DO NOTHING", params![item, name, quality, source])?;
-                        *count += 1;
-                        continue 'items;
-                    }
+            for (index, item) in items.iter().enumerate() {
+                if Instant::now() >= deadline {
+                    left = items.len() - index;
+                    break;
                 }
-                nowhere += 1;
+                let Some((name, quality)) = self.item_name(item)? else {
+                    nowhere += 1;
+                    continue;
+                };
+                // A player's name stored during the lookup stays.
+                db.execute("INSERT INTO items (item_key,name,quality,source) VALUES (?1,?2,?3,?4) ON CONFLICT(item_key) DO NOTHING", params![item, name, quality, NAME_SOURCE])?;
+                named += 1;
             }
             Ok(())
         });
         if let Err(error) = outcome {
             eprintln!("battlenet auctions: naming items failed: {error:#}");
         }
-        if named.iter().any(|&count| count > 0) {
-            let counts: Vec<_> = NAME_SOURCES
-                .iter()
-                .zip(named)
-                .map(|((_, source), count)| format!("{count} from {source}"))
-                .collect();
+        if named > 0 || left > 0 {
             eprintln!(
-                "battlenet auctions: named items, {}, {nowhere} found nowhere",
-                counts.join(", ")
+                "battlenet auctions: named {named} items from {NAME_SOURCE}, {nowhere} found nowhere, {left} left for the next pass"
             );
         }
     }
-    /// The item's name and quality in `namespace`; None when the namespace
-    /// does not know the item or its quality.
-    fn item_name(&mut self, namespace: &str, item: &str) -> Result<Option<(String, i64)>> {
-        let url = self.config.item_url(namespace, item);
+    /// The item's name and quality in Forever; None when Forever does not
+    /// know the item or its quality.
+    fn item_name(&mut self, item: &str) -> Result<Option<(String, i64)>> {
+        let url = self.config.item_url(item);
         let response = self.get(&url, None)?;
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);

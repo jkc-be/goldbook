@@ -126,7 +126,10 @@ pub(crate) fn store_scan(db: &mut Connection, scan: &ScanUpload) -> rusqlite::Re
     let inserted = tx.execute("INSERT INTO scans (realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint,house) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,unixepoch(),?9,?10) ON CONFLICT(fingerprint) DO NOTHING",params![scan.realm,scan.faction,scan.region,scan.scanned_at as i64,scan.mode,scan.scanner,scan.build,scan.rows.len() as i64,scan.fingerprint(),house])?;
     let id = tx.last_insert_rowid();
     {
-        let mut items = tx.prepare("INSERT INTO items (item_key,name,quality,source) VALUES (?1,?2,?3,'player') ON CONFLICT(item_key) DO UPDATE SET name=excluded.name,quality=excluded.quality,source='player' WHERE items.name IS NOT excluded.name OR items.quality IS NOT excluded.quality OR items.source<>'player'")?;
+        // The addon keeps the names it imports from ServerData.lua and uploads
+        // them with its scans, so a name that matches the stored one keeps
+        // the stored source.
+        let mut items = tx.prepare("INSERT INTO items (item_key,name,quality,source) VALUES (?1,?2,?3,'player') ON CONFLICT(item_key) DO UPDATE SET name=excluded.name,quality=excluded.quality,source='player' WHERE items.name IS NOT excluded.name OR items.quality IS NOT excluded.quality")?;
         for (key, (name, quality)) in &scan.items {
             items.execute(params![key, name, *quality as i64])?;
         }
