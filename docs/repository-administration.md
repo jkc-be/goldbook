@@ -169,6 +169,10 @@ builds the image only when they pass. It shares the concurrency group
 `goldbook-production` with **Release promote**, so a server-only deploy and a
 promotion never interleave.
 
+`scripts/setup-backups.sh` installs the hourly, encrypted database backup to OVH
+Object Storage. [Releasing](releasing.md#hourly-backups-in-ovh-object-storage)
+describes the bucket, the setup and the restore.
+
 The server retains its Compose files. Review and copy Compose changes separately
 before deploying an image that depends on them. On OVH, deployment and update
 publication use separate locks. Releases go through **Release build** and

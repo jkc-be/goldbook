@@ -92,7 +92,8 @@ run: node_modules ## Start the local server stack and desktop app
 #| Usage: make test
 #| Runs addon, Rust, Python and HTTP/SQLite integration tests with disposable
 #| local databases and loopback servers. Does not open the desktop app.
-#| Needs LuaJIT, Rust, Python 3 and the Docker Compose CLI, but no Docker daemon.
+#| Needs LuaJIT, Rust, Python 3, age, zstd and the Docker Compose CLI, but no
+#| Docker daemon.
 #| Related: make help check
 test: ## Run the full local test suite
 	python3 scripts/test.py
@@ -132,7 +133,8 @@ dev-check: ## Verify the running local server stack
 #| Usage: make check
 #| Runs the full local test suite plus Rust formatting checks and clippy.
 #| This is the suite used by CI and the pre-push hook.
-#| Needs LuaJIT, Rust with rustfmt/clippy, Python 3 and the Docker Compose CLI.
+#| Needs LuaJIT, Rust with rustfmt/clippy, Python 3, age, zstd and the Docker
+#| Compose CLI.
 #| Tests use disposable local databases and loopback servers, not production.
 #| Related: make help test; make help hooks
 check: ## Run tests, Rust formatting checks, and clippy

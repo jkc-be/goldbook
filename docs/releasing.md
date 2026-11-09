@@ -285,6 +285,95 @@ To recover the database:
 Compose file changes are still copied to OVH by hand before a release that
 needs them.
 
+### Hourly backups in OVH Object Storage
+
+The deploy backups stay on the server's disk. To survive the loss of the
+server, the `goldbook-backup` systemd timer also uploads a backup to an OVH
+Object Storage bucket at 5 minutes past every hour. Each backup is a copy made
+through SQLite's backup API that passed `PRAGMA integrity_check`, compressed
+with zstd and encrypted with [age](https://age-encryption.org) to a public key.
+The server never holds the private key, so the bucket's keys and the server
+together cannot read a backup. Backups are named
+`goldbook/goldbook-<UTC stamp>.sqlite.zst.age`.
+
+The bucket is `goldbook-backups-jkc` in Gravelines (`gra`), away from the
+server in Frankfurt. Its lifecycle rules delete old backups, not the server:
+the server's S3 user may upload, list and read, but OVH refuses its deletes.
+A backup is current for 7 days. It then stays as an older version, which can
+still be fetched with any S3 client, for 7 more days. An upload that overwrites a backup
+leaves the original as an older version in the same way.
+
+To set up a new bucket:
+
+1. In the OVH Public Cloud project, create a bucket with versioning in another
+   region than the server.
+2. Add a lifecycle rule that expires current versions after 7 days and
+   noncurrent versions 7 days after they become noncurrent, and a second rule
+   that deletes expired delete markers.
+3. Import this policy for a new S3 user before you enable its S3 keys, so the
+   keys never reach the project's other buckets:
+
+   ```json
+   {
+     "Statement": [{
+       "Sid": "GoldbookBackups",
+       "Effect": "Allow",
+       "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+       "Resource": ["arn:aws:s3:::goldbook-backups-jkc", "arn:aws:s3:::goldbook-backups-jkc/*"]
+     }]
+   }
+   ```
+
+4. On your own computer, create the age key pair and keep a copy of the private
+   key somewhere other than the server, such as a password manager. Without it,
+   no backup can be opened. Keep it out of `~/.config/goldbook`, which
+   `make reset-local` deletes.
+
+   ```sh
+   age-keygen -o ~/.config/age/goldbook-backup.key
+   ```
+
+5. Run the setup. It asks for the bucket, the S3 user's keys and the age
+   public key (`age1...`) that `age-keygen` printed, installs the timer and
+   runs the first backup.
+
+   ```sh
+   bash scripts/setup-backups.sh fedora_ovh
+   ```
+
+Rerun the setup after a change to `scripts/backup-ovh.py`. It keeps the
+settings in `/opt/goldbook/backup.env`; delete that file first to change the
+bucket, the keys or the age key.
+
+To check that backups run, list them. The last line is the newest:
+
+```sh
+ssh fedora_ovh python3 /opt/goldbook/backup-ovh.py list | tail -n 3
+ssh fedora_ovh systemctl status goldbook-backup.service
+```
+
+To restore from the bucket, fetch a backup, open it on your own computer and
+follow the recovery steps above with the opened file. `fetch` takes the newest
+backup unless `--key` names one.
+
+```sh
+ssh fedora_ovh python3 /opt/goldbook/backup-ovh.py fetch /tmp/goldbook.sqlite.zst.age
+scp fedora_ovh:/tmp/goldbook.sqlite.zst.age .
+python3 scripts/backup-ovh.py open --identity ~/.config/age/goldbook-backup.key \
+  goldbook.sqlite.zst.age goldbook.sqlite
+```
+
+`open` needs age and zstd, and refuses to overwrite a file. It prints the
+number of tables and fails when the database fails its integrity check.
+
+When the server is gone, fetch on your own computer instead. Write a file with
+the same six settings as `/opt/goldbook/backup.env`, taking the keys from the
+S3 user in the OVH console, and pass it before the command:
+
+```sh
+python3 scripts/backup-ovh.py --config backup.env fetch goldbook.sqlite.zst.age
+```
+
 ## Version numbers
 
 You choose the version in the release PR. A release with only fixes bumps the
