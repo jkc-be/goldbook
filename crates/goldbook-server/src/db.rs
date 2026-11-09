@@ -6,7 +6,7 @@ use rusqlite::{
 use serde_json::Value;
 use std::{path::Path, time::Duration};
 
-const MIGRATIONS: [(&str, &str); 16] = [
+const MIGRATIONS: [(&str, &str); 17] = [
     (
         "0001_init.sql",
         include_str!("../../../server/migrations/0001_init.sql"),
@@ -71,6 +71,10 @@ const MIGRATIONS: [(&str, &str); 16] = [
         "0016_auction_houses.sql",
         include_str!("../../../server/migrations/0016_auction_houses.sql"),
     ),
+    (
+        "0017_item_sources.sql",
+        include_str!("../../../server/migrations/0017_item_sources.sql"),
+    ),
 ];
 
 pub fn connect(path: &Path) -> anyhow::Result<Connection> {
@@ -122,7 +126,7 @@ pub(crate) fn store_scan(db: &mut Connection, scan: &ScanUpload) -> rusqlite::Re
     let inserted = tx.execute("INSERT INTO scans (realm,faction,region,scanned_at,mode,scanner,build,item_count,uploaded_at,fingerprint,house) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,unixepoch(),?9,?10) ON CONFLICT(fingerprint) DO NOTHING",params![scan.realm,scan.faction,scan.region,scan.scanned_at as i64,scan.mode,scan.scanner,scan.build,scan.rows.len() as i64,scan.fingerprint(),house])?;
     let id = tx.last_insert_rowid();
     {
-        let mut items = tx.prepare("INSERT INTO items (item_key,name,quality) VALUES (?1,?2,?3) ON CONFLICT(item_key) DO UPDATE SET name=excluded.name,quality=excluded.quality WHERE items.name IS NOT excluded.name OR items.quality IS NOT excluded.quality")?;
+        let mut items = tx.prepare("INSERT INTO items (item_key,name,quality,source) VALUES (?1,?2,?3,'player') ON CONFLICT(item_key) DO UPDATE SET name=excluded.name,quality=excluded.quality,source='player' WHERE items.name IS NOT excluded.name OR items.quality IS NOT excluded.quality OR items.source<>'player'")?;
         for (key, (name, quality)) in &scan.items {
             items.execute(params![key, name, *quality as i64])?;
         }
@@ -179,4 +183,36 @@ pub fn query(
         Ok(Value::Object(out))
     })?
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_stored_before_item_sources_stay_players_names() {
+        let mut db = connect(Path::new(":memory:")).unwrap();
+        db.execute_batch(
+            "CREATE TABLE migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)",
+        )
+        .unwrap();
+        for (name, sql) in &MIGRATIONS[..16] {
+            db.execute_batch(sql).unwrap();
+            db.execute("INSERT INTO migrations VALUES (?1, 0)", [name])
+                .unwrap();
+        }
+        db.execute(
+            "INSERT INTO items (item_key,name,quality) VALUES (?1,?2,?3)",
+            params!["2589", "Linen Cloth", 1],
+        )
+        .unwrap();
+
+        migrate(&mut db).unwrap();
+        assert_eq!(
+            query(&db, "SELECT * FROM items", &[]).unwrap(),
+            [
+                serde_json::json!({"item_key":"2589","name":"Linen Cloth","quality":1,"source":"player"})
+            ]
+        );
+    }
 }

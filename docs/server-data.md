@@ -52,7 +52,7 @@ The fields mean the following:
 - `realm` and `faction` are the ones asked for, also when the answer comes from a pooled auction house. The app does not read these fields.
 - `scannedAt` is the time of the auction house's newest scan, in unix seconds. Both history windows end at this scan, not at the time of the request.
 - `items` maps each item key to the item's data, sorted by key. An item key is the addon's key from `Codec.ItemKey`: the item ID, or `itemID:suffix` for an item with a random suffix.
-- `name` and `quality` come from the server's item names. Both are `null` when no upload named the item.
+- `name` and `quality` come from the server's item names. Both are `null` when neither an upload nor Battle.net named the item.
 - `price` is `[min, qty, n, seen, mv, mvAt]`. `min`, `qty` and `n` are the lowest buyout, the quantity and the auction count of the item's newest row, and `seen` is that row's scan time. `n` is 0 when that row came from a quick scan. `mv` is the market value of the newest row whose market value is above 0, and `mvAt` is that row's scan time. Both are 0 when no full scan in the window measured the item.
 - `hours` holds one `[hour, min, qty, mv]` entry per unix hour (`floor(time / 3600)`) in which a scan saw the item, oldest first. It covers the 168 hours that end with the hour of `scannedAt`.
 - `days` holds one `[day, min, qty, mv]` entry per UTC day number (`floor(time / 86400)`) in which a scan saw the item, oldest first. It covers the day of `scannedAt` and the 60 days before it, the same window as `KEPT_DAYS` in `Database.lua`. `days` overlaps `hours`, so that the addon can merge daily history without adding up hours.

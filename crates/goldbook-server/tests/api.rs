@@ -2743,6 +2743,13 @@ struct Blizzard {
     stale_commodities: usize,
     // The If-Modified-Since and Accept-Encoding of each request for house 113.
     asked: Vec<(Option<String>, String)>,
+    // The item API's namespace, item ID, name and quality type of each item it
+    // knows, and the namespace and item ID of each request it got.
+    items: Vec<(&'static str, &'static str, &'static str, &'static str)>,
+    looked_up: Vec<(String, String)>,
+    // The item ID whose lookups fail, and what runs during the next lookup.
+    failing: Option<&'static str>,
+    meanwhile: Option<Box<dyn FnOnce() + Send>>,
 }
 fn first_snapshot() -> Snapshot {
     Snapshot {
@@ -2807,6 +2814,28 @@ async fn blizzard(
     if header("authorization") != Some(format!("Bearer token-{}", state.revision)) {
         return axum::http::StatusCode::UNAUTHORIZED.into_response();
     }
+    if let Some(item) = parts.uri.path().strip_prefix("/data/wow/item/") {
+        let query = parts.uri.query().unwrap_or_default();
+        let namespace = query
+            .strip_suffix("&locale=en_US")
+            .and_then(|query| query.strip_prefix("namespace="))
+            .unwrap_or_default();
+        assert!(
+            matches!(namespace, "static-forever-eu" | "static-classic1x-eu"),
+            "{query}"
+        );
+        state.looked_up.push((namespace.into(), item.into()));
+        if let Some(meanwhile) = state.meanwhile.take() {
+            meanwhile();
+        }
+        if state.failing == Some(item) {
+            return axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        return match state.items.iter().find(|known| (known.0, known.1) == (namespace, item)) {
+            Some((_, id, name, quality)) => axum::Json(json!({"_links":{},"id":id.parse::<u64>().unwrap(),"name":name,"quality":{"type":quality}})).into_response(),
+            None => axum::http::StatusCode::NOT_FOUND.into_response(),
+        };
+    }
     assert_eq!(parts.uri.query(), Some("namespace=dynamic-forever-eu"));
     let (list, modified) = match parts.uri.path() {
         "/data/wow/ruleset/1/auctions/113" => {
@@ -2850,6 +2879,10 @@ async fn battlenet_poller(f: &Fixture) -> (Poller, Arc<Mutex<Blizzard>>) {
         honors_since: true,
         stale_commodities: 0,
         asked: vec![],
+        items: vec![],
+        looked_up: vec![],
+        failing: None,
+        meanwhile: None,
     }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -2895,6 +2928,27 @@ async fn horde_export(f: &Fixture) -> Value {
 }
 async fn stored_scans(f: &Fixture) -> Value {
     call(&f.app, "GET", "/api/realms", Value::Null, &[]).await.2["realms"].clone()
+}
+// Each item of the EU PvP Horde export as its name, its quality and where the
+// server got the name.
+async fn horde_names(f: &Fixture) -> Value {
+    use rusqlite::OptionalExtension;
+    let db = db::connect(&f.database()).unwrap();
+    let export = horde_export(f).await;
+    let names = export["items"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(key, item)| {
+            let source: Option<String> = db
+                .query_row("SELECT source FROM items WHERE item_key=?1", [key], |row| {
+                    row.get(0)
+                })
+                .optional()
+                .unwrap();
+            (key.clone(), json!([item["name"], item["quality"], source]))
+        });
+    Value::Object(names.collect())
 }
 
 #[tokio::test]
@@ -3315,5 +3369,192 @@ async fn books_stored_before_a_failed_scan_are_not_stored_twice() {
         json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":1,"lastScan":1793956642}])
     );
     assert_eq!(horde_book(&f, "4537").await, book);
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn battlenet_names_the_items_no_player_named() {
+    let f = Fixture::new().await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
+    blizzard.lock().unwrap().items = vec![
+        ("static-forever-eu", "2589", "Linen Cloth", "COMMON"),
+        // Classic Era rates some items differently, as it does 7062.
+        ("static-classic1x-eu", "2589", "Linen Cloth", "POOR"),
+        ("static-classic1x-eu", "4537", "Tel'Abim Banana", "COMMON"),
+    ];
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await,
+        json!({
+            "2589":["Linen Cloth",1,"battlenet-forever"],
+            "4537":["Tel'Abim Banana",1,"battlenet-classic-era"],
+            "15477":[null,null,null]
+        })
+    );
+
+    blizzard
+        .lock()
+        .unwrap()
+        .items
+        .push(("static-forever-eu", "15477", "Bandit Cinch", "UNCOMMON"));
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await["15477"],
+        json!(["Bandit Cinch", 2, "battlenet-forever"]),
+        "an item no namespace knew is looked up again on the next pass"
+    );
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn a_players_item_names_win_over_battlenets() {
+    let f = Fixture::new().await;
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm8PvP",
+            1793950000,
+            "browse",
+            json!([["2589", 95, 0, 7, 0], ["15477:584", 650, 0, 1, 0]]),
+            json!({"2589":["Linen Cloth",1]}),
+        ),
+    )
+    .await;
+    upload(
+        &f,
+        forever_scan(
+            "Faramon",
+            1793950000,
+            "browse",
+            json!([["7070", 300, 0, 5, 0]]),
+            json!({}),
+        ),
+    )
+    .await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
+    blizzard.lock().unwrap().items = vec![
+        ("static-forever-eu", "2589", "Linen Cloth", "POOR"),
+        ("static-forever-eu", "4537", "Tel'Abim Banana", "COMMON"),
+        ("static-forever-eu", "15477", "Bandit Cinch", "WOW_TOKEN"),
+        ("static-classic1x-eu", "15477", "Bandit Cinch", "UNCOMMON"),
+    ];
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await,
+        json!({
+            "2589":["Linen Cloth",1,"player"],
+            "4537":["Tel'Abim Banana",1,"battlenet-forever"],
+            "15477":["Bandit Cinch",2,"battlenet-classic-era"],
+            "15477:584":[null,null,null]
+        })
+    );
+    let requested = [
+        ("static-forever-eu".to_owned(), "15477".to_owned()),
+        ("static-classic1x-eu".to_owned(), "15477".to_owned()),
+        ("static-forever-eu".to_owned(), "4537".to_owned()),
+    ];
+    assert_eq!(blizzard.lock().unwrap().looked_up, requested);
+
+    upload(
+        &f,
+        forever_scan(
+            "CAMWOWEU4Realm8PvP",
+            1793960000,
+            "browse",
+            json!([["4537", 44, 0, 10, 0], ["15477", 480, 0, 1, 0]]),
+            json!({"4537":["Tel'Abim-Banane",1],"15477":["Bandit Cinch",2]}),
+        ),
+    )
+    .await;
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await,
+        json!({
+            "2589":["Linen Cloth",1,"player"],
+            "4537":["Tel'Abim-Banane",1,"player"],
+            "15477":["Bandit Cinch",2,"player"],
+            "15477:584":[null,null,null]
+        })
+    );
+    assert_eq!(
+        blizzard.lock().unwrap().looked_up,
+        requested,
+        "named items are not looked up again"
+    );
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn a_failed_lookup_ends_the_pass_and_the_next_pass_goes_on() {
+    let f = Fixture::new().await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
+    {
+        let mut blizzard = blizzard.lock().unwrap();
+        blizzard.items = vec![
+            ("static-forever-eu", "2589", "Linen Cloth", "COMMON"),
+            ("static-classic1x-eu", "4537", "Tel'Abim Banana", "COMMON"),
+        ];
+        blizzard.failing = Some("4537");
+    }
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await,
+        json!({
+            "2589":["Linen Cloth",1,"battlenet-forever"],
+            "4537":[null,null,null],
+            "15477":[null,null,null]
+        })
+    );
+    assert_eq!(
+        blizzard.lock().unwrap().looked_up,
+        [
+            ("static-forever-eu".to_owned(), "15477".to_owned()),
+            ("static-classic1x-eu".to_owned(), "15477".to_owned()),
+            ("static-forever-eu".to_owned(), "2589".to_owned()),
+            ("static-forever-eu".to_owned(), "4537".to_owned()),
+        ]
+    );
+
+    blizzard.lock().unwrap().failing = None;
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await,
+        json!({
+            "2589":["Linen Cloth",1,"battlenet-forever"],
+            "4537":["Tel'Abim Banana",1,"battlenet-classic-era"],
+            "15477":[null,null,null]
+        })
+    );
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn a_name_a_player_stores_during_the_lookup_stays() {
+    let f = Fixture::new().await;
+    let (poller, blizzard) = battlenet_poller(&f).await;
+    let database = f.database();
+    {
+        let mut blizzard = blizzard.lock().unwrap();
+        blizzard.items = vec![("static-forever-eu", "4537", "Tel'Abim Banana", "COMMON")];
+        // An upload's name for 4537 lands after the pass chose to look it up.
+        blizzard.meanwhile = Some(Box::new(move || {
+            db::connect(&database).unwrap().execute("INSERT INTO items (item_key,name,quality,source) VALUES ('4537','Tel''Abim-Banane',1,'player')", []).unwrap();
+        }));
+    }
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_names(&f).await["4537"],
+        json!(["Tel'Abim-Banane", 1, "player"])
+    );
+    assert_eq!(
+        blizzard.lock().unwrap().looked_up,
+        [
+            ("static-forever-eu".to_owned(), "15477".to_owned()),
+            ("static-classic1x-eu".to_owned(), "15477".to_owned()),
+            ("static-forever-eu".to_owned(), "2589".to_owned()),
+            ("static-classic1x-eu".to_owned(), "2589".to_owned()),
+            ("static-forever-eu".to_owned(), "4537".to_owned()),
+        ]
+    );
     stop(poller).await;
 }

@@ -219,7 +219,10 @@ The scans and order books leave out:
 - Listings with `bonus_lists`, because the API's bonus IDs do not map to the addon's item keys. See [Item variants](#item-variants).
 - Listings without a buyout, as the in-game scanner does.
 - Blackwater houses, because a server house has only Alliance and Horde.
-- Item names. An item that no player has scanned has no name until one does.
+
+After each pass over the houses, the server names the items that a polled house prices and that have no name yet. It asks the item API, `/data/wow/item/{id}` with `locale=en_US`, in the `static-forever-eu` namespace first. The answer's `quality.type`, `POOR` to `HEIRLOOM`, becomes the addon's quality number. Only when Forever answers 404, or a quality type outside that range, does the server ask Classic Era, `static-classic1x-eu`, because Classic Era rates some items differently: 7062 is Common there and Uncommon in Forever. Only plain item IDs are named, so a variant keyed `itemID:suffix` waits for a player. An item that neither namespace knows stays unnamed and is asked for again in the next pass. The first failed request ends the naming for that hour, and the names stored before it stay.
+
+A player's name always wins. The server never replaces a stored name with Battle.net's, and a player's upload replaces a name from Battle.net. The `source` column of `items` records where each name came from: `player`, `battlenet-forever` or `battlenet-classic-era`. On 2026-11-09, Forever named 279 of the 445 unnamed item IDs in production and Classic Era 135 more. The other 31, Forever items from 277064 up, are in neither.
 
 ## Open questions
 
