@@ -36,8 +36,8 @@ Run the full automated suite without an OVH connection or production database:
 make test
 ```
 
-Install Rust 1.99.1, Python 3.11 or newer, LuaJIT, curl and the Docker Compose
-CLI first. The suite needs neither Node.js nor a running Docker daemon. `npm test` runs the same command. `make check`
+Install Rust 1.99.1, Python 3.11 or newer, LuaJIT, age, zstd, curl and the
+Docker Compose CLI first. The suite needs neither Node.js nor a running Docker daemon. `npm test` runs the same command. `make check`
 also runs Rust formatting and clippy checks, and runs in the Check workflow on
 pull requests and pushes to main. Installer builds remain manual.
 
@@ -153,7 +153,8 @@ This runs everything on your own machine. Nothing leaves it until you
 - Rust 1.99.1, installed through [rustup](https://rustup.rs).
 - For the desktop app, Node.js 22.18 or newer and the
   [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/).
-- For verification, LuaJIT, Python 3.11 or newer, curl and the Docker Compose CLI.
+- For verification, LuaJIT, Python 3.11 or newer, age, zstd, curl and the
+  Docker Compose CLI.
 - A terminal opened in this folder.
 
 ### 1. Install the tools
