@@ -1,6 +1,7 @@
 //! Auction snapshots of WoW Forever houses from the Battle.net Game Data API,
 //! stored as full scans and order books so that they reach clients like a
-//! player's upload.
+//! player's upload, and names from its item API for the items they price that
+//! no player has named.
 //!
 //! `GOLDBOOK_BATTLENET_AUCTIONS=1` switches polling on; unset, nothing here
 //! runs. docs/ah-api/README.md records what the API returns.
@@ -19,7 +20,7 @@ use reqwest::{
 use rusqlite::{Connection, TransactionBehavior, params};
 use serde::Deserialize;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     io::Read,
     path::PathBuf,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -66,6 +67,24 @@ const SOURCES: [Source; 3] = [
     },
 ];
 
+/// The item API's WoW Forever namespace, and the source its names record.
+/// Classic Era's namespace is not asked, because it rates some items a
+/// quality lower than Forever and the players' clients do.
+const NAME_NAMESPACE: &str = "static-forever-eu";
+const NAME_SOURCE: &str = "battlenet-forever";
+/// The item API's quality types in the order of the addon's
+/// `Enum.ItemQuality`, the numbers `items.quality` stores.
+const QUALITIES: [&str; 8] = [
+    "POOR",
+    "COMMON",
+    "UNCOMMON",
+    "RARE",
+    "EPIC",
+    "LEGENDARY",
+    "ARTIFACT",
+    "HEIRLOOM",
+];
+
 #[derive(Clone, Debug)]
 pub struct AuctionConfig {
     client_id: String,
@@ -74,6 +93,9 @@ pub struct AuctionConfig {
     pub token_endpoint: String,
     pub api: String,
     pub retry_pause: Duration,
+    /// How long one pass may spend naming items, so that the next hour's poll
+    /// starts on time. The next pass names the rest.
+    pub naming_budget: Duration,
 }
 impl AuctionConfig {
     pub(crate) fn from_env() -> Result<Option<Self>> {
@@ -104,6 +126,7 @@ impl AuctionConfig {
             token_endpoint: "https://oauth.battle.net/token".into(),
             api: "https://eu.api.blizzard.com".into(),
             retry_pause: Duration::from_secs(30),
+            naming_budget: Duration::from_secs(20 * 60),
         }))
     }
     fn auctions_url(&self, source: &Source, list: &str) -> String {
@@ -111,6 +134,12 @@ impl AuctionConfig {
             "{}/data/wow/ruleset/{RULESET}/auctions/{}{list}?namespace={NAMESPACE}",
             self.api.trim_end_matches('/'),
             source.id
+        )
+    }
+    fn item_url(&self, item: &str) -> String {
+        format!(
+            "{}/data/wow/item/{item}?namespace={NAME_NAMESPACE}&locale=en_US",
+            self.api.trim_end_matches('/')
         )
     }
 }
@@ -138,6 +167,15 @@ struct CommodityListing {
     item: Item,
     quantity: u64,
     unit_price: u64,
+}
+#[derive(Deserialize)]
+struct NamedItem {
+    name: String,
+    quality: Quality,
+}
+#[derive(Deserialize)]
+struct Quality {
+    r#type: String,
 }
 
 /// A house's two lists as buyout listings by plain item ID. The API's bonus
@@ -253,13 +291,28 @@ fn store_books(db: &mut Connection, books: &[SellerSnapshot]) -> Result<()> {
     Ok(())
 }
 
+/// The plain item IDs priced in a polled house that have no name.
+fn unnamed_items(db: &Connection) -> Result<BTreeSet<String>> {
+    let mut select = db.prepare("SELECT item_key FROM latest_prices WHERE house=?1 AND faction=?2 AND item_key NOT GLOB '*[^0-9]*' AND item_key NOT IN (SELECT item_key FROM items)")?;
+    let mut items = BTreeSet::new();
+    for source in &SOURCES {
+        for item in select.query_map(params![House::of(source.house), source.faction], |row| {
+            row.get(0)
+        })? {
+            items.insert(item?);
+        }
+    }
+    Ok(items)
+}
+
 struct Token {
     value: String,
     refresh_at: Instant,
 }
 
-/// Polls every house in `SOURCES` once per `poll_once`, and stores each new
-/// snapshot as a full scan and an order book per item.
+/// Polls every house in `SOURCES` once per `poll_once`, stores each new
+/// snapshot as a full scan and an order book per item, and then names the
+/// items they price that have no name.
 pub struct Poller {
     config: AuctionConfig,
     database: PathBuf,
@@ -313,6 +366,53 @@ impl Poller {
                 Err(error) => eprintln!("battlenet auctions: {source} failed: {error:#}"),
             }
         }
+        self.name_items(&db);
+    }
+    /// Names each unnamed item that Forever's item API knows, storing each
+    /// name as it is found. The first failure ends the pass, and so does
+    /// `naming_budget`. The next pass looks up whatever is still unnamed,
+    /// including the items Forever does not know.
+    fn name_items(&mut self, db: &Connection) {
+        let deadline = Instant::now() + self.config.naming_budget;
+        let (mut named, mut nowhere, mut left) = (0, 0, 0);
+        let outcome = unnamed_items(db).and_then(|items| {
+            for (index, item) in items.iter().enumerate() {
+                if Instant::now() >= deadline {
+                    left = items.len() - index;
+                    break;
+                }
+                let Some((name, quality)) = self.item_name(item)? else {
+                    nowhere += 1;
+                    continue;
+                };
+                // A player's name stored during the lookup stays.
+                db.execute("INSERT INTO items (item_key,name,quality,source) VALUES (?1,?2,?3,?4) ON CONFLICT(item_key) DO NOTHING", params![item, name, quality, NAME_SOURCE])?;
+                named += 1;
+            }
+            Ok(())
+        });
+        if let Err(error) = outcome {
+            eprintln!("battlenet auctions: naming items failed: {error:#}");
+        }
+        if named > 0 || left > 0 {
+            eprintln!(
+                "battlenet auctions: named {named} items from {NAME_SOURCE}, {nowhere} found nowhere, {left} left for the next pass"
+            );
+        }
+    }
+    /// The item's name and quality in Forever; None when Forever does not
+    /// know the item or its quality.
+    fn item_name(&mut self, item: &str) -> Result<Option<(String, i64)>> {
+        let url = self.config.item_url(item);
+        let response = self.get(&url, None)?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let found: NamedItem = json(response, &url)?;
+        Ok(QUALITIES
+            .iter()
+            .position(|quality| *quality == found.quality.r#type)
+            .map(|quality| (found.name, quality as i64)))
     }
     fn poll(&mut self, db: &mut Connection, source: &Source) -> Result<Option<(u64, usize)>> {
         let stored: Option<i64> = db.query_row(
