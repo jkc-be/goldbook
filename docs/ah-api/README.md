@@ -219,7 +219,10 @@ The scans and order books leave out:
 - Listings with `bonus_lists`, because the API's bonus IDs do not map to the addon's item keys. See [Item variants](#item-variants).
 - Listings without a buyout, as the in-game scanner does.
 - Blackwater houses, because a server house has only Alliance and Horde.
-- Item names. An item that no player has scanned has no name until one does.
+
+After each pass over the houses, the server names the items that a polled house prices and that have no name yet. It asks the item API of WoW Forever, `/data/wow/item/{id}` in the `static-forever-eu` namespace with `locale=en_US`, and turns the answer's `quality.type`, `POOR` to `HEIRLOOM`, into the addon's quality number. Classic Era's namespace, `static-classic1x-eu`, is not used, because in a live run it rated 15 of 878 items one quality lower than Forever, while Forever matched the players' names of all 2,778 items that both knew. An item that Forever answers 404 for, or with another quality type, stays unnamed and is asked for again in the next pass. Only plain item IDs are named, so a variant keyed `itemID:suffix` waits for a player. The server stores each name as it finds it. The first failed request ends the naming for that pass, and so do 20 minutes of naming, so that the next hour's poll starts on time. The next pass goes on with the items that are still unnamed, and the log line of each pass that named something or ran out of time counts the items it named, found nowhere and left for the next pass.
+
+A player's name wins. The server never replaces a stored name with Battle.net's, and a player's upload replaces a name from Battle.net when its name or quality differs. An upload with the same name and quality keeps the stored source, because the addon keeps the names it imports from `ServerData.lua` and uploads them with its scans. The `source` column of `items` records where each name came from: `player` or `battlenet-forever`. On 2026-11-09, Forever named 279 of the 445 unnamed item IDs in production. The other 166 stay unnamed until a player scans them.
 
 ## Open questions
 
