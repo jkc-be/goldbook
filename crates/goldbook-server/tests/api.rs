@@ -3185,3 +3185,135 @@ async fn a_players_newer_scan_keeps_its_prices_over_an_older_snapshot() {
     );
     stop(poller).await;
 }
+
+// What the website's Order book panel reads for an item of the EU PvP Horde
+// house: the shown book's time, its levels as [unit price, units, cumulative
+// units, cumulative cost], and the time of every book in its history. Null
+// when the item has no book.
+async fn horde_book(f: &Fixture, item: &str) -> Value {
+    let (status, _, body) = call(
+        &f.app,
+        "GET",
+        &format!("/api/sellers?realm=CAMWOWEU4Realm8PvP&faction=Horde&itemKey={item}&history=1"),
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let Some(levels) = body["snapshot"]["orderBook"].as_array() else {
+        return body["snapshot"].clone();
+    };
+    json!({
+        "scannedAt": body["snapshot"]["scannedAt"],
+        "orderBook": levels
+            .iter()
+            .map(|level| json!([level["unitPrice"], level["quantity"], level["cumulativeQuantity"], level["cumulativeCost"]]))
+            .collect::<Vec<_>>(),
+        "history": body["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["scannedAt"].clone())
+            .collect::<Vec<_>>(),
+    })
+}
+
+#[tokio::test]
+async fn battlenet_snapshots_replace_their_items_order_books_and_keep_players() {
+    let f = Fixture::new().await;
+    // The fake serves only house 113, so this stands in for a book that a
+    // poll of the Alliance house stored.
+    db::connect(&f.database()).unwrap().execute_batch(r#"INSERT INTO seller_snapshots (fingerprint,realm,faction,item_key,scanned_at,payload,house) VALUES ('alliance','EU PvP','Alliance','4537',1793950000,'{"realm":"EU PvP","faction":"Alliance","itemKey":"4537","scannedAt":1793950000,"offers":[{"unitPrice":60,"quantity":1,"owners":[],"totalOwners":0}]}','EU PvP')"#).unwrap();
+    let (poller, blizzard) = battlenet_poller(&f).await;
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_book(&f, "4537").await,
+        json!({"scannedAt":1793956642,"orderBook":[[45,5,5,225],[50,20,25,1225],[80,100,125,9225]],"history":[1793956642]})
+    );
+    assert_eq!(
+        horde_book(&f, "2589").await,
+        json!({"scannedAt":1793956642,"orderBook":[[100,1,1,100],[101,1,2,201],[120,1,3,321],[400,1,4,721]],"history":[1793956642]})
+    );
+    assert_eq!(
+        horde_book(&f, "15477").await,
+        json!({"scannedAt":1793956642,"orderBook":[[500,1,1,500]],"history":[1793956642]}),
+        "the listing with bonus_lists is not in the book"
+    );
+    assert_eq!(
+        horde_book(&f, "9999").await,
+        Value::Null,
+        "a bid without a buyout is no book"
+    );
+
+    blizzard.lock().unwrap().snapshot = second_snapshot();
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_book(&f, "4537").await,
+        json!({"scannedAt":1793960242,"orderBook":[[44,10,10,440]],"history":[1793960242]})
+    );
+    assert_eq!(
+        horde_book(&f, "15477").await,
+        json!({"scannedAt":1793956642,"orderBook":[[500,1,1,500]],"history":[1793956642]}),
+        "an item gone from the snapshot keeps its last book"
+    );
+
+    let book = json!({"realm":"CAMWOWEU4Realm8PvP","faction":"Horde","itemKey":"4537","scannedAt":1793961000,
+        "offers":[{"unitPrice":43,"quantity":2,"owners":["Feretuse"],"totalOwners":1}]});
+    assert_eq!(
+        call(&f.app, "POST", "/api/sellers", book, &f.auth())
+            .await
+            .2,
+        json!({"stored":true})
+    );
+    assert_eq!(
+        horde_book(&f, "4537").await,
+        json!({"scannedAt":1793961000,"orderBook":[[43,2,2,86]],"history":[1793961000,1793960242]})
+    );
+
+    blizzard.lock().unwrap().snapshot = Snapshot {
+        modified: "Fri, 6 Nov 2026 11:17:22 GMT",
+        since: "Fri, 06 Nov 2026 11:17:22 GMT",
+        ..second_snapshot()
+    };
+    let poller = poll(poller).await;
+    assert_eq!(
+        horde_book(&f, "4537").await,
+        json!({"scannedAt":1793963842,"orderBook":[[44,10,10,440]],"history":[1793963842,1793961000]}),
+        "the player's book stays"
+    );
+    let (_, _, alliance) = call(
+        &f.app,
+        "GET",
+        "/api/sellers?realm=CAMWOWEU4Realm8PvP&faction=Alliance&itemKey=4537",
+        Value::Null,
+        &[],
+    )
+    .await;
+    assert_eq!(
+        alliance["snapshot"]["orderBook"],
+        json!([{"unitPrice":60,"quantity":1,"cumulativeQuantity":1,"cumulativeCost":60,"owners":[],"hasUnnamedOwners":true}]),
+        "the other faction's polled book stays"
+    );
+    stop(poller).await;
+}
+
+#[tokio::test]
+async fn books_stored_before_a_failed_scan_are_not_stored_twice() {
+    let f = Fixture::new().await;
+    let db = db::connect(&f.database()).unwrap();
+    db.execute_batch("CREATE TRIGGER reject_scan BEFORE INSERT ON scans BEGIN SELECT RAISE(ABORT,'test failure'); END;").unwrap();
+    let (poller, _blizzard) = battlenet_poller(&f).await;
+    let poller = poll(poller).await;
+    assert_eq!(stored_scans(&f).await, json!([]));
+    let book = json!({"scannedAt":1793956642,"orderBook":[[45,5,5,225],[50,20,25,1225],[80,100,125,9225]],"history":[1793956642]});
+    assert_eq!(horde_book(&f, "4537").await, book);
+
+    db.execute_batch("DROP TRIGGER reject_scan").unwrap();
+    let poller = poll(poller).await;
+    assert_eq!(
+        stored_scans(&f).await,
+        json!([{"realm":"EU PvP","faction":"Horde","region":"EU","scans":1,"lastScan":1793956642}])
+    );
+    assert_eq!(horde_book(&f, "4537").await, book);
+    stop(poller).await;
+}
