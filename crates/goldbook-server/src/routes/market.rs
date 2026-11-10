@@ -127,10 +127,7 @@ pub(super) fn prices(input: &Input, db: &Connection) -> Result<Reply> {
         .map(String::as_str)
         .unwrap_or("name")
     {
-        "name" => (
-            "COALESCE(i.name,p.item_key) COLLATE NOCASE".to_owned(),
-            NAMED,
-        ),
+        "name" => ("i.name COLLATE NOCASE".to_owned(), NAMED),
         "min" => ("p.min_buyout".to_owned(), ""),
         "market" => (format!("NULLIF({MARKET},0)"), MARKET_JOIN),
         "quantity" => ("p.quantity".to_owned(), ""),
