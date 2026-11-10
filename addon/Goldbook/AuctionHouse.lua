@@ -232,8 +232,11 @@ function House.More()
   end
 end
 
+-- What the bags hold to sell. A commodity is one row with all its stacks, as
+-- one post takes from every stack and each post pays its own deposit; its
+-- location is its first stack.
 function House.Bags()
-  local rows = {}
+  local rows, commodities = {}, {}
   if not House.open or not ItemLocation or not AH.IsSellItemValid then return rows end
   for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4 do
     for slot = 1, C_Container.GetContainerNumSlots(bag) do
@@ -243,10 +246,17 @@ function House.Bags()
         local status = AH.GetItemCommodityStatus(location)
         if AH.IsSellItemValid(location, false) and (status == Enum.ItemCommodityStatus.Item or status == Enum.ItemCommodityStatus.Commodity) then
           local key = AH.GetItemKeyFromItem(location)
-          local name, icon, _, quality = describe(key, info.hyperlink)
-          rows[#rows + 1] = { bag = bag, slot = slot, location = location, itemKey = key,
-            name = name, link = info.hyperlink, icon = info.iconFileID or icon, quality = info.quality or quality, quantity = info.stackCount,
-            commodity = status == Enum.ItemCommodityStatus.Commodity }
+          local commodity = status == Enum.ItemCommodityStatus.Commodity
+          local held = commodity and commodities[key.itemID]
+          if held then
+            held.quantity, held.stacks = held.quantity + info.stackCount, held.stacks + 1
+          else
+            local name, icon, _, quality = describe(key, info.hyperlink)
+            rows[#rows + 1] = { bag = bag, slot = slot, location = location, itemKey = key,
+              name = name, link = info.hyperlink, icon = info.iconFileID or icon, quality = info.quality or quality, quantity = info.stackCount,
+              stacks = 1, commodity = commodity }
+            if commodity then commodities[key.itemID] = rows[#rows] end
+          end
         end
       end
     end
@@ -284,7 +294,7 @@ function House.SetMode(mode)
     return send("owned", function() AH.QueryOwnedAuctions({}) end, "Loading your auctions...")
   elseif mode == "sell" then
     House.rows = House.Bags()
-    notify("Select a bag stack. Each post uses at most that stack's quantity.")
+    notify("Select an item to sell. A commodity posts from all its bag stacks at once.")
   else
     return House.Search(House.text or "")
   end
@@ -323,12 +333,22 @@ function House.ReviewBuy(offer, quantity)
   return true
 end
 
-local function postValid(plan)
+-- Where the plan posts from, or nil when the bags no longer hold it. A
+-- commodity posts from whichever of its stacks the bags hold now.
+local function postFrom(plan)
   local item = plan.item
+  if item.commodity then
+    for _, held in ipairs(House.Bags()) do
+      if held.commodity and held.itemKey.itemID == item.itemKey.itemID then
+        return held.quantity >= plan.quantity and held.location or nil
+      end
+    end
+    return nil
+  end
   local current = C_Container.GetContainerItemInfo(item.bag, item.slot)
   return current and current.hyperlink == item.link and not current.isLocked and not current.isBound
     and current.stackCount >= plan.quantity and AH.IsSellItemValid(item.location, false)
-    and sameKey(AH.GetItemKeyFromItem(item.location), item.itemKey)
+    and sameKey(AH.GetItemKeyFromItem(item.location), item.itemKey) and item.location or nil
 end
 
 local function deposit(plan)
@@ -348,7 +368,7 @@ function House.ReviewPost(quantity, unitPrice, duration)
   if not item.commodity and quantity ~= 1 then return fail("Post ordinary items one at a time.") end
   local plan = { kind = "post", item = item, name = item.name, quantity = quantity,
     unitPrice = unitPrice, total = unitPrice * quantity, duration = duration }
-  if not postValid(plan) then return fail("The bag stack changed. Select it again.") end
+  if not postFrom(plan) then return fail("Your bags no longer hold that. Select it again.") end
   plan.deposit = deposit(plan)
   if not plan.deposit then return fail("The deposit is not available yet. Try again.") end
   review = plan
@@ -382,13 +402,14 @@ function House.Confirm()
     invoke(function() AH.PlaceBid(plan.auctionID, plan.total) end)
     begin("buy", "Waiting for the purchase confirmation...")
   elseif plan.kind == "post" then
-    if not postValid(plan) or deposit(plan) ~= plan.deposit then return fail("The stack or deposit changed. Review the post again.") end
+    local location = postFrom(plan)
+    if not location or deposit(plan) ~= plan.deposit then return fail("The stack or deposit changed. Review the post again.") end
     local params, sellFrame
     if plan.item.commodity then
-      params = { plan.item.location, plan.duration, plan.quantity, plan.unitPrice }
+      params = { location, plan.duration, plan.quantity, plan.unitPrice }
       sellFrame = AuctionHouseFrame and AuctionHouseFrame.CommoditiesSellFrame
     else
-      params = { plan.item.location, plan.duration, plan.quantity, nil, plan.unitPrice }
+      params = { location, plan.duration, plan.quantity, nil, plan.unitPrice }
       sellFrame = AuctionHouseFrame and AuctionHouseFrame.ItemSellFrame
     end
     local needsConfirmation = invoke(function()
@@ -479,7 +500,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
   elseif event == "BAG_UPDATE_DELAYED" and House.mode == "sell" and not transaction() then
     House.Dismiss()
     House.selected, House.rows = nil, House.Bags()
-    notify("Bags updated. Select a stack to sell.")
+    notify("Bags updated. Select an item to sell.")
   elseif event == "PLAYER_MONEY" then notify()
   elseif event == "ITEM_KEY_ITEM_INFO_RECEIVED" and House.phase == "idle" and House.context == "variants" then readBrowse() end
 end)

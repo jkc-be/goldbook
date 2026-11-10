@@ -144,11 +144,13 @@ variant, or click the stack icon again to show all variants separately.
 - **Deals** uses Market's deal calculations and minimum-profit setting.
   Select a deal to see its estimated return, then **Find live listings** to
   check current prices before buying. A completed scan refreshes the view.
-- **Sell** lists auctionable bag stacks. Select one and enter a quantity, a
-  unit price in gold and a duration. The initial price, when present, is
-  Goldbook's last recorded minimum. Review the total and deposit before
-  posting. A post uses at most the selected bag stack. Ordinary items are
-  posted one at a time; commodity posts use the quantity you enter.
+- **Sell** lists what your bags can auction. A commodity is one row with
+  the quantity of all its bag stacks; an ordinary item is one row per bag
+  slot. Select one and enter a quantity, a unit price in gold and a
+  duration. The initial price, when present, is Goldbook's last recorded
+  minimum. Review the total and deposit before posting. A commodity post
+  takes the quantity you enter from all its stacks and pays one deposit, as
+  the game's own sell frame does. Ordinary items are posted one at a time.
 - **My auctions** lists your auctions and lets you review a cancellation.
   The review shows the cancellation fee. Cancelling also loses the deposit;
   returned items arrive by mail.
@@ -169,7 +171,7 @@ cycles through saved groups. Saving replaces the group with that name.
 | Above maximum | Use the normal price or the maximum |
 | Undercut | Copper to subtract from the cheapest competing unit price; zero matches it |
 | Post cap | Maximum number of your items listed for that exact item variant; existing auctions count |
-| Items per auction | Maximum commodity quantity in each queued post, within the selected bag stack; ordinary items post one at a time |
+| Items per auction | Maximum commodity quantity in each queued post, taken from all its bag stacks; ordinary items post one at a time. Each post pays its own deposit |
 | Duration | 2, 8 or 24 hours |
 | Shopping limit | Highest unit price to include in shopping scan results |
 
@@ -181,7 +183,7 @@ search. A missing source skips the item. These are Goldbook expressions;
 TSM custom strings and operation imports are not supported.
 
 A posting scan counts your existing auctions, skips prices outside the rule
-as configured and divides eligible bag stacks into posts under the cap. An
+as configured and divides what your bags hold into posts under the cap. An
 undercut scan queues cancellable auctions with cheaper competing listings.
 A shopping scan searches the base item IDs in the groups; use **Browse** for
 a specific suffix, item level or battle pet variant.
