@@ -8,6 +8,38 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.5.3 - 2026-11-10
+
+### Addon
+
+- Goldbook reads its stored vendor prices again each time you log in or
+  `/reload`, so hotfixed vendor prices show up in tooltips, `/gb deals` and
+  `/gb bags`. A vendor price used to be read once and kept: after the WoW
+  Forever hotfixes of 10 November, Iron Grenade still showed 5s, while a
+  vendor now pays 1s 25c, and grenades at 3s 90c showed up as vendor deals.
+
+### Website
+
+- The Prices list, sorted by name, now lists items without a name after the
+  named ones instead of filling the first pages with "Item 12345".
+
+### Server
+
+- Items that WoW Forever's item data does not know, mostly older Classic
+  items, now get their names from Battle.net's Classic Era item data instead
+  of showing "Item 12345". A player's scan still corrects a name or quality
+  that differs.
+- With `GOLDBOOK_BATTLENET_AUCTIONS=1`, the server also fetches the WoW
+  Forever EU PvE Horde auction prices from Battle.net every hour, so EU PvE
+  Horde players get website and server-data prices when nobody scanned
+  recently.
+- Items that only Battle.net's hourly auction snapshots have seen now show
+  their names on the website and in server data, instead of "Item 12345",
+  when Battle.net's WoW Forever item data knows them.
+- The website's **Order book** panel shows a book for items on the WoW
+  Forever EU PvP auction houses even when no player has scanned them. The
+  server builds it from each hourly Battle.net snapshot, without seller names.
+
 ## 0.5.2 - 2026-11-07
 
 ### Addon
