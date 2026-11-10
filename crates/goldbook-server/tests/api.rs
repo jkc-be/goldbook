@@ -2341,6 +2341,58 @@ async fn upload(f: &Fixture, scan: Value) {
     let (status, _, body) = call(&f.app, "POST", "/api/scans", scan, &f.auth()).await;
     assert_eq!(status, 200, "{body}");
 }
+async fn price_keys(f: &Fixture, query: &str) -> Vec<String> {
+    let (_, _, prices) = call(
+        &f.app,
+        "GET",
+        &format!("/api/prices?realm=Faramon&faction=Horde{query}"),
+        Value::Null,
+        &[],
+    )
+    .await;
+    prices["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["itemKey"].as_str().unwrap().to_owned())
+        .collect()
+}
+#[tokio::test]
+async fn prices_sorted_by_name_list_unnamed_items_last() {
+    let f = Fixture::new().await;
+    upload(
+        &f,
+        forever_scan(
+            "Faramon",
+            1760000000,
+            "browse",
+            json!([
+                ["100", 10, 0, 1, 1],
+                ["7", 20, 0, 1, 1],
+                ["2589", 30, 0, 1, 1],
+                ["20", 40, 0, 1, 1],
+                ["7070", 50, 0, 1, 1],
+                ["14047", 60, 0, 1, 1]
+            ]),
+            json!({"2589":["zinc 7",1],"7070":["Alpha 7",1],"14047":["beta",1]}),
+        ),
+    )
+    .await;
+    assert_eq!(
+        price_keys(&f, "").await,
+        ["7070", "14047", "2589", "100", "20", "7"],
+        "named items by name ignoring case, then the unnamed by key"
+    );
+    assert_eq!(
+        price_keys(&f, "&order=desc").await,
+        ["2589", "14047", "7070", "100", "20", "7"]
+    );
+    assert_eq!(price_keys(&f, "&q=7").await, ["7070", "2589", "7"]);
+    assert_eq!(
+        price_keys(&f, "&q=7&order=desc").await,
+        ["2589", "7070", "7"]
+    );
+}
 // The reported case: two shards of one WoW Forever house, scans on one only.
 #[tokio::test]
 async fn a_never_scanned_forever_shard_reads_its_house() {
