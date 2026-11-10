@@ -95,14 +95,23 @@ local function unresolved(key)
   return not ns.db.items[key] or ns.db.vendor[Codec.BaseID(key)] == nil
 end
 
-local function resolveItems(keys, from, done)
-  local to = math.min(from + INFO_BATCH - 1, #keys)
-  for index = from, to do
-    resolveItem(keys[index])
+-- Hotfixes change what vendors pay, so each login reads the stored prices
+-- again. One whose item is not loaded keeps what was stored.
+local function refreshVendorPrice(itemID)
+  if C_Item.GetItemInfo(itemID) then
+    ns.db.vendor[itemID] = ns.SellPrice("item:" .. itemID) or ns.db.vendor[itemID]
   end
-  if to < #keys then
+end
+
+local function inBatches(list, each, done, from)
+  from = from or 1
+  local to = math.min(from + INFO_BATCH - 1, #list)
+  for index = from, to do
+    each(list[index])
+  end
+  if to < #list then
     C_Timer.After(INFO_BATCH_DELAY, function()
-      resolveItems(keys, to + 1, done)
+      inBatches(list, each, done, to + 1)
     end)
   else
     done()
@@ -185,7 +194,7 @@ Scanner.Subscribe(function(kind, payload)
     if #keys > INFO_BATCH then
       ns.Print("Scan saved. Loading details of " .. #keys .. " items...")
     end
-    resolveItems(keys, 1, function()
+    inBatches(keys, resolveItem, function()
       unannounced = payload
       announceOnceNamed()
       if unannounced then
@@ -505,6 +514,11 @@ frame:SetScript("OnEvent", function(_, event, first, second)
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("BAG_UPDATE_DELAYED")
     recordGold()
+    local stored = {}
+    for itemID in pairs(ns.db.vendor) do
+      stored[#stored + 1] = itemID
+    end
+    inBatches(stored, refreshVendorPrice, ns.UI.RefreshSoon)
     ns.Print(ns.VERSION .. " loaded. Type /gb for commands.")
   elseif event == "PLAYER_MONEY" then
     recordGold()

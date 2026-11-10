@@ -483,6 +483,10 @@ shows, for every item, whether you hold it or not. The item data addons read
 with `C_Item.GetItemInfo` is wrong for some items: it says 9s 62c for Rough
 Bronze Leggings, while the tooltip and the vendor say 5s 77c.
 
+Blizzard changes vendor prices in hotfixes, so Goldbook reads every stored
+vendor price again each time you log in or `/reload`. It takes about 20
+seconds for 5,000 items.
+
 ### Goods merchants sell
 
 Thread, vials, flux, coal, flint and tinder, spices, dyes and class reagents
