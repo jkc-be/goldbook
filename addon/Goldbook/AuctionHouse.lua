@@ -5,6 +5,9 @@ ns.AuctionHouse = House
 
 local listeners, serial, issuing = {}, 0, false
 local request, review
+-- buying: the next listings load opens the cheapest item listing's review.
+-- bought: the confirmation shown once listings reload after a purchase.
+local buying, bought = false, nil
 local TIMEOUT = 20
 
 local function notify(message)
@@ -52,7 +55,7 @@ end
 local function fail(message)
   local commodity = review and review.kind == "commodity" and House.phase ~= "buy"
   serial = serial + 1
-  House.phase, request, review, House.failed = "idle", nil, nil, true
+  House.phase, request, review, House.failed, buying, bought = "idle", nil, nil, true, false, nil
   if commodity then AH.CancelCommoditiesPurchase() end
   notify(message)
   return false
@@ -135,7 +138,7 @@ end
 function House.Search(text)
   if not available() or not House.Dismiss(true) then return false end
   House.mode, House.context, House.selected, House.more = "browse", "browse", nil, false
-  House.rows, House.offers, House.text = {}, {}, text or ""
+  House.rows, House.offers, House.text, buying, bought = {}, {}, text or "", false, nil
   for _, item in ipairs(ns.Database.Search(ns.db, ns.RealmKey(), House.text)) do
     House.rows[#House.rows + 1] = House.CachedItem(item)
   end
@@ -164,9 +167,9 @@ function House.Select(row)
   end, "Loading listings for " .. row.name .. "...")
 end
 
-function House.Find(item)
+function House.Find(item, buy)
   if not available() or not House.Dismiss(true) then return false end
-  House.mode = "browse"
+  House.mode, buying = "browse", buy == true
   return House.Select(item)
 end
 
@@ -219,7 +222,18 @@ local function readOffers()
   if item.commodity then complete = AH.HasFullCommoditySearchResults(item.itemKey.itemID)
   else complete = AH.HasFullItemSearchResults(item.itemKey) end
   House.more, House.phase = not complete, "idle"
-  notify(#rows == 0 and "No buyout listings available." or "Select a listing to review a purchase.")
+  local hint = #rows == 0 and "No buyout listings available."
+    or item.commodity and "Click a listing to quote every unit up to its price."
+    or "Click a listing to review its purchase."
+  local cheapest
+  if buying and not item.commodity then
+    for _, row in ipairs(rows) do
+      if not row.owned then cheapest = row; break end
+    end
+  end
+  hint, buying, bought = bought and (bought .. " " .. hint) or hint, false, nil
+  notify(hint)
+  if cheapest then House.ReviewBuy(cheapest, cheapest.quantity) end
 end
 
 function House.More()
@@ -278,7 +292,7 @@ end
 function House.SetMode(mode)
   if not available() or not House.Dismiss(true) then return false end
   House.mode, House.context, House.selected, House.more = mode, nil, nil, false
-  House.rows, House.offers = {}, {}
+  House.rows, House.offers, buying, bought = {}, {}, false, nil
   if mode == "owned" then
     House.context = "owned"
     return send("owned", function() AH.QueryOwnedAuctions({}) end, "Loading your auctions...")
@@ -301,12 +315,13 @@ local function currentOffer(id)
 end
 
 function House.ReviewBuy(offer, quantity)
-  if not readyToTrade() or House.Busy() or not House.selected then return false end
+  if not available() or House.Busy() or not House.selected then return false end
   local found = false
   for _, row in ipairs(House.offers) do if row == offer then found = true end end
   if not found or offer.owned then return fail("Choose an available listing from another seller.") end
   local item = House.selected
   if item.commodity then
+    if not readyToTrade() then return false end
     local totalAvailable = 0
     for _, row in ipairs(House.offers) do totalAvailable = totalAvailable + row.quantity end
     if not integer(quantity, 1, totalAvailable) then return fail("Enter a quantity within the loaded listings.") end
@@ -411,6 +426,7 @@ function House.Confirm()
 end
 
 local function completed(message)
+  local purchased = House.mode == "browse" and House.selected
   serial = serial + 1
   House.phase, review, House.selected, House.offers = "idle", nil, nil, {}
   if House.mode == "sell" then House.rows = House.Bags()
@@ -418,6 +434,7 @@ local function completed(message)
   else House.rows, House.context = {}, nil end
   House.completed = (House.completed or 0) + 1
   notify(message)
+  if purchased and House.Select(purchased) then bought = message end
 end
 
 local frame = CreateFrame("Frame")
@@ -437,7 +454,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
   elseif event == "AUCTION_HOUSE_CLOSED" then
     House.open = false
     serial = serial + 1
-    House.phase, request, review = "idle", nil, nil
+    House.phase, request, review, buying, bought = "idle", nil, nil, false, nil
     House.rows, House.offers, House.selected, House.context, House.more = {}, {}, nil, nil, false
     notify("Open the auction house to trade.")
   elseif not House.open then return
