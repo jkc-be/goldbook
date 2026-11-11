@@ -867,11 +867,11 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
     let after = all().await;
     assert_eq!(
         after.as_array().unwrap().len(),
-        4,
-        "a repeated upload adds nothing, and trades the addon dropped stay"
+        3,
+        "a repeated upload adds nothing, a sale the addon took off goes, and a character left out keeps its trades"
     );
     assert_eq!(
-        after[3]["itemKey"], "9775:584",
+        after[2]["itemKey"], "9775:584",
         "a key learnt later fills in"
     );
     let (_, _, sultan) = call(
@@ -882,7 +882,7 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
         &[("cookie", cookie.as_str())],
     )
     .await;
-    assert_eq!(sultan["trades"].as_array().unwrap().len(), 3);
+    assert_eq!(sultan["trades"].as_array().unwrap().len(), 2);
     assert_eq!(
         call(
             &f.app,
@@ -933,6 +933,87 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
         theirs["trades"],
         json!([]),
         "another account sees none of them"
+    );
+}
+// The addon prunes its oldest trades, and takes off a sale bought back or
+// booked twice. An upload holds each character's trades from its oldest one
+// on, so only within that stretch does a trade it no longer holds go.
+#[tokio::test]
+async fn an_upload_takes_off_what_its_character_no_longer_holds_from_its_oldest_trade_on() {
+    let f = Fixture::new().await;
+    let vendor = |name: &str, at: u64, item: &str, price: u64| {
+        trade(name, at, "vendor", item, json!(null), price, 0)
+    };
+    let mut upload = account();
+    upload["trades"] = json!([
+        trade(
+            "Sultan",
+            1760001000,
+            "buy",
+            "Linen Cloth",
+            json!("2589"),
+            1500,
+            0
+        ),
+        vendor("Sultan", 1760002000, "Light Bow", 1184),
+        vendor("Sultan", 1760002600, "Light Bow", 1184),
+        vendor("Sultan", 1760003000, "Ceranium Rod", 2322),
+        trade(
+            "Mirelle",
+            1760001500,
+            "buy",
+            "Linen Cloth",
+            json!("2589"),
+            1500,
+            0
+        ),
+    ]);
+    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
+    upload["trades"] = json!([
+        vendor("Sultan", 1760002000, "Light Bow", 1184),
+        vendor("Sultan", 1760003000, "Ceranium Rod", 2322),
+    ]);
+    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
+    let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    let listed = || async {
+        let (_, _, body) = call(
+            &f.app,
+            "GET",
+            "/api/trades",
+            Value::Null,
+            &[("cookie", cookie.as_str())],
+        )
+        .await;
+        body["trades"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| {
+                format!(
+                    "{} {} {}",
+                    t["name"].as_str().unwrap(),
+                    t["at"],
+                    t["item"].as_str().unwrap()
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        listed().await,
+        [
+            "Sultan 1760003000 Ceranium Rod",
+            "Sultan 1760002000 Light Bow",
+            "Mirelle 1760001500 Linen Cloth",
+            "Sultan 1760001000 Linen Cloth",
+        ],
+        "the sale booked twice goes; the pruned purchase and the character left out stay"
+    );
+    upload["trades"] = json!([]);
+    call(&f.app, "POST", "/api/account", upload, &f.auth()).await;
+    assert_eq!(
+        listed().await.len(),
+        4,
+        "an upload without trades takes off none"
     );
 }
 #[tokio::test]
