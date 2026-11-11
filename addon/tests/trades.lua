@@ -257,7 +257,8 @@ buyback[4] = { "Broken Fang", 1, 85 }
 Stub.fire("MERCHANT_UPDATE")
 Stub.money = Stub.money + 170
 Stub.fire("PLAYER_MONEY")
-eq(select(2, vendored():gsub("Broken Fang", "")), 2, "two equal stacks sold are two sales")
+Stub.advance(10)
+eq(select(2, vendored():gsub("Broken Fang", "")), 2, "two equal stacks sold are two sales, also when one change of gold pays both")
 table.remove(buyback, 4)
 Stub.fire("MERCHANT_UPDATE")
 eq(select(2, vendored():gsub("Broken Fang", "")), 1, "an item bought back takes its sale off again")

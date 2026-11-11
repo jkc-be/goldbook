@@ -363,16 +363,18 @@ local function vendorSaleBooked()
 end
 
 -- A sale to a vendor of `count` of `item` for `price` in all, booked once
--- the gold comes in.
-local function claimVendorSale(item, key, count, price)
-  ns.Accounting.Claim({ side = "vendor", sign = 1, amount = price,
+-- gold comes in while the merchant is open: only gold of exactly its price
+-- when `exact`.
+local function claimVendorSale(item, key, count, price, exact)
+  ns.Accounting.Claim({ side = "vendor", sign = 1, amount = price, exact = exact, window = "merchant",
     stacks = { { item = item, key = key, count = count } }, booked = vendorSaleBooked })
 end
 
 local function bookVendorSales(opened)
   local sales, undone = Trades.Merchant(ns.db, characterKey(), ns.RealmKey(), time(), GetMoney(), opened)
+  -- One sale is paid at a time; a buyback entry that showed up late pays nothing.
   for _, sale in ipairs(sales) do
-    claimVendorSale(sale.item, sale.key, sale.count, sale.price)
+    claimVendorSale(sale.item, sale.key, sale.count, sale.price, true)
   end
   vendorSales = vendorSales - undone
   if undone > 0 then

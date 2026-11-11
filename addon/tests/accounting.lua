@@ -145,16 +145,16 @@ Stub.buyback = { { "Broken Fang", 1, 85 } }
 Stub.fire("MERCHANT_SHOW")
 Stub.buyback = { { "Broken Fang", 1, 85 }, { "Light Bow", 1, 1184 }, { "Ceranium Rod", 1, 2322 } }
 Stub.fire("MERCHANT_UPDATE")
+Stub.buyback[4] = { "Stinging Viper", 1, 2793 }
+gain(2793)
+Stub.fire("MERCHANT_UPDATE")
+eq(booked(), "vendor Stinging Viper nil 1 2793 nil", "a sale whose gold comes before the buyback list is booked, not one that showed up late")
+Stub.buyback[5] = { "Melon Juice", 1, 25 }
+Stub.fire("MERCHANT_UPDATE")
+gain(25)
+eq(booked(), "vendor Melon Juice nil 1 25 nil", "a sale is booked with the gold it brings in")
 Stub.advance(GRACE)
 eq(booked() .. "|" .. accruing(), "|", "buyback entries that show up after the merchant opened are not sold again")
-Stub.buyback[4] = { "Stinging Viper", 1, 2793 }
-Stub.fire("MERCHANT_UPDATE")
-gain(2793)
-eq(booked(), "vendor Stinging Viper nil 1 2793 nil", "a sale is booked with the gold it brings in")
-Stub.buyback[5] = { "Melon Juice", 1, 25 }
-gain(25)
-Stub.fire("MERCHANT_UPDATE")
-eq(booked(), "vendor Melon Juice nil 1 25 nil", "a sale whose gold comes before the buyback list is booked too")
 Stub.fire("MERCHANT_CLOSED")
 eq(plain(Stub.printed[#Stub.printed]), "Goldbook Booked 2 vendor sales. Type /gb accounting.", "closing counts the sales the gold confirmed")
 Stub.advance(GRACE * 2)
