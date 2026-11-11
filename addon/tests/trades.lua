@@ -371,5 +371,36 @@ if arg[1] then
   out:close()
 end
 
+-- Before schema 7, WoW Forever's buyback list booked vendor sales again at
+-- every merchant visit. The upgrade takes off a sale that repeats one of the
+-- 12 before it, but never more than the gold history shows was booked.
+local HOUR, first = 3600, 500000
+local function sold(hour, seconds, item, price)
+  return { at = (first + hour) * HOUR + seconds, side = "vendor", item = item, count = 1, price = price, fee = 0 }
+end
+local repeated = {
+  version = 6,
+  gold = { A = { [first] = 0, [first + 1] = 1300, [first + 2] = 1600, [first + 3] = 1700 } },
+  trades = { A = {
+    sold(0, 100, "Torn Letter", 5),
+    sold(1, 10, "Light Bow", 1000),
+    sold(1, 20, "Melon Juice", 300),
+    sold(1, 600, "Light Bow", 1000),
+    sold(2, 60, "Melon Juice", 300),
+    sold(3, 10, "Linen Cloth", 50),
+    sold(3, 15, "Linen Cloth", 50),
+    sold(3, 900, "Melon Juice", 300),
+  } },
+}
+local upgraded, dropped = ns.Database.Init(repeated)
+local kept = {}
+for _, trade in ipairs(upgraded.trades.A) do
+  kept[#kept + 1] = trade.item .. " " .. (trade.at - first * HOUR)
+end
+eq(table.concat(kept, ", ") .. " | " .. tostring(dropped),
+  "Torn Letter 100, Light Bow 3610, Melon Juice 3620, Melon Juice 7260, Linen Cloth 10810, Linen Cloth 10815 | 2",
+  "the upgrade takes off sales booked again, where the gold shows they were, and keeps a real second sale")
+eq(select(2, ns.Database.Init(upgraded)), 0, "the upgrade runs once")
+
 io.write(("%d trade checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
