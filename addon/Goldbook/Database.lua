@@ -32,6 +32,8 @@ local PARK_MILLER = 2147483647
 --   bank[character]            = { at, items = { { key, count }, ... } }, the unbound items in the bank when last open
 --   trades[character][]        = { at, side, item, key, count, price, fee, party }, revenue and expenses,
 --                                  oldest first, see Trades
+--   dropped[character][]       = trades taken off as booked by mistake, as in trades, for the sync
+--                                  agent to take off the server too, see Trades.DropRepeatedSales
 --   accruing[character][side]  = the entry of gold added up this hour, booked once the hour has ended,
 --                                  see Trades.Accrue
 --   scans[]                    = scans waiting for the sync agent
@@ -160,6 +162,7 @@ function Database.Init(saved)
   db.account = db.account or newAccount()
   db.fromServer = db.fromServer or {}
   db.serverMerged = db.serverMerged or {}
+  db.dropped = db.dropped or {}
   -- Schema 7 takes off the vendor sales that WoW Forever's buyback list
   -- booked more than once.
   local dropped = before and before < 7 and ns.Trades.DropRepeatedSales(db) or 0

@@ -346,7 +346,9 @@ local REPEAT_AFTER = 30
 -- every merchant visit, see Trades.Merchant. Takes off each vendor sale that
 -- repeats one of the BUYBACK_SLOTS kept before it, REPEAT_AFTER or more
 -- later, as long as the entries between two hours of gold history book more
--- than the gold did by at least its price. Returns how many it took off.
+-- than the gold did by at least its price. What it takes off goes to
+-- db.dropped, for the sync agent to take off the server too. Returns how many
+-- it took off.
 function Trades.DropRepeatedSales(db)
   local dropped = 0
   for character, booked in pairs(db.trades) do
@@ -404,6 +406,8 @@ function Trades.DropRepeatedSales(db)
       if repeats then
         excess[hour] = excess[hour] - entry.price
         dropped = dropped + 1
+        db.dropped[character] = db.dropped[character] or {}
+        table.insert(db.dropped[character], entry)
       else
         kept[#kept + 1] = entry
         if entry.side == "vendor" then
