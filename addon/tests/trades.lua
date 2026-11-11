@@ -400,6 +400,11 @@ end
 eq(table.concat(kept, ", ") .. " | " .. tostring(dropped),
   "Torn Letter 100, Light Bow 3610, Melon Juice 3620, Melon Juice 7260, Linen Cloth 10810, Linen Cloth 10815 | 2",
   "the upgrade takes off sales booked again, where the gold shows they were, and keeps a real second sale")
+local gone = {}
+for _, trade in ipairs(upgraded.dropped.A) do
+  gone[#gone + 1] = trade.item .. " " .. (trade.at - first * HOUR)
+end
+eq(table.concat(gone, ", "), "Light Bow 4200, Melon Juice 11700", "what it takes off is kept for the server to take off too")
 eq(select(2, ns.Database.Init(upgraded)), 0, "the upgrade runs once")
 -- An auction sale is dated when the auction house mailed it, not when its
 -- gold was taken from the mailbox, so it says nothing about that hour's gold.
