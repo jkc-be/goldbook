@@ -608,7 +608,7 @@ like a broker's statement. Each entry has a source:
 | Source | Booked when |
 |---|---|
 | Auction sale, Auction purchase | You open a mailbox with the auction house invoice. See below |
-| Vendor sale | The item appears in the merchant's buyback list, with what the vendor paid. Buying it back takes the sale off again |
+| Vendor sale | The item appears in the merchant's buyback list and the gold the vendor paid comes in. Junk sold with the merchant's Sell All Junk button counts too. Buying it back takes the sale off again |
 | Merchant purchase | You buy from a merchant, with the item and how many |
 | Trade sale, Trade purchase | A trade with a player completes: what you gave and what you got, see below |
 | Trade gold in, Trade gold out | A trade moves gold and no items the other way |
@@ -1293,7 +1293,10 @@ files, so update those before deploying the Rust image through Actions.
   the first mail was taken before the second arrived, count as one. A vendor
   sale is noticed through the buyback list, which holds 12 items: with it
   full, selling the same stack as its oldest entry is booked only when the
-  gold gained equals that price.
+  gold gained equals that price. WoW Forever fills the buyback list over a
+  moment after a merchant opens, so a vendor sale counts only once the gold
+  it paid comes in; gold a merchant pays that no sale explains is other
+  income.
 - The game says only that your gold changed, not why. Goldbook books a change
   by what you did within 10 seconds of it, so two things done at once can be
   booked under the wrong source, and a change it cannot explain is other

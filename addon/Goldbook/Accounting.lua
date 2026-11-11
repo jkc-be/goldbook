@@ -24,10 +24,9 @@ local MAIL_ATTACHMENTS = ATTACHMENTS_MAX_RECEIVE or 16
 -- What a window makes of gold no claim explains, while it is open and GRACE
 -- after: the side to book, or "skip" when another booking covers it.
 local WINDOWS = {
-  -- Sales are booked from the buyback list (Trades.Merchant), junk sold all
-  -- at once from the bags (Core), and purchases and buybacks leave claims,
-  -- so a loss left over is a repair.
-  merchant = { gain = "skip", loss = "repair" },
+  -- Sales, purchases and buybacks leave claims, so a loss left over is a
+  -- repair, and a gain left over is other income.
+  merchant = { loss = "repair" },
   loot = { gain = "loot" },
   -- Booked from the trade window once the trade completes.
   trade = { gain = "skip", loss = "skip" },
@@ -120,22 +119,37 @@ local function book(side, copper, claim)
   else
     Trades.Add(ns.db, ns.CharacterKey(), entries(side, copper, claim, now), now)
   end
+  if claim.booked then
+    claim.booked()
+  end
   ns.UI.RefreshSoon()
 end
 
--- Books what the claims made around `change` explain of it: first those
--- with an amount that fits in what is left, then one that takes any. A claim
--- takes no part of a change smaller than its amount, which is some other
--- gold. Once GRACE has passed, the window open when the gold moved explains
--- the rest, or else it is other.
+-- Which claims each pass of `explain` takes for what is left of a change.
+local PASSES = {
+  function(claim, left)
+    return claim.amount == left
+  end,
+  function(claim, left)
+    return claim.amount ~= nil and claim.amount <= left
+  end,
+  function(claim)
+    return claim.amount == nil
+  end,
+}
+
+-- Books what the claims made around `change` explain of it: first one whose
+-- amount is all that is left, then those with an amount that fits in what is
+-- left, then one that takes any. A claim takes no part of a change smaller
+-- than its amount, which is some other gold. Once GRACE has passed, the
+-- window open when the gold moved explains the rest, or else it is other.
 local function explain(change, final)
   local sign = change.left > 0 and 1 or -1
-  for _, sized in ipairs({ true, false }) do
+  for _, takes in ipairs(PASSES) do
     local index = 1
     while change.left ~= 0 and claims[index] do
       local claim = claims[index]
-      if claim.sign == sign and (claim.amount ~= nil) == sized and (claim.amount or 0) <= math.abs(change.left)
-        and math.abs(claim.at - change.at) <= GRACE then
+      if claim.sign == sign and takes(claim, math.abs(change.left)) and math.abs(claim.at - change.at) <= GRACE then
         local copper = claim.amount or math.abs(change.left)
         table.remove(claims, index)
         book(claim.side, copper, claim)
@@ -194,6 +208,10 @@ local function claim(new)
   claims[#claims + 1] = new
   settle()
 end
+
+-- A claim from elsewhere: { side, sign, amount, item, party, stacks, id,
+-- booked }, where `booked` is called once gold has confirmed it.
+Accounting.Claim = claim
 
 local function open(name)
   spans[#spans + 1] = { name = name, from = GetTime() }
