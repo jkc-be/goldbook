@@ -86,9 +86,17 @@ eq(server.count("search"), offerCalls + 1, "opening an item fetches live listing
 eq(#House.offers, 2, "commodity listings loaded")
 eq(panel.rows[1].icon.texture, 134566, "commodity order book keeps the item icon")
 eq(panel.rows[2].icon.texture, 134566, "each commodity listing keeps the icon")
-click(panel.rows[1])
+click(panel.rows[2])
+local quote = server.calls[#server.calls]
+eq(quote.name .. " " .. quote.args[2], "quote 50", "clicking a commodity listing quotes every unit up to its price")
+eq(server.count("blocked"), 0, "the listing click carries the quote request")
+eq(panel.review.shown, true, "the listing click opens the review")
+click(panel.review.back)
+eq(panel.quantity:GetText(), "50", "Back keeps the quoted quantity editable")
 panel.quantity:SetText("4")
 click(panel.action)
+quote = server.calls[#server.calls]
+eq(quote.name .. " " .. quote.args[2], "quote 4", "Review purchase quotes an edited quantity")
 eq(server.count("buy-commodity"), 0, "review does not purchase")
 Stub.advance(0.2)
 eq(House.Review().total, 500, "review uses server total")
@@ -103,7 +111,12 @@ House.Confirm()
 eq(server.count("blocked"), 0, "the quote and the purchase run while their buttons are enabled")
 eq(server.count("buy-commodity"), 1, "double click purchases once")
 Stub.fire("COMMODITY_PURCHASE_SUCCEEDED")
-eq(House.phase, "idle", "purchase completes on server event")
+eq(House.Review(), nil, "purchase completes on server event")
+eq(House.phase, "offers", "a purchase reloads the item's listings")
+Stub.advance(0.3)
+eq(House.context .. " " .. House.selected.itemKey.itemID, "offers 2770", "the reloaded listings stay on the bought item")
+eq(House.message, "Purchase confirmed. Collect your items from the mailbox. Click a listing to quote every unit up to its price.",
+  "the reloaded listings keep the purchase confirmation")
 
 search(1206)
 eq(panel.rows[1].icon.texture, 134105, "item order book keeps the item icon")
@@ -124,13 +137,14 @@ click(panel.review.confirm)
 eq(server.count("blocked"), 0, "the buyout runs while its button is enabled")
 eq(server.count("buy-item"), 1, "item listing bought from its button")
 Stub.fire("AUCTION_HOUSE_PURCHASE_COMPLETED", bought)
-eq(House.phase, "idle", "item purchase completes on server event")
+Stub.advance(0.3)
+eq(House.phase .. " " .. House.context, "idle offers", "item purchase completes and reloads its listings")
 
 House.SetMode("sell")
 House.Select(House.rows[1])
 eq(House.ReviewPost(5, 200, 2), true, "posting review")
 eq(House.Review().total, 1000, "posting unit price multiplied")
-Stub.bags[0][1].hyperlink = "|Hitem:2771|h[Tin Ore]|h"
+Stub.bags[0][1].itemID, Stub.bags[0][1].hyperlink = 2771, "|Hitem:2771|h[Tin Ore]|h"
 eq(House.Confirm(), false, "bag slot replacement refused")
 eq(server.count("post-commodity"), 0, "replacement never posted")
 server.seed(); server.cache(ns)
@@ -143,6 +157,38 @@ ns.Scanner.Start("browse")
 eq(ns.Scanner.state, "idle", "scan cannot interrupt transaction")
 Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 300)
 eq(House.phase, "idle", "post finishes on server event")
+
+-- Each post pays a deposit, so a commodity posts from all its bag stacks at
+-- once, as the game's own sell frame does.
+local callsBefore = #server.calls
+Stub.bags[1] = { slots = 1, { itemID = 2770, hyperlink = "|Hitem:2770|h[Copper Ore]|h", stackCount = 20, commodity = true } }
+House.SetMode("sell")
+local ore = {}
+for _, row in ipairs(House.rows) do
+  if row.itemKey.itemID == 2770 then ore[#ore + 1] = row.quantity end
+end
+eq(table.concat(ore, " "), "32", "a commodity's bag stacks are one row")
+House.Select(House.rows[1])
+eq(House.ReviewPost(32, 200, 2), true, "a post may use every stack of a commodity")
+House.Confirm()
+local posted = server.calls[#server.calls]
+eq(posted.name .. " " .. posted.args[3], "post-commodity 32", "one post sells both stacks")
+Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 302)
+House.Select(House.rows[1])
+House.ReviewPost(20, 200, 2)
+Stub.bags[0][1] = nil
+House.Confirm()
+posted = server.calls[#server.calls]
+eq(posted.name .. " " .. posted.args[1].bagID .. " " .. posted.args[3], "post-commodity 1 20",
+  "a post whose first stack is gone takes a stack still in the bags")
+Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 303)
+House.Select(House.rows[1])
+House.ReviewPost(20, 200, 2)
+Stub.bags[1][1].stackCount = 19
+eq(House.Confirm(), false, "a post larger than what the bags still hold is refused")
+for index = #server.calls, callsBefore + 1, -1 do table.remove(server.calls, index) end
+server.seed(); server.cache(ns)
+
 House.SetMode("owned")
 Stub.advance(0.2)
 House.Select(House.rows[1])
@@ -220,6 +266,15 @@ Stub.bags[0][1].stackCount = 8
 Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 301)
 eq(Rules.queue[1].done, true, "completed queue row marked")
 eq(Rules.Execute(Rules.queue[1]), false, "completed row cannot run again")
+
+server.seed(); server.cache(ns)
+Stub.bags[0][1].stackCount = 2
+Stub.bags[1] = { slots = 1, { itemID = 2770, hyperlink = "|Hitem:2770|h[Copper Ore]|h", stackCount = 2, commodity = true } }
+Rules.Start("post")
+Stub.advance(2)
+eq(Rules.queue[1].name .. " " .. Rules.queue[1].quantity .. " " .. Rules.queue[2].name, "Copper Ore 4 Tin Ore",
+  "automation posts a commodity's stacks together, up to the items per auction")
+server.seed(); server.cache(ns)
 
 Rules.Start("cancel")
 Stub.advance(2)
@@ -391,6 +446,16 @@ Stub.ctrl = false
 reopen()
 server.seed(); server.cache(ns)
 ns.AuctionUI.Show()
+
+Stub.bags[1] = { slots = 1, { itemID = 2770, hyperlink = "|Hitem:2770|h[Copper Ore]|h", stackCount = 20, commodity = true } }
+click(panel.tabs.sell)
+click(panel.rows[1])
+eq(panel.rows[1].count.text .. " " .. panel.rows[1].price.text, "32 2 stacks", "the sell list counts a commodity's stacks")
+eq(panel.detailBody.text:match("^[^\n]*"), "32 in 2 bag stacks", "the sell detail counts a commodity's stacks")
+eq(panel.quantity:GetText(), "32", "a commodity's quantity starts at all its stacks")
+Stub.bags[1] = nil
+click(panel.tabs.browse)
+Stub.advance(0.3)
 
 -- Duration labels, reviews and posting arguments stay aligned.
 click(panel.tabs.sell)
@@ -675,13 +740,33 @@ click(panel.filters.clear)
 panel.search:SetText("copper")
 eq(visibleNames(), "Copper Ore", "deals filter as names are typed")
 click(panel.rows[1])
-eq(panel.action.label.text, "Find live listings", "deal requires current listing search")
+eq(panel.action.label.text, "Buy", "a deal is bought from its live listings")
 local buysBefore = server.count("buy-commodity") + server.count("buy-item")
 click(panel.action)
 Stub.advance(1)
 eq(House.context, "offers", "opening a deal fetches live listings")
 eq(House.text, "Copper Ore", "opening a deal keeps its item name")
 eq(server.count("buy-commodity") + server.count("buy-item"), buysBefore, "opening a deal never buys from saved prices")
+eq(House.Review(), nil, "a commodity deal waits for a listing click to quote")
+server.offers[1206] = { { auctionID = 100, itemKey = { itemID = 1206 }, buyoutAmount = 50000, quantity = 1, containsOwnerItem = true },
+  { auctionID = 101, itemKey = { itemID = 1206 }, buyoutAmount = 100000, quantity = 2, owners = { "Jeweller" } } }
+local itemBuys = server.count("buy-item")
+click(panel.tabs.deals)
+panel.search:SetText("agate")
+click(panel.rows[1])
+click(panel.action)
+Stub.advance(1)
+eq(House.Review() and House.Review().auctionID, 101, "Buy on an item deal reviews the cheapest listing from another seller")
+eq(panel.review.shown, true, "the review opens without a listing click")
+eq(panel.rows[2].marker.shown, true, "the reviewed listing is highlighted")
+eq(server.count("buy-item"), itemBuys, "the review does not buy")
+click(panel.review.confirm)
+eq(server.count("blocked"), 0, "the deal's buyout runs from the confirm click")
+eq(server.count("buy-item"), itemBuys + 1, "confirming buys the reviewed listing")
+Stub.fire("AUCTION_HOUSE_PURCHASE_COMPLETED", 101)
+Stub.advance(0.3)
+eq(House.Review(), nil, "listings reloaded after a purchase do not open a review by themselves")
+server.seed(); server.cache(ns)
 
 -- Scan controls feed the same database and refresh the open Deals view.
 click(panel.tabs.deals)

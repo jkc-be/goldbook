@@ -167,7 +167,17 @@ local function selectRow(row)
   if view == "queue" or view == "deals" then
     refresh()
   elseif view == "browse" and House.context == "offers" then
-    window.quantity:SetText(tostring(House.selected.commodity and 1 or row.quantity))
+    local quantity = row.quantity
+    if House.selected.commodity then
+      quantity = 0
+      for _, offer in ipairs(House.offers) do
+        quantity = quantity + offer.quantity - offer.ownQuantity
+        if offer == row then break end
+      end
+    end
+    window.quantity:SetText(tostring(quantity))
+    -- The row click is the hardware event the commodity quote needs.
+    if not row.owned and quantity > 0 then House.ReviewBuy(row, quantity) end
     refresh()
   else
     House.Select(row)
@@ -189,7 +199,7 @@ local function reviewAction()
     resetSelection()
     window.search:SetText(name)
     House.text = name
-    House.Find(item)
+    House.Find(item, true)
   elseif view == "queue" and selected then
     if selected.kind == "shop" then
       if Rules.Execute(selected) then view, selected, offset = "browse", nil, 0 end
@@ -212,8 +222,8 @@ local function detail()
         .. (selected.kind == "vendor" and " to a vendor." or " at auction.")
         .. "\n\nEstimated profit: " .. money(selected.total)
         .. "\nSeen " .. Codec.Age(time() - selected.seen)
-        .. "\n\nCheck live listings before buying. Auction resale prices can change."
-      actionable, action = true, "Find live listings"
+        .. "\n\nBuy loads the live listings. Nothing is bought until you confirm the review."
+      actionable, action = true, "Buy"
     end
   elseif view == "queue" then
     heading, body = "Action queue", Rules.message
@@ -238,9 +248,10 @@ local function detail()
     heading = item.name
     if view == "sell" then
       quantity, pricing, actionable, action = true, true, true, "Review post"
-      body = "Bag " .. item.bag .. ", slot " .. item.slot .. " · " .. item.quantity .. " available\n\n"
+      body = (item.commodity and item.quantity .. " in " .. item.stacks .. (item.stacks == 1 and " bag stack" or " bag stacks")
+          or "Bag " .. item.bag .. ", slot " .. item.slot .. " · " .. item.quantity .. " available") .. "\n\n"
         .. "Set the price per item in gold. The review shows the total buyout and deposit.\n\n"
-        .. (item.commodity and "The initial price is the last Goldbook minimum, when available."
+        .. (item.commodity and "One post takes from every stack and pays one deposit. The initial price is the last Goldbook minimum, when available."
           or "Ordinary items are posted one at a time. The initial price is Goldbook's last minimum.")
     elseif view == "owned" then
       actionable, action = true, "Review cancellation"
@@ -253,7 +264,7 @@ local function detail()
         .. (selected.owned and "This listing belongs to you or your account." or (selected.owners ~= "" and "Seller: " .. selected.owners or "Seller names are unavailable."))
         .. "\n\n" .. (item.commodity and "The review requests a current quote for your quantity across the cheapest listings."
           or "You buy the whole listing for " .. money(selected.total) .. ".")
-    else body = "Select a buyout listing on the left." end
+    else body = "Click a listing on the left to review its purchase." end
   end
   window.detailTitle:SetText(heading)
   window.detailBody:SetText(body)
@@ -348,6 +359,7 @@ refresh = function()
   window.header:SetText(view == "queue" and "ITEM / GROUP" or "ITEM")
   window.priceHeader:SetText(view == "queue" and "ACTION / PRICE" or view == "deals" and "EST. PROFIT" or view == "sell" and "BAG" or view == "browse" and House.context == "browse" and "SCAN UNIT PRICE" or "UNIT BUYOUT")
   offset = math.max(0, math.min(offset, math.max(0, #listing - visibleRows)))
+  local plan = House.Review()
   for index, row in ipairs(window.rows) do
     local item = index <= visibleRows and listing[index + offset] or nil
     row:SetShown(item ~= nil)
@@ -362,9 +374,9 @@ refresh = function()
       row.title:SetText(text)
       row.count:SetText(item.quantity or "")
       row.price:SetText(view == "queue" and (item.done and "Confirmed" or item.kind == "skip" and "Skipped" or item.kind == "cancel" and "Cancel" or money(item.unitPrice))
-        or view == "deals" and money(item.total) or view == "sell" and (item.bag .. " / " .. item.slot) or (item.price and item.price > 0 and money(item.price) or "No buyout"))
+        or view == "deals" and money(item.total) or view == "sell" and (item.commodity and (item.stacks == 1 and "1 stack" or item.stacks .. " stacks") or item.bag .. " / " .. item.slot) or (item.price and item.price > 0 and money(item.price) or "No buyout"))
       row.icon:SetTexture(item.icon or (item.item and item.item.icon) or "Interface\\Icons\\INV_Misc_QuestionMark")
-      row.marker:SetShown(selected == item)
+      row.marker:SetShown(selected == item or (plan ~= nil and plan.auctionID ~= nil and plan.auctionID == item.auctionID))
       row:SetEnabled(not busy)
     end
   end
@@ -373,7 +385,7 @@ refresh = function()
     or Rules.running and "Reading current listings..."
     or view == "queue" and "Save your groups and rules, then run a scan."
     or view == "deals" and "No matching deals. Run a scan to update prices."
-    or view == "sell" and "No auctionable bag stacks."
+    or view == "sell" and "Nothing in your bags can be auctioned."
     or view == "owned" and "No auctions to display."
     or view == "browse" and House.context ~= "browse" and "No current listings. Try another item or refresh your scan."
     or not ns.Database.NewestScan(ns.db, ns.RealmKey()) and "No scan yet. Run at least a Quick scan to see reference prices."

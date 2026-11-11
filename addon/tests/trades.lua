@@ -247,14 +247,18 @@ buyback = { { "Broken Fang", 1, 85 } }
 Stub.fire("MERCHANT_SHOW")
 eq(vendored(), "", "what the buyback list held when the merchant opened was sold before and is not booked again")
 buyback[2] = { "Jagged Star of the Eagle", 1, 3100, star }
-Stub.money = Stub.money + 3100
 Stub.fire("MERCHANT_UPDATE")
+Stub.money = Stub.money + 3100
+Stub.fire("PLAYER_MONEY")
 Stub.fire("MERCHANT_UPDATE")
 eq(vendored(), "Jagged Star of the Eagle 15301:1019 1 3100 0 0", "a new buyback entry is a vendor sale, booked once, keyed by its link")
 buyback[3] = { "Broken Fang", 1, 85 }
 buyback[4] = { "Broken Fang", 1, 85 }
 Stub.fire("MERCHANT_UPDATE")
-eq(select(2, vendored():gsub("Broken Fang", "")), 2, "two equal stacks sold are two sales")
+Stub.money = Stub.money + 170
+Stub.fire("PLAYER_MONEY")
+Stub.advance(10)
+eq(select(2, vendored():gsub("Broken Fang", "")), 2, "two equal stacks sold are two sales, also when one change of gold pays both")
 table.remove(buyback, 4)
 Stub.fire("MERCHANT_UPDATE")
 eq(select(2, vendored():gsub("Broken Fang", "")), 1, "an item bought back takes its sale off again")
@@ -273,11 +277,13 @@ table.remove(buyback, 1)
 buyback[12] = { "Broken Fang", 1, 85 }
 Stub.money = Stub.money + 85
 Stub.fire("MERCHANT_UPDATE")
+Stub.fire("PLAYER_MONEY")
 eq(select(2, vendored():gsub("Broken Fang", "")), 2, "a full list that sold the same stack as its oldest entry books it from the gold gained")
 table.remove(buyback, 1)
 buyback[12] = { "Ruined Pelt", 1, 55 }
 Stub.money = Stub.money + 55
 Stub.fire("MERCHANT_UPDATE")
+Stub.fire("PLAYER_MONEY")
 eq(select(2, vendored():gsub("Ruined Pelt", "")), 1, "with the list full, a sale unlike the oldest entry is seen as usual")
 Stub.fire("MERCHANT_CLOSED")
 
