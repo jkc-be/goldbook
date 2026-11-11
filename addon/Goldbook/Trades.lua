@@ -376,8 +376,11 @@ function Trades.DropRepeatedSales(db)
     for index = 2, #hours do
       excess[hours[index]] = gold[hours[index - 1]] - gold[hours[index]]
     end
+    -- An auction sale is dated when the auction house mailed it, and its
+    -- gold comes when the mail is taken, which books nothing, so it is left
+    -- out of both.
     local function count(entry)
-      local hour = stretch(entry.at)
+      local hour = entry.side ~= "sell" and stretch(entry.at)
       if hour then
         excess[hour] = excess[hour] + netOf(entry)
       end

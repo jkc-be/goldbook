@@ -401,6 +401,18 @@ eq(table.concat(kept, ", ") .. " | " .. tostring(dropped),
   "Torn Letter 100, Light Bow 3610, Melon Juice 3620, Melon Juice 7260, Linen Cloth 10810, Linen Cloth 10815 | 2",
   "the upgrade takes off sales booked again, where the gold shows they were, and keeps a real second sale")
 eq(select(2, ns.Database.Init(upgraded)), 0, "the upgrade runs once")
+-- An auction sale is dated when the auction house mailed it, not when its
+-- gold was taken from the mailbox, so it says nothing about that hour's gold.
+local auctioned = ns.Database.Init({
+  version = 6,
+  gold = { A = { [first] = 0, [first + 1] = 200 } },
+  trades = { A = {
+    sold(1, 10, "Linen Cloth", 100),
+    sold(1, 900, "Linen Cloth", 100),
+    { at = (first + 1) * HOUR + 1200, side = "sell", item = "Wool Cloth", count = 1, price = 105, fee = 5 },
+  } },
+})
+eq(#auctioned.trades.A, 3, "an auction sale whose gold is still in the mailbox takes off no vendor sale")
 
 io.write(("%d trade checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
