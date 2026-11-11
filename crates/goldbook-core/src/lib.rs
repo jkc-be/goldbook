@@ -70,6 +70,10 @@ pub struct AccountUpload {
     /// Left out when empty, so that an account without trades uploads as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trades: Vec<Trade>,
+    /// Trades the addon took off after booking them, such as a vendor sale
+    /// booked twice, for the server to take off too. Left out when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dropped_trades: Vec<Trade>,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -378,20 +382,23 @@ pub fn parse_account_upload(v: &Value) -> Result<AccountUpload, String> {
         .enumerate()
         .map(|(i, v)| character(v, &format!("characters[{i}]")))
         .collect::<Result<_, _>>()?;
-    let trades = match a.get("trades") {
-        None => Vec::new(),
-        Some(v) => list(v, "trades", MAX_TRADES)?
-            .iter()
-            .enumerate()
-            .map(|(i, v)| parse_trade(v, &format!("trades[{i}]")))
-            .collect::<Result<_, _>>()?,
+    let trades = |name: &str| -> Result<Vec<Trade>, String> {
+        match a.get(name) {
+            None => Ok(Vec::new()),
+            Some(v) => list(v, name, MAX_TRADES)?
+                .iter()
+                .enumerate()
+                .map(|(i, v)| parse_trade(v, &format!("{name}[{i}]")))
+                .collect(),
+        }
     };
     Ok(AccountUpload {
         id,
         key_hash,
         previous_key_hash,
         characters,
-        trades,
+        trades: trades("trades")?,
+        dropped_trades: trades("droppedTrades")?,
     })
 }
 
