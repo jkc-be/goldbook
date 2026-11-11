@@ -4,7 +4,7 @@ local Codec = ns.Codec
 local Database = {}
 ns.Database = Database
 
-local SCHEMA = 6
+local SCHEMA = 7
 local MAX_QUEUED_SCANS = 20
 local MAX_QUEUE_AGE = 14 * 24 * 3600
 local HISTORY_DAYS = 14
@@ -118,8 +118,11 @@ local function newAccount()
   return { id = Codec.RandomCode(ID_LENGTH, random), key = Codec.RandomCode(KEY_LENGTH, random) }
 end
 
+-- Returns the database, and how many repeated vendor sales the upgrade to
+-- schema 7 took off, 0 without that upgrade.
 function Database.Init(saved)
   local db = saved or {}
+  local before = db.version
   if db.version == 1 then
     upgradeFromSchema1(db)
     db.version = 2
@@ -157,7 +160,10 @@ function Database.Init(saved)
   db.account = db.account or newAccount()
   db.fromServer = db.fromServer or {}
   db.serverMerged = db.serverMerged or {}
-  return db
+  -- Schema 7 takes off the vendor sales that WoW Forever's buyback list
+  -- booked more than once.
+  local dropped = before and before < 7 and ns.Trades.DropRepeatedSales(db) or 0
+  return db, dropped
 end
 
 -- Logins made with the old key end once the sync agent uploads the new one.
