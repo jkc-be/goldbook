@@ -24,10 +24,9 @@ local MAIL_ATTACHMENTS = ATTACHMENTS_MAX_RECEIVE or 16
 -- What a window makes of gold no claim explains, while it is open and GRACE
 -- after: the side to book, or "skip" when another booking covers it.
 local WINDOWS = {
-  -- Sales are booked from the buyback list (Trades.Merchant), junk sold all
-  -- at once from the bags (Core), and purchases and buybacks leave claims,
-  -- so a loss left over is a repair.
-  merchant = { gain = "skip", loss = "repair" },
+  -- Sales, purchases and buybacks leave claims, so a loss left over is a
+  -- repair, and a gain left over is other income.
+  merchant = { loss = "repair" },
   loot = { gain = "loot" },
   -- Booked from the trade window once the trade completes.
   trade = { gain = "skip", loss = "skip" },
@@ -120,28 +119,75 @@ local function book(side, copper, claim)
   else
     Trades.Add(ns.db, ns.CharacterKey(), entries(side, copper, claim, now), now)
   end
+  if claim.booked then
+    claim.booked()
+  end
   ns.UI.RefreshSoon()
 end
 
--- Books what the claims made around `change` explain of it: first those
--- with an amount that fits in what is left, then one that takes any. A claim
--- takes no part of a change smaller than its amount, which is some other
--- gold. Once GRACE has passed, the window open when the gold moved explains
--- the rest, or else it is other.
+-- Which claims each pass of `explain` takes for what is left of a change,
+-- and whether it looks at the newest first. An `exact` claim may be no gold
+-- at all, such as a buyback entry that shows up late (Trades.Merchant), so
+-- it takes part of a change only once GRACE has passed and no other claim can
+-- still come, the newest first.
+local PASSES = {
+  {
+    takes = function(claim, left)
+      return claim.amount == left
+    end,
+  },
+  {
+    takes = function(claim, left)
+      return not claim.exact and claim.amount ~= nil and claim.amount <= left
+    end,
+  },
+  {
+    final = true,
+    newest = true,
+    takes = function(claim, left)
+      return claim.exact and claim.amount <= left
+    end,
+  },
+  {
+    takes = function(claim)
+      return claim.amount == nil
+    end,
+  },
+}
+
+-- Whether the window `name` was open at `at`, or closed within GRACE before.
+local function within(name, at)
+  for _, span in ipairs(spans) do
+    if span.name == name and at >= span.from and at <= (span.to or math.huge) + GRACE then
+      return true
+    end
+  end
+  return false
+end
+
+-- Books what the claims made around `change` explain of it, pass by pass,
+-- see PASSES. A claim takes no part of a change smaller than its amount,
+-- which is some other gold. Once GRACE has passed, the window open when the
+-- gold moved explains the rest, or else it is other.
 local function explain(change, final)
   local sign = change.left > 0 and 1 or -1
-  for _, sized in ipairs({ true, false }) do
-    local index = 1
-    while change.left ~= 0 and claims[index] do
-      local claim = claims[index]
-      if claim.sign == sign and (claim.amount ~= nil) == sized and (claim.amount or 0) <= math.abs(change.left)
-        and math.abs(claim.at - change.at) <= GRACE then
-        local copper = claim.amount or math.abs(change.left)
-        table.remove(claims, index)
-        book(claim.side, copper, claim)
-        change.left = change.left - sign * copper
-      else
-        index = index + 1
+  for _, pass in ipairs(PASSES) do
+    if final or not pass.final then
+      local index = pass.newest and #claims or 1
+      while change.left ~= 0 and claims[index] do
+        local claim = claims[index]
+        if claim.sign == sign and pass.takes(claim, math.abs(change.left)) and math.abs(claim.at - change.at) <= GRACE
+          and (not claim.window or within(claim.window, change.at)) then
+          local copper = claim.amount or math.abs(change.left)
+          table.remove(claims, index)
+          book(claim.side, copper, claim)
+          change.left = change.left - sign * copper
+          if pass.newest then
+            index = index - 1
+          end
+        else
+          index = index + (pass.newest and -1 or 1)
+        end
       end
     end
   end
@@ -194,6 +240,11 @@ local function claim(new)
   claims[#claims + 1] = new
   settle()
 end
+
+-- A claim from elsewhere: { side, sign, amount, item, party, stacks, id,
+-- booked, exact, window }, where `booked` is called once gold has confirmed
+-- it, and `window` names the window that must be open when the gold moves.
+Accounting.Claim = claim
 
 local function open(name)
   spans[#spans + 1] = { name = name, from = GetTime() }
