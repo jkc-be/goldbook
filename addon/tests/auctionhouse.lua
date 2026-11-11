@@ -144,7 +144,7 @@ House.SetMode("sell")
 House.Select(House.rows[1])
 eq(House.ReviewPost(5, 200, 2), true, "posting review")
 eq(House.Review().total, 1000, "posting unit price multiplied")
-Stub.bags[0][1].hyperlink = "|Hitem:2771|h[Tin Ore]|h"
+Stub.bags[0][1].itemID, Stub.bags[0][1].hyperlink = 2771, "|Hitem:2771|h[Tin Ore]|h"
 eq(House.Confirm(), false, "bag slot replacement refused")
 eq(server.count("post-commodity"), 0, "replacement never posted")
 server.seed(); server.cache(ns)
@@ -157,6 +157,38 @@ ns.Scanner.Start("browse")
 eq(ns.Scanner.state, "idle", "scan cannot interrupt transaction")
 Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 300)
 eq(House.phase, "idle", "post finishes on server event")
+
+-- Each post pays a deposit, so a commodity posts from all its bag stacks at
+-- once, as the game's own sell frame does.
+local callsBefore = #server.calls
+Stub.bags[1] = { slots = 1, { itemID = 2770, hyperlink = "|Hitem:2770|h[Copper Ore]|h", stackCount = 20, commodity = true } }
+House.SetMode("sell")
+local ore = {}
+for _, row in ipairs(House.rows) do
+  if row.itemKey.itemID == 2770 then ore[#ore + 1] = row.quantity end
+end
+eq(table.concat(ore, " "), "32", "a commodity's bag stacks are one row")
+House.Select(House.rows[1])
+eq(House.ReviewPost(32, 200, 2), true, "a post may use every stack of a commodity")
+House.Confirm()
+local posted = server.calls[#server.calls]
+eq(posted.name .. " " .. posted.args[3], "post-commodity 32", "one post sells both stacks")
+Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 302)
+House.Select(House.rows[1])
+House.ReviewPost(20, 200, 2)
+Stub.bags[0][1] = nil
+House.Confirm()
+posted = server.calls[#server.calls]
+eq(posted.name .. " " .. posted.args[1].bagID .. " " .. posted.args[3], "post-commodity 1 20",
+  "a post whose first stack is gone takes a stack still in the bags")
+Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 303)
+House.Select(House.rows[1])
+House.ReviewPost(20, 200, 2)
+Stub.bags[1][1].stackCount = 19
+eq(House.Confirm(), false, "a post larger than what the bags still hold is refused")
+for index = #server.calls, callsBefore + 1, -1 do table.remove(server.calls, index) end
+server.seed(); server.cache(ns)
+
 House.SetMode("owned")
 Stub.advance(0.2)
 House.Select(House.rows[1])
@@ -234,6 +266,15 @@ Stub.bags[0][1].stackCount = 8
 Stub.fire("AUCTION_HOUSE_AUCTION_CREATED", 301)
 eq(Rules.queue[1].done, true, "completed queue row marked")
 eq(Rules.Execute(Rules.queue[1]), false, "completed row cannot run again")
+
+server.seed(); server.cache(ns)
+Stub.bags[0][1].stackCount = 2
+Stub.bags[1] = { slots = 1, { itemID = 2770, hyperlink = "|Hitem:2770|h[Copper Ore]|h", stackCount = 2, commodity = true } }
+Rules.Start("post")
+Stub.advance(2)
+eq(Rules.queue[1].name .. " " .. Rules.queue[1].quantity .. " " .. Rules.queue[2].name, "Copper Ore 4 Tin Ore",
+  "automation posts a commodity's stacks together, up to the items per auction")
+server.seed(); server.cache(ns)
 
 Rules.Start("cancel")
 Stub.advance(2)
@@ -405,6 +446,16 @@ Stub.ctrl = false
 reopen()
 server.seed(); server.cache(ns)
 ns.AuctionUI.Show()
+
+Stub.bags[1] = { slots = 1, { itemID = 2770, hyperlink = "|Hitem:2770|h[Copper Ore]|h", stackCount = 20, commodity = true } }
+click(panel.tabs.sell)
+click(panel.rows[1])
+eq(panel.rows[1].count.text .. " " .. panel.rows[1].price.text, "32 2 stacks", "the sell list counts a commodity's stacks")
+eq(panel.detailBody.text:match("^[^\n]*"), "32 in 2 bag stacks", "the sell detail counts a commodity's stacks")
+eq(panel.quantity:GetText(), "32", "a commodity's quantity starts at all its stacks")
+Stub.bags[1] = nil
+click(panel.tabs.browse)
+Stub.advance(0.3)
 
 -- Duration labels, reviews and posting arguments stay aligned.
 click(panel.tabs.sell)

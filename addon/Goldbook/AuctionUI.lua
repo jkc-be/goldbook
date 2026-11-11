@@ -248,9 +248,10 @@ local function detail()
     heading = item.name
     if view == "sell" then
       quantity, pricing, actionable, action = true, true, true, "Review post"
-      body = "Bag " .. item.bag .. ", slot " .. item.slot .. " · " .. item.quantity .. " available\n\n"
+      body = (item.commodity and item.quantity .. " in " .. item.stacks .. (item.stacks == 1 and " bag stack" or " bag stacks")
+          or "Bag " .. item.bag .. ", slot " .. item.slot .. " · " .. item.quantity .. " available") .. "\n\n"
         .. "Set the price per item in gold. The review shows the total buyout and deposit.\n\n"
-        .. (item.commodity and "The initial price is the last Goldbook minimum, when available."
+        .. (item.commodity and "One post takes from every stack and pays one deposit. The initial price is the last Goldbook minimum, when available."
           or "Ordinary items are posted one at a time. The initial price is Goldbook's last minimum.")
     elseif view == "owned" then
       actionable, action = true, "Review cancellation"
@@ -373,7 +374,7 @@ refresh = function()
       row.title:SetText(text)
       row.count:SetText(item.quantity or "")
       row.price:SetText(view == "queue" and (item.done and "Confirmed" or item.kind == "skip" and "Skipped" or item.kind == "cancel" and "Cancel" or money(item.unitPrice))
-        or view == "deals" and money(item.total) or view == "sell" and (item.bag .. " / " .. item.slot) or (item.price and item.price > 0 and money(item.price) or "No buyout"))
+        or view == "deals" and money(item.total) or view == "sell" and (item.commodity and (item.stacks == 1 and "1 stack" or item.stacks .. " stacks") or item.bag .. " / " .. item.slot) or (item.price and item.price > 0 and money(item.price) or "No buyout"))
       row.icon:SetTexture(item.icon or (item.item and item.item.icon) or "Interface\\Icons\\INV_Misc_QuestionMark")
       row.marker:SetShown(selected == item or (plan ~= nil and plan.auctionID ~= nil and plan.auctionID == item.auctionID))
       row:SetEnabled(not busy)
@@ -384,7 +385,7 @@ refresh = function()
     or Rules.running and "Reading current listings..."
     or view == "queue" and "Save your groups and rules, then run a scan."
     or view == "deals" and "No matching deals. Run a scan to update prices."
-    or view == "sell" and "No auctionable bag stacks."
+    or view == "sell" and "Nothing in your bags can be auctioned."
     or view == "owned" and "No auctions to display."
     or view == "browse" and House.context ~= "browse" and "No current listings. Try another item or refresh your scan."
     or not ns.Database.NewestScan(ns.db, ns.RealmKey()) and "No scan yet. Run at least a Quick scan to see reference prices."
