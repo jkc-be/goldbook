@@ -2,7 +2,11 @@ use crate::{App, Error, Input, Reply, Result, db, hash, house::House, now};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// A stored trade's key besides its account, name and realm: at, side, item,
+/// count, price, fee and copy.
+type TradeKey = (i64, String, String, i64, i64, i64, i64);
 
 pub(super) fn register_installation(
     input: &Input,
@@ -194,6 +198,9 @@ pub(super) fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply
     {
         let mut insert = tx.prepare("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy,item_key,party) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12) ON CONFLICT (account_id,name,realm,at,side,item,count,price,fee,copy) DO UPDATE SET item_key=COALESCE(item_key,excluded.item_key),party=COALESCE(party,excluded.party)")?;
         let mut copies: BTreeMap<_, i64> = BTreeMap::new();
+        // Per character, its oldest trade in the upload and every trade it
+        // holds, as the key the table stores it under.
+        let mut held: BTreeMap<(&str, &str), (i64, BTreeSet<TradeKey>)> = BTreeMap::new();
         for t in &account.trades {
             let copy = copies
                 .entry((
@@ -214,7 +221,49 @@ pub(super) fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply
                 t.item_key,
                 t.party
             ])?;
+            let (oldest, keys) = held
+                .entry((&t.name, &t.realm))
+                .or_insert((t.at as i64, BTreeSet::new()));
+            *oldest = (*oldest).min(t.at as i64);
+            keys.insert((
+                t.at as i64,
+                t.side.clone(),
+                t.item.clone(),
+                t.count as i64,
+                t.price as i64,
+                t.fee as i64,
+                *copy,
+            ));
             *copy += 1;
+        }
+        // The addon prunes its oldest trades and the sync agent sends the
+        // newest, so an upload holds each character's trades from its oldest
+        // one on. A trade stored from then on that the upload no longer
+        // holds was taken off by the addon, such as a sale bought back or
+        // booked twice, and goes. Older trades stay.
+        let mut stored = tx.prepare("SELECT at,side,item,count,price,fee,copy FROM trades WHERE account_id=?1 AND name=?2 AND realm=?3 AND at>=?4")?;
+        let mut delete = tx.prepare("DELETE FROM trades WHERE account_id=?1 AND name=?2 AND realm=?3 AND at=?4 AND side=?5 AND item=?6 AND count=?7 AND price=?8 AND fee=?9 AND copy=?10")?;
+        for ((name, realm), (oldest, keys)) in &held {
+            let gone = stored
+                .query_map(params![account.id, name, realm, oldest], |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<TradeKey>>>()?
+                .into_iter()
+                .filter(|key| !keys.contains(key));
+            for (at, side, item, count, price, fee, copy) in gone {
+                delete.execute(params![
+                    account.id, name, realm, at, side, item, count, price, fee, copy
+                ])?;
+            }
         }
     }
     if let Some(fingerprint) = &input.uploader {
