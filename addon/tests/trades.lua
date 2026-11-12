@@ -377,25 +377,33 @@ if arg[1] then
   out:close()
 end
 
--- Before schema 7, WoW Forever's buyback list booked vendor sales again at
--- every merchant visit. The upgrade takes off a sale that repeats one of the
--- 12 before it, but never more than the gold history shows was booked.
+-- Before schema 7, WoW Forever's buyback list booked vendor sales again in a
+-- burst as each merchant visit began. The upgrade takes off the repeats such
+-- a burst starts with, but never more than the gold history shows was booked.
 local HOUR, first = 3600, 500000
 local function sold(hour, seconds, item, price)
   return { at = (first + hour) * HOUR + seconds, side = "vendor", item = item, count = 1, price = price, fee = 0 }
 end
 local repeated = {
   version = 6,
-  gold = { A = { [first] = 0, [first + 1] = 1300, [first + 2] = 1600, [first + 3] = 1700 } },
+  -- Hours 1 and 2 hold auction bids of 1000 and 300 that book nothing yet,
+  -- and hour 4 auction gold of 80 taken from the mailbox.
+  gold = { A = { [first] = 0, [first + 1] = 1350, [first + 2] = 1350, [first + 3] = 1700, [first + 4] = 1940 } },
   trades = { A = {
-    sold(0, 100, "Torn Letter", 5),
     sold(1, 10, "Light Bow", 1000),
     sold(1, 20, "Melon Juice", 300),
+    sold(1, 25, "Linen Cloth", 50),
     sold(1, 600, "Light Bow", 1000),
+    sold(1, 600, "Melon Juice", 300),
+    sold(1, 601, "Linen Cloth", 50),
+    sold(1, 603, "Light Bow", 1000),
     sold(2, 60, "Melon Juice", 300),
     sold(3, 10, "Linen Cloth", 50),
-    sold(3, 15, "Linen Cloth", 50),
-    sold(3, 900, "Melon Juice", 300),
+    sold(3, 11, "Melon Juice", 300),
+    sold(4, 100, "Catfish", 80),
+    sold(4, 100, "Catfish", 80),
+    sold(4, 700, "Catfish", 80),
+    sold(4, 700, "Catfish", 80),
   } },
 }
 local upgraded, dropped = ns.Database.Init(repeated)
@@ -404,26 +412,30 @@ for _, trade in ipairs(upgraded.trades.A) do
   kept[#kept + 1] = trade.item .. " " .. (trade.at - first * HOUR)
 end
 eq(table.concat(kept, ", ") .. " | " .. tostring(dropped),
-  "Torn Letter 100, Light Bow 3610, Melon Juice 3620, Melon Juice 7260, Linen Cloth 10810, Linen Cloth 10815 | 2",
-  "the upgrade takes off sales booked again, where the gold shows they were, and keeps a real second sale")
+  "Light Bow 3610, Melon Juice 3620, Linen Cloth 3625, Light Bow 4203, Melon Juice 7260, Linen Cloth 10810, Melon Juice 10811, "
+    .. "Catfish 14500, Catfish 14500, Catfish 15100, Catfish 15100 | 3",
+  "the upgrade takes off the burst a visit starts with where the gold shows it was booked again, and keeps a repeat "
+    .. "later in the visit or on its own, sales the gold shows were paid, and equal sales in one second the gold covers only some of")
 local gone = {}
 for _, trade in ipairs(upgraded.dropped.A) do
   gone[#gone + 1] = trade.item .. " " .. (trade.at - first * HOUR)
 end
-eq(table.concat(gone, ", "), "Light Bow 4200, Melon Juice 11700", "what it takes off is kept for the server to take off too")
+eq(table.concat(gone, ", "), "Light Bow 4200, Melon Juice 4200, Linen Cloth 4201", "what it takes off is kept for the server to take off too")
 eq(select(2, ns.Database.Init(upgraded)), 0, "the upgrade runs once")
 -- An auction sale is dated when the auction house mailed it, not when its
 -- gold was taken from the mailbox, so it says nothing about that hour's gold.
 local auctioned = ns.Database.Init({
   version = 6,
-  gold = { A = { [first] = 0, [first + 1] = 200 } },
+  gold = { A = { [first] = 0, [first + 1] = 320 } },
   trades = { A = {
     sold(1, 10, "Linen Cloth", 100),
+    sold(1, 12, "Wool Cloth", 60),
     sold(1, 900, "Linen Cloth", 100),
+    sold(1, 901, "Wool Cloth", 60),
     { at = (first + 1) * HOUR + 1200, side = "sell", item = "Wool Cloth", count = 1, price = 105, fee = 5 },
   } },
 })
-eq(#auctioned.trades.A, 3, "an auction sale whose gold is still in the mailbox takes off no vendor sale")
+eq(#auctioned.trades.A, 5, "an auction sale whose gold is still in the mailbox takes off no vendor sale")
 
 io.write(("%d trade checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
