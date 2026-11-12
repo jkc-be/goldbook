@@ -744,7 +744,20 @@ end
 function GetCurrentRegionName()
   return "EU"
 end
-function UnitFactionGroup()
+-- The auctioneer the "npc" unit reads while the auction house is open: a
+-- faction's auctioneer has its faction group, a neutral goblin has none, and
+-- nil stands for no "npc" unit at all.
+Stub.auctioneer = { faction = "Horde" }
+function UnitExists(unit)
+  if unit:lower() == "npc" then
+    return Stub.auctioneer ~= nil
+  end
+  return true
+end
+function UnitFactionGroup(unit)
+  if unit:lower() == "npc" then
+    return Stub.auctioneer and Stub.auctioneer.faction
+  end
   return "Horde"
 end
 -- "NPC" is whoever the trade window is open with.
