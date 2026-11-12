@@ -389,6 +389,20 @@ eq(booked(), "vendor Malachite nil 1 15 nil / vendor Light Feather nil 1 7 nil",
   "two sales paid with one change of gold wait for it, also when other gold moves before it is booked")
 Stub.advance(GRACE)
 eq(booked(), "repair Repairs nil 1 3 nil", "and the other gold is booked on its own")
+-- Only gold a claim may explain keeps it waiting: a take the server refused
+-- does not hold back the same mail's next take.
+Stub.inbox.mails = { { sender = "Mirelle", subject = "Again", money = 100, daysLeft = 20, refuses = true } }
+TakeInboxMoney(1)
+Stub.advance(1)
+pay(5)
+Stub.advance(GRACE - 0.5)
+pay(5)
+Stub.advance(0.25)
+TakeInboxMoney(1)
+gain(100)
+eq(booked(), "mailIn Again nil 1 100 Mirelle", "a take tried again is booked, also while gold spent since a refused take waits")
+Stub.advance(GRACE)
+eq(booked(), "repair Repairs nil 1 5 nil / repair Repairs nil 1 5 nil", "and the gold spent is booked on its own")
 Stub.fire("MERCHANT_CLOSED")
 
 booked()

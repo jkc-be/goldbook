@@ -165,6 +165,14 @@ local function within(name, at)
   return false
 end
 
+-- Whether `claim` may explain part of what is left of `change`: gold the
+-- same way, moved within GRACE of the claim, no less than its amount, and
+-- while its window was open.
+local function fits(claim, change)
+  return claim.sign == (change.left > 0 and 1 or -1) and math.abs(claim.at - change.at) <= GRACE
+    and (claim.amount or 0) <= math.abs(change.left) and (not claim.window or within(claim.window, change.at))
+end
+
 -- Books what the claims made around `change` explain of it, pass by pass,
 -- see PASSES. A claim takes no part of a change smaller than its amount,
 -- which is some other gold. Once GRACE has passed, the window open when the
@@ -176,8 +184,7 @@ local function explain(change, final)
       local index = pass.newest and #claims or 1
       while change.left ~= 0 and claims[index] do
         local claim = claims[index]
-        if claim.sign == sign and pass.takes(claim, math.abs(change.left)) and math.abs(claim.at - change.at) <= GRACE
-          and (not claim.window or within(claim.window, change.at)) then
+        if fits(claim, change) and pass.takes(claim, math.abs(change.left)) then
           local copper = claim.amount or math.abs(change.left)
           table.remove(claims, index)
           book(claim.side, copper, claim)
@@ -216,13 +223,13 @@ local function settle()
     end
   end
   changes = waiting
-  -- A claim older than GRACE explains no new change, but one made around a
+  -- A claim older than GRACE explains no new change, but one that fits a
   -- change still waiting may yet explain it in its final pass.
   for index = #claims, 1, -1 do
     local claim = claims[index]
     local wanted = false
     for _, change in ipairs(changes) do
-      wanted = wanted or math.abs(claim.at - change.at) <= GRACE
+      wanted = wanted or fits(claim, change)
     end
     if now - claim.at > GRACE and not wanted then
       table.remove(claims, index)
