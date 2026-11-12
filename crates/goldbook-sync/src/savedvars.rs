@@ -271,12 +271,11 @@ fn merge_characters(characters: Vec<(String, u64, Value)>) -> Vec<(String, u64, 
         .collect()
 }
 
-/// The trades under GoldbookDB[table]["Name-Realm"], the newest MAX_TRADES of
-/// them: "trades" for those booked, "dropped" for those the addon took off as
-/// booked by mistake. One the server would refuse is left out rather than
+/// The trades booked under GoldbookDB.trades["Name-Realm"], the newest
+/// MAX_TRADES of them. One the server would refuse is left out rather than
 /// hold up the rest of the account.
-fn extract_trades(db: &Map<String, Value>, table: &str) -> Vec<Trade> {
-    let Some(Value::Object(booked)) = db.get(table) else {
+fn extract_trades(db: &Map<String, Value>) -> Vec<Trade> {
+    let Some(Value::Object(booked)) = db.get("trades") else {
         return Vec::new();
     };
     let mut trades = Vec::new();
@@ -362,5 +361,5 @@ pub fn extract_account(saved: &SavedVariables) -> Result<Option<AccountUpload>> 
     characters.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     characters.truncate(MAX_CHARACTERS);
     characters.sort_by(|a, b| a.0.cmp(&b.0));
-    parse_account_upload(&json!({"id":login.id,"keyHash":key_hash(&login.key),"characters":characters.into_iter().map(|c|c.2).collect::<Vec<_>>(),"trades":extract_trades(db,"trades"),"droppedTrades":extract_trades(db,"dropped")})).map(Some).map_err(anyhow::Error::msg)
+    parse_account_upload(&json!({"id":login.id,"keyHash":key_hash(&login.key),"characters":characters.into_iter().map(|c|c.2).collect::<Vec<_>>(),"trades":extract_trades(db)})).map(Some).map_err(anyhow::Error::msg)
 }
