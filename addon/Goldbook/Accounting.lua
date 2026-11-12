@@ -213,11 +213,14 @@ local function explain(change, final)
   change.left = 0
 end
 
-local function settle()
+-- Books what the claims and windows explain of the changes waiting. When
+-- `closing`, at logout, no claim or gold can come any more, so everything
+-- waiting is settled now; the game saves nothing that still waits.
+local function settle(closing)
   local now = GetTime()
   local waiting = {}
   for _, change in ipairs(changes) do
-    explain(change, now - change.at >= GRACE)
+    explain(change, closing or now - change.at >= GRACE)
     if change.left ~= 0 then
       waiting[#waiting + 1] = change
     end
@@ -231,7 +234,7 @@ local function settle()
     for _, change in ipairs(changes) do
       wanted = wanted or fits(claim, change)
     end
-    if now - claim.at > GRACE and not wanted then
+    if (closing or now - claim.at > GRACE) and not wanted then
       table.remove(claims, index)
       if claim.unpaid then
         claim.unpaid()
@@ -299,7 +302,9 @@ local function moneyChanged()
   if copper ~= 0 then
     changes[#changes + 1] = { at = GetTime(), left = copper }
     settle()
-    C_Timer.After(GRACE, settle)
+    C_Timer.After(GRACE, function()
+      settle()
+    end)
   end
 end
 
@@ -503,6 +508,9 @@ local AUCTION_HOOKS = {
 
 local EVENTS = {
   PLAYER_MONEY = moneyChanged,
+  PLAYER_LOGOUT = function()
+    settle(true)
+  end,
   MERCHANT_SHOW = function()
     open("merchant")
   end,
