@@ -196,7 +196,7 @@ The [Reddit post](https://www.reddit.com/r/wowaddons/comments/1xofb73/how_to_acc
 
 ## Polling from the server
 
-The server can poll the EU PvP auction houses of both factions and the EU PvE Horde house itself, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. `0` or nothing leaves it off. The server does not start when the variable has another value, or when it is `1` and the client ID or secret is missing.
+The server can itself poll the EU PvP and EU PvE auction houses of both factions, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. `0` or nothing leaves it off. The server does not start when the variable has another value, or when it is `1` and the client ID or secret is missing.
 
 The houses are built into `crates/goldbook-server/src/auctions.rs`:
 
@@ -205,8 +205,9 @@ The houses are built into `crates/goldbook-server/src/auctions.rs`:
 | EU PvP | Horde | 113 |
 | EU PvP | Alliance | 110 |
 | EU PvE | Horde | 114 |
+| EU PvE | Alliance | 111 |
 
-[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for EU PvP Horde and 114 for EU PvE Horde. 110 for EU PvP Alliance follows from the ID sets and is not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
+[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for EU PvP Horde and 114 for EU PvE Horde. 110 for EU PvP Alliance and 111 for EU PvE Alliance follow from the ID sets and are not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
 
 Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP CAMWOWEU4Realm8PvE` checks every polled house end to end, with the client ID and secret in the environment. It takes one shard of each server house; the shard need not exist, because the server pools it into its house by name. It polls the houses into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs each polled house and faction into a `ServerData.lua` under its shard, and restarts the server to show that the same snapshots are not stored twice.
 
