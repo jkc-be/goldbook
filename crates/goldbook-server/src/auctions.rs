@@ -48,8 +48,8 @@ impl std::fmt::Display for Source {
 }
 
 /// The houses polled for now. docs/ah-api/README.md confirms 113 and 114
-/// against player scans; 110 follows from the ID sets.
-const SOURCES: [Source; 3] = [
+/// against player scans; 110 and 111 follow from the ID sets.
+const SOURCES: [Source; 4] = [
     Source {
         house: "EU PvP",
         faction: "Horde",
@@ -64,6 +64,11 @@ const SOURCES: [Source; 3] = [
         house: "EU PvE",
         faction: "Horde",
         id: 114,
+    },
+    Source {
+        house: "EU PvE",
+        faction: "Alliance",
+        id: 111,
     },
 ];
 
@@ -694,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn eu_pvp_is_polled_for_both_factions_and_eu_pve_for_horde() {
+    fn eu_pvp_and_eu_pve_are_polled_for_both_factions() {
         let config = AuctionConfig::parse("1", "id", "secret").unwrap().unwrap();
         let polled: Vec<_> = SOURCES
             .iter()
@@ -720,6 +725,10 @@ mod tests {
                 (
                     "EU PvE/Horde (house 114)".to_owned(),
                     "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/114/commodities?namespace=dynamic-forever-eu".to_owned()
+                ),
+                (
+                    "EU PvE/Alliance (house 111)".to_owned(),
+                    "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/111/commodities?namespace=dynamic-forever-eu".to_owned()
                 ),
             ]
         );
