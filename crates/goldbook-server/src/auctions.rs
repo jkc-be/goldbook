@@ -47,9 +47,11 @@ impl std::fmt::Display for Source {
     }
 }
 
-/// The houses polled for now. docs/ah-api/README.md confirms 113 and 114
-/// against player scans; 110 and 111 follow from the ID sets.
-const SOURCES: [Source; 4] = [
+/// The houses polled for now. docs/ah-api/README.md confirms 113, 114 and 116
+/// against player scans; 110, 111 and 117 follow from the ID sets. A neutral
+/// (Blackwater) house is stored under the faction `Neutral`, as the addon
+/// files a scan taken at a neutral auctioneer.
+const SOURCES: [Source; 6] = [
     Source {
         house: "EU PvP",
         faction: "Horde",
@@ -69,6 +71,16 @@ const SOURCES: [Source; 4] = [
         house: "EU PvE",
         faction: "Alliance",
         id: 111,
+    },
+    Source {
+        house: "EU PvP",
+        faction: "Neutral",
+        id: 116,
+    },
+    Source {
+        house: "EU PvE",
+        faction: "Neutral",
+        id: 117,
     },
 ];
 
@@ -699,7 +711,7 @@ mod tests {
     }
 
     #[test]
-    fn eu_pvp_and_eu_pve_are_polled_for_both_factions() {
+    fn eu_pvp_and_eu_pve_are_polled_for_both_factions_and_neutral() {
         let config = AuctionConfig::parse("1", "id", "secret").unwrap().unwrap();
         let polled: Vec<_> = SOURCES
             .iter()
@@ -729,6 +741,14 @@ mod tests {
                 (
                     "EU PvE/Alliance (house 111)".to_owned(),
                     "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/111/commodities?namespace=dynamic-forever-eu".to_owned()
+                ),
+                (
+                    "EU PvP/Neutral (house 116)".to_owned(),
+                    "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/116/commodities?namespace=dynamic-forever-eu".to_owned()
+                ),
+                (
+                    "EU PvE/Neutral (house 117)".to_owned(),
+                    "https://eu.api.blizzard.com/data/wow/ruleset/1/auctions/117/commodities?namespace=dynamic-forever-eu".to_owned()
                 ),
             ]
         );
