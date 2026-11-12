@@ -338,14 +338,46 @@ end
 -- A second sale of the same stack sooner than this after the first is a real
 -- one: WoW Forever booked a sale again only at a later merchant visit.
 local REPEAT_AFTER = 30
+-- A vendor sale this long after the one before starts a merchant visit.
+local VISIT_GAP = 30
+-- WoW Forever booked the buyback list again all at once as a merchant
+-- opened, in the second the visit's first sale was booked. Fewer repeats than
+-- this in that second may be real sales made quickly.
+local REPLAYED = 3
+-- The buyback list holds the BUYBACK_SLOTS sales made last, but junk sold all
+-- at once never reaches it, so a sale it booked again can lie further back
+-- among the sales booked.
+local RECENT = 4 * BUYBACK_SLOTS
+
+-- Whether `entry` repeats one of the sales in `recent`, REPEAT_AFTER or more
+-- later.
+local function repeats(entry, recent)
+  for _, earlier in ipairs(recent) do
+    if earlier.item == entry.item and earlier.key == entry.key and earlier.count == entry.count
+      and earlier.price == entry.price and entry.at - earlier.at >= REPEAT_AFTER then
+      return true
+    end
+  end
+  return false
+end
+
+-- What tells a trade apart on the server; equal ones are copies of it.
+local function serverKey(entry)
+  return table.concat({ entry.at, entry.item, entry.count, entry.price, entry.fee or 0 }, "|")
+end
 
 -- Before schema 7, WoW Forever's buyback list booked vendor sales again at
--- every merchant visit, see Trades.Merchant. Takes off each vendor sale that
--- repeats one of the BUYBACK_SLOTS kept before it, REPEAT_AFTER or more
--- later, as long as the entries between two hours of gold history book more
--- than the gold did by at least its price. What it takes off goes to
--- db.dropped, for the sync agent to take off the server too. Returns how many
--- it took off.
+-- every merchant visit, see Trades.Merchant: sales in the second the visit
+-- began, each repeating one of the RECENT sales kept before it, REPEAT_AFTER
+-- or more later. Takes off the repeats a visit starts with in that second
+-- when there are at least REPLAYED, as long as the entries between two hours
+-- of gold history book more than the gold did by at least their price. Fewer
+-- repeats, or one later in a visit, may be a real second sale, and gold that
+-- went without being booked yet, such as an auction bid, also looks like a
+-- sale that never paid, so neither is taken off alone. Equal sales booked in
+-- the same second go or stay together, as the server keeps them as copies of
+-- one trade. What it takes off goes to db.dropped, for the sync agent to take
+-- off the server too. Returns how many it took off.
 function Trades.DropRepeatedSales(db)
   local dropped = 0
   for character, booked in pairs(db.trades) do
@@ -390,29 +422,66 @@ function Trades.DropRepeatedSales(db)
     for _, entry in pairs(db.accruing[character] or {}) do
       count(entry)
     end
-    local kept, recent = {}, {}
+    local visits, last = {}, nil
     for _, entry in ipairs(booked) do
-      local hour = entry.side == "vendor" and stretch(entry.at)
-      local repeats = false
-      if hour and excess[hour] >= entry.price then
-        for _, earlier in ipairs(recent) do
-          repeats = repeats or (earlier.item == entry.item and earlier.key == entry.key and earlier.count == entry.count
-            and earlier.price == entry.price and entry.at - earlier.at >= REPEAT_AFTER)
+      if entry.side == "vendor" then
+        if not last or entry.at - last.at >= VISIT_GAP then
+          visits[#visits + 1] = {}
+        end
+        table.insert(visits[#visits], entry)
+        last = entry
+      end
+    end
+    local gone, recent = {}, {}
+    for _, visit in ipairs(visits) do
+      local began, replayed = visit[1].at, 0
+      while visit[replayed + 1] and visit[replayed + 1].at == began and repeats(visit[replayed + 1], recent) do
+        replayed = replayed + 1
+      end
+      if replayed >= REPLAYED then
+        -- The trades booked in that second as the server keeps them: their
+        -- copies, what those were booked for, and whether every copy repeats.
+        local trades = {}
+        for index = 1, #visit do
+          local entry = visit[index]
+          if entry.at ~= began then
+            break
+          end
+          local key = serverKey(entry)
+          local trade = trades[key] or { copies = {}, price = 0, repeated = true }
+          trades[key] = trade
+          trade.copies[#trade.copies + 1] = entry
+          trade.price = trade.price + entry.price
+          trade.repeated = trade.repeated and index <= replayed
+        end
+        local hour = stretch(began)
+        for index = 1, replayed do
+          local trade = trades[serverKey(visit[index])]
+          if trade.repeated and not gone[visit[index]] and hour and excess[hour] >= trade.price then
+            excess[hour] = excess[hour] - trade.price
+            for _, copy in ipairs(trade.copies) do
+              gone[copy] = true
+            end
+          end
         end
       end
-      if repeats then
-        excess[hour] = excess[hour] - entry.price
+      for _, entry in ipairs(visit) do
+        if not gone[entry] then
+          recent[#recent + 1] = entry
+          if #recent > RECENT then
+            table.remove(recent, 1)
+          end
+        end
+      end
+    end
+    local kept = {}
+    for _, entry in ipairs(booked) do
+      if gone[entry] then
         dropped = dropped + 1
         db.dropped[character] = db.dropped[character] or {}
         table.insert(db.dropped[character], entry)
       else
         kept[#kept + 1] = entry
-        if entry.side == "vendor" then
-          recent[#recent + 1] = entry
-          if #recent > BUYBACK_SLOTS then
-            table.remove(recent, 1)
-          end
-        end
       end
     end
     db.trades[character] = kept
