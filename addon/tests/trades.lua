@@ -381,11 +381,22 @@ end
 -- each merchant visit began. The upgrade takes off what a visit booked again
 -- in its first second, but never more than the gold history shows was booked.
 local HOUR, first = 3600, 500000
+-- Goods of common quality, keyed as their links would be.
+local goods = { ["Light Bow"] = "2001", ["Melon Juice"] = "2002", ["Linen Cloth"] = "2003", Catfish = "2004", ["Wool Cloth"] = "2005",
+  ["Silk Cloth"] = "2006" }
+local function known()
+  local items = {}
+  for name, key in pairs(goods) do
+    items[key] = "1|" .. name
+  end
+  return items
+end
 local function sold(hour, seconds, item, price)
-  return { at = (first + hour) * HOUR + seconds, side = "vendor", item = item, count = 1, price = price, fee = 0 }
+  return { at = (first + hour) * HOUR + seconds, side = "vendor", item = item, key = goods[item], count = 1, price = price, fee = 0 }
 end
 local repeated = {
   version = 6,
+  items = known(),
   -- Hours 1, 2 and 3 hold auction bids of 1000, 300 and 350 that book
   -- nothing yet, and hour 4 auction gold of 80 taken from the mailbox.
   gold = { A = { [first] = 0, [first + 1] = 1350, [first + 2] = 1350, [first + 3] = 1350, [first + 4] = 1590 } },
@@ -428,6 +439,7 @@ eq(select(2, ns.Database.Init(upgraded)), 0, "the upgrade runs once")
 -- gold was taken from the mailbox, so it says nothing about that hour's gold.
 local auctioned = ns.Database.Init({
   version = 6,
+  items = known(),
   gold = { A = { [first] = 0, [first + 1] = 400 } },
   trades = { A = {
     sold(1, 10, "Linen Cloth", 100),
@@ -446,21 +458,26 @@ local function junk(seconds, key, item, price)
   entry.key = key
   return entry
 end
-local junked = ns.Database.Init({
-  version = 6,
-  items = { ["1001"] = "0|Broken Fang", ["1002"] = "0|Gnawed Bone", ["1003"] = "0|Torn Letter" },
-  -- An auction bid of 200 books nothing yet.
-  gold = { A = { [first] = 0, [first + 1] = 200 } },
-  trades = { A = {
-    junk(10, "1001", "Broken Fang", 100),
-    junk(10, "1002", "Gnawed Bone", 60),
-    junk(10, "1003", "Torn Letter", 40),
-    junk(900, "1001", "Broken Fang", 100),
-    junk(900, "1002", "Gnawed Bone", 60),
-    junk(900, "1003", "Torn Letter", 40),
-  } },
-})
-eq(#junked.trades.A, 6, "junk sold all at once at two visits takes off no sale, also beside an auction bid")
+local function junked(items)
+  return ns.Database.Init({
+    version = 6,
+    items = items,
+    -- An auction bid of 200 books nothing yet.
+    gold = { A = { [first] = 0, [first + 1] = 200 } },
+    trades = { A = {
+      junk(10, "1001", "Broken Fang", 100),
+      junk(10, "1002", "Gnawed Bone", 60),
+      junk(10, "1003", "Torn Letter", 40),
+      junk(900, "1001", "Broken Fang", 100),
+      junk(900, "1002", "Gnawed Bone", 60),
+      junk(900, "1003", "Torn Letter", 40),
+    } },
+  })
+end
+local twice = junked({ ["1001"] = "0|Broken Fang", ["1002"] = "0|Gnawed Bone", ["1003"] = "0|Torn Letter" })
+eq(#twice.trades.A .. " " .. #(twice.dropped.A or {}), "6 0", "junk sold all at once at two visits takes off no sale, also beside an auction bid")
+local unknown = junked({ ["1001"] = "0|Broken Fang", ["1002"] = "0|Gnawed Bone" })
+eq(#unknown.trades.A .. " " .. #(unknown.dropped.A or {}), "6 0", "nor does it when the quality of one of them is not known")
 
 io.write(("%d trade checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)

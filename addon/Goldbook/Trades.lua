@@ -368,7 +368,8 @@ local function repeats(entry, recent)
 end
 
 -- Junk sold with the Sell All Junk button is booked all in one second too, so
--- a visit that began with junk alone did not book the buyback list again.
+-- a visit that began with junk alone did not book the buyback list again. An
+-- item whose quality is not known may be junk as well.
 local JUNK = 0
 
 local function junkOnly(db, visit)
@@ -376,7 +377,8 @@ local function junkOnly(db, visit)
     if entry.at ~= visit[1].at then
       break
     end
-    if not entry.key or select(2, Database.Item(db, entry.key)) ~= JUNK then
+    local quality = entry.key and select(2, Database.Item(db, entry.key))
+    if quality and quality ~= JUNK then
       return false
     end
   end
