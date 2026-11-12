@@ -25,6 +25,7 @@ The python.org build of Python on macOS has no CA certificates. If a script fail
 - `If-Modified-Since` returns 304 when the snapshot has not changed.
 - EU4 PvP Horde, the shards `CAMWOWEU4Realm6PvP` and `CAMWOWEU4Realm8PvP`, is house 113. A scan taken 30 minutes before a snapshot has the same minimum as house 113 for 75% of its items.
 - EU PvE Horde is house 114. A scan taken 52 minutes before a snapshot has the same minimum as house 114 for 74% of its items.
+- EU PvP's neutral (Blackwater) auction house is house 116. A scan taken 3 minutes after a snapshot has the same minimum as house 116 for 99% of its items.
 - The API's bonus IDs for item variants are not the suffix IDs the addon uses in its item keys. How to map one to the other is unknown.
 
 ## Routes
@@ -179,6 +180,19 @@ A third run on 2026-11-08 compared the server's newest `EU PvE` Horde scan, take
 
 On the 1,941 items where houses 114 and 113 have different minimums, the scan matches 114 exactly 1,266 times and 113 32 times. EU PvE Horde is house 114. From the ID sets, EU PvE Alliance would be 111 and its Blackwater house 117, but there are no Alliance scans to check that.
 
+A fourth run on 2026-11-12 compared a full scan that a Horde character took at an EU PvP neutral auctioneer, at 22:27:52 UTC, with the snapshots of 22:25 UTC. The addon filed the scan as Horde then, so it was read from the character's SavedVariables instead of `/api/export`. All 2,301 of its items are plain item IDs:
+
+| House | Scan items found | Same minimum | Median \|ln(scan / house)\| |
+|---|---|---|---|
+| 116 | 100% | 99% | 0.00 |
+| 121 | 13% | 7% | 0.86 |
+| 117 | 71% | 7% | 0.44 |
+| 120, 123, 119, 124 | 59 to 75% | 5 to 6% | 0.56 to 0.61 |
+| 125 | 13% | 3% | 0.81 |
+| 110, 111, 113, 114 | 96 to 98% | 2 to 3% | 0.68 to 0.69 |
+
+On the 2,158 items where houses 116 and 113 have different minimums, the scan matches 116 exactly 2,132 times and 113 never. EU PvP's neutral house is house 116, which also confirms the 110/113/116 set. From the ID sets, EU PvE's neutral house would be 117.
+
 ## Item variants
 
 The addon keys a variant as `itemID:suffix` (`Codec.ItemKey` in `addon/Goldbook/Codec.lua`). The API marks variants with `bonus_lists`. The two use different numbers: the API's bonus IDs ranged from 12688 to 12920, and the suffixes in production's `CAMWOWEU4Realm8PvP` scans range from 14296 to 14473. None of the 3,778 variant keys in that export appears as an item and bonus ID pair in the API. A fixed offset of about 1580 lines up some of them, but neighbouring offsets fit almost as well, so it proves nothing.
@@ -196,7 +210,7 @@ The [Reddit post](https://www.reddit.com/r/wowaddons/comments/1xofb73/how_to_acc
 
 ## Polling from the server
 
-The server can itself poll the EU PvP and EU PvE auction houses of both factions, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. `0` or nothing leaves it off. The server does not start when the variable has another value, or when it is `1` and the client ID or secret is missing.
+The server can itself poll the EU PvP and EU PvE auction houses of both factions and their neutral houses, and store each snapshot as a full scan. Polling is off by default. To switch it on, set `GOLDBOOK_BATTLENET_AUCTIONS=1` in the server's environment, beside `BNET_CLIENT_ID` and `BNET_CLIENT_SECRET`, which it uses to get its token. `0` or nothing leaves it off. The server does not start when the variable has another value, or when it is `1` and the client ID or secret is missing.
 
 The houses are built into `crates/goldbook-server/src/auctions.rs`:
 
@@ -206,8 +220,10 @@ The houses are built into `crates/goldbook-server/src/auctions.rs`:
 | EU PvP | Alliance | 110 |
 | EU PvE | Horde | 114 |
 | EU PvE | Alliance | 111 |
+| EU PvP | Neutral | 116 |
+| EU PvE | Neutral | 117 |
 
-[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for EU PvP Horde and 114 for EU PvE Horde. 110 for EU PvP Alliance and 111 for EU PvE Alliance follow from the ID sets and are not confirmed. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
+[Which house a shard uses](#which-house-a-shard-uses) confirms 113 for EU PvP Horde, 114 for EU PvE Horde and 116 for EU PvP Neutral. 110 for EU PvP Alliance, 111 for EU PvE Alliance and 117 for EU PvE Neutral follow from the ID sets and are not confirmed. A neutral house is stored under the faction `Neutral`, the faction the addon files a scan taken at a neutral auctioneer under. To check one, take a scan of one of the house's shards that is newer than the snapshot, then run `probe-forever-ah.py` and `match-forever-house.py` as in [Run it again](#run-it-again).
 
 Before switching it on, `scripts/verify-battlenet-auctions.py CAMWOWEU4Realm6PvP CAMWOWEU4Realm8PvE` checks every polled house end to end, with the client ID and secret in the environment. It takes one shard of each server house; the shard need not exist, because the server pools it into its house by name. It polls the houses into a throwaway server, compares every exported minimum with its own reading of the API, checks that Battle.net answers 304 to the stored time, syncs each polled house and faction into a `ServerData.lua` under its shard, and restarts the server to show that the same snapshots are not stored twice.
 
@@ -219,7 +235,6 @@ The scans and order books leave out:
 
 - Listings with `bonus_lists`, because the API's bonus IDs do not map to the addon's item keys. See [Item variants](#item-variants).
 - Listings without a buyout, as the in-game scanner does.
-- Blackwater houses, because a server house has only Alliance and Horde.
 
 After each pass over the houses, the server names the items that a polled house prices and that have no name yet. It asks the item API of WoW Forever, `/data/wow/item/{id}` in the `static-forever-eu` namespace with `locale=en_US`, and turns the answer's `quality.type`, `POOR` to `HEIRLOOM`, into the addon's quality number. Only when Forever answers 404, or with another quality type, does the server ask Classic Era's namespace, `static-classic1x-eu`, in the same way. Classic Era names only the items that Forever does not know, because in a live run it rated 15 of 878 items one quality lower than Forever, while Forever matched the players' names of all 2,778 items that both knew. A name whose quality may be one too low is more useful than "Item 809", and a player's scan corrects the quality. An item that neither namespace knows stays unnamed, and the next pass asks both again. Only plain item IDs are named, so a variant keyed `itemID:suffix` waits for a player. The server stores each name as it finds it. The first failed request, in either namespace, ends the naming for that pass, and so do 20 minutes of naming, so that the next hour's poll starts on time. The next pass goes on with the items that are still unnamed, and the log line of each pass that named something or ran out of time counts the items it named from each source, found nowhere and left for the next pass.
 
@@ -229,6 +244,7 @@ A player's name wins. The server never replaces a stored name with Battle.net's,
 
 - Confirm that EU4 PvP Alliance is house 110, using an Alliance scan taken within an hour of a snapshot's `Last-Modified`.
 - Confirm that EU PvE Alliance is house 111, using an Alliance scan taken within an hour of a snapshot's `Last-Modified`.
+- Confirm that EU PvE's neutral house is 117, using a scan at an EU PvE neutral auctioneer taken within an hour of a snapshot's `Last-Modified`.
 - Find which shards use the sets 119/120/121 and 123/124/125, and what the empty set 112/115/118 is for.
 - Confirm over a day that every house's `Last-Modified` changes once an hour.
 - Find how API bonus IDs map to the addon's suffix IDs.
