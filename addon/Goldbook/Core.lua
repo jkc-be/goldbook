@@ -370,15 +370,28 @@ local function claimVendorSale(item, key, count, price, exact)
     stacks = { { item = item, key = key, count = count } }, booked = vendorSaleBooked })
 end
 
+-- A sale bought back: the gold its claim still waits for books nothing, or
+-- else the sale is taken off the books.
+local function unsell(entry)
+  ns.Accounting.Unclaim(function(claim)
+    local stack = claim.side == "vendor" and claim.stacks[1]
+    return stack and stack.item == entry.item and stack.count == entry.count and claim.amount == entry.price
+  end, function()
+    if Trades.TakeOffSale(ns.db, characterKey(), entry) then
+      vendorSales = vendorSales - 1
+      ns.UI.RefreshSoon()
+    end
+  end)
+end
+
 local function bookVendorSales(opened)
-  local sales, undone = Trades.Merchant(ns.db, characterKey(), ns.RealmKey(), time(), GetMoney(), opened)
+  local sales, gone = Trades.Merchant(ns.db, characterKey(), ns.RealmKey(), time(), GetMoney(), opened)
   -- One sale is paid at a time; a buyback entry that showed up late pays nothing.
   for _, sale in ipairs(sales) do
     claimVendorSale(sale.item, sale.key, sale.count, sale.price, true)
   end
-  vendorSales = vendorSales - undone
-  if undone > 0 then
-    ns.UI.RefreshSoon()
+  for _, entry in ipairs(gone) do
+    unsell(entry)
   end
 end
 

@@ -277,8 +277,8 @@ local listed, listedById, listedMoney
 -- and its sale is taken off again; one gone as another came in fell off the
 -- end of a full list. A full list that sold the same stack as its oldest
 -- entry reads the same after, so then gold gained by exactly an entry's
--- price is that sale. Returns the entries that may be sales, as { item, key,
--- count, price }, and how many sales were taken off.
+-- price is that sale. Returns the entries that may be sales and those bought
+-- back, both as { item, key, count, price }; see Trades.TakeOffSale.
 function Trades.Merchant(db, character, realmKey, now, money, opened)
   local entries = buyback(db, realmKey)
   local counts, byId = tally(entries)
@@ -286,7 +286,7 @@ function Trades.Merchant(db, character, realmKey, now, money, opened)
   listed, listedById, listedMoney = counts, byId, money
   -- A list that was not read yet holds sales booked before a /reload.
   if opened or not before then
-    return {}, 0
+    return {}, {}
   end
   local booked = db.trades[character] or {}
   db.trades[character] = booked
@@ -297,7 +297,7 @@ function Trades.Merchant(db, character, realmKey, now, money, opened)
       sales[#sales + 1] = entry
     end
   end
-  local undone, changed = 0, #sales > 0
+  local gone, changed = {}, #sales > 0
   for id, count in pairs(before) do
     changed = changed or count ~= (counts[id] or 0)
   end
@@ -313,21 +313,27 @@ function Trades.Merchant(db, character, realmKey, now, money, opened)
   end
   if #sales == 0 then
     for id, count in pairs(before) do
-      local gone = beforeById[id]
       for _ = 1, count - (counts[id] or 0) do
-        for index = #booked, 1, -1 do
-          local trade = booked[index]
-          if trade.side == "vendor" and trade.item == gone.item and trade.count == gone.count and trade.price == gone.price then
-            table.remove(booked, index)
-            undone = undone + 1
-            break
-          end
-        end
+        gone[#gone + 1] = beforeById[id]
       end
     end
   end
   prune(booked, now)
-  return sales, undone
+  return sales, gone
+end
+
+-- Takes off the vendor sale of `entry`'s stack booked last, for a buyback.
+-- Returns whether there was one.
+function Trades.TakeOffSale(db, character, entry)
+  local booked = db.trades[character] or {}
+  for index = #booked, 1, -1 do
+    local trade = booked[index]
+    if trade.side == "vendor" and trade.item == entry.item and trade.count == entry.count and trade.price == entry.price then
+      table.remove(booked, index)
+      return true
+    end
+  end
+  return false
 end
 
 -- What an entry did to the gold.
