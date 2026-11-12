@@ -935,65 +935,6 @@ async fn trades_accumulate_once_each_and_stay_with_their_account() {
         "another account sees none of them"
     );
 }
-// The addon takes off a trade it booked by mistake, such as a vendor sale
-// booked again at a later merchant visit, and uploads it as dropped. The
-// server takes it off, and an upload from another installation of the same
-// ID that still holds it does not bring it back.
-#[tokio::test]
-async fn trades_the_addon_dropped_go_and_stay_gone() {
-    let f = Fixture::new().await;
-    let vendor = |at: u64, item: &str, price: u64| {
-        trade("Sultan", at, "vendor", item, json!(null), price, 0)
-    };
-    let mut upload = account();
-    upload["trades"] = json!([
-        vendor(1760002000, "Light Bow", 1184),
-        vendor(1760002600, "Light Bow", 1184),
-        vendor(1760003000, "Ceranium Rod", 2322),
-    ]);
-    let stale = upload.clone();
-    call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
-    upload["trades"] = json!([
-        vendor(1760002000, "Light Bow", 1184),
-        vendor(1760003000, "Ceranium Rod", 2322)
-    ]);
-    upload["droppedTrades"] = json!([vendor(1760002600, "Light Bow", 1184)]);
-    assert_eq!(
-        call(&f.app, "POST", "/api/account", upload, &f.auth())
-            .await
-            .2,
-        json!({"stored":true,"characters":1})
-    );
-    let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
-    let listed = || async {
-        let (_, _, body) = call(
-            &f.app,
-            "GET",
-            "/api/trades",
-            Value::Null,
-            &[("cookie", cookie.as_str())],
-        )
-        .await;
-        body["trades"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|t| format!("{} {}", t["at"], t["item"].as_str().unwrap()))
-            .collect::<Vec<_>>()
-    };
-    let kept = ["1760003000 Ceranium Rod", "1760002000 Light Bow"];
-    assert_eq!(
-        listed().await,
-        kept,
-        "the dropped sale goes, the others stay"
-    );
-    call(&f.app, "POST", "/api/account", stale, &f.auth()).await;
-    assert_eq!(
-        listed().await,
-        kept,
-        "an upload that still holds it does not bring it back"
-    );
-}
 #[tokio::test]
 async fn vendor_sales_are_trades_without_a_cut() {
     let f = Fixture::new().await;

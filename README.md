@@ -683,11 +683,8 @@ Entries between two of your own characters, such as gold mailed to an alt,
 show on the account page twice: once as revenue and once as an expense. They
 cancel out in the net.
 
-The server keeps every entry it receives, together with the other player of
-a trade or mail, also after the addon drops it for its age or the entry
-limit. An entry the addon takes off because it was booked by mistake, such as
-a vendor sale booked twice, goes from the server at the next upload, and an
-upload of an older copy of your saved data does not bring it back.
+The server keeps every entry it receives, also after the addon drops it,
+together with the other player of a trade or mail.
 
 ### Price history
 

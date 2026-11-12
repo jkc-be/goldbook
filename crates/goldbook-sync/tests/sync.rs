@@ -153,26 +153,6 @@ fn account_extraction_carries_valid_trades_and_leaves_them_out_when_there_are_no
     );
 }
 #[test]
-fn account_extraction_carries_the_trades_the_addon_dropped() {
-    let plain = "GoldbookDB={[\"account\"]={[\"id\"]=\"K7Q2M9PX\",[\"key\"]=\"7KQ2M9PXABCDEFGHJKMN\"},[\"gold\"]={[\"Sultan-Faramon\"]={[497759]=5000}},[\"items\"]={},[\"scans\"]={}";
-    let repeat = "{[\"at\"]=1760002600,[\"side\"]=\"vendor\",[\"item\"]=\"Light Bow\",[\"count\"]=1,[\"price\"]=1184,[\"fee\"]=0}";
-    let text = format!("{plain},[\"dropped\"]={{[\"Sultan-Faramon\"]={{{repeat}}}}}}}");
-    let account = extract_account(&parse_saved_variables(text).unwrap())
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        (
-            serde_json::to_value(&account.dropped_trades).unwrap(),
-            account.trades.len()
-        ),
-        (
-            json!([{"name":"Sultan","realm":"Faramon","at":1760002600,"side":"vendor","item":"Light Bow","itemKey":null,"count":1,"price":1184,"fee":0}]),
-            0
-        ),
-        "GoldbookDB.dropped travels as the account's dropped trades"
-    );
-}
-#[test]
 fn addon_fixture_carries_accounting_entries_with_their_party() {
     let account = extract_account(&parse_saved_variables(FIXTURE).unwrap())
         .unwrap()

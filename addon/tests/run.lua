@@ -224,7 +224,7 @@ eq(upgraded.prices.R["1"], "100,7,0,5000,105,5000;100;", "schema 1 prices are ca
 eq(#Codec.DecodePrice("100,7,0,5000,105,5000;100,90").days, 2, "records from before the ladder still read")
 eq(upgraded.scanned.R, 5000, "schema 1 realms know their newest scan")
 eq(upgraded.history.R["1"], "0:100:7:105", "schema 1 prices start a dated history")
-eq(upgraded.version, 7, "schema version raised")
+eq(upgraded.version, 6, "schema version raised")
 local fromSchema2 = Database.Init({ version = 2, prices = { R = {
   ["1"] = "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5",
   ["2"] = "100,4,0,1760000000,105,1759900000;100,90",
@@ -232,7 +232,7 @@ local fromSchema2 = Database.Init({ version = 2, prices = { R = {
 eq(fromSchema2.history.R["1"], "20370:1500:7:1400", "schema 2 history starts from the newest price, with that day's market value")
 eq(fromSchema2.history.R["2"], "20370:100:4:0", "a market value from an earlier day is not booked on the newest day")
 eq(fromSchema2.prices.R["1"], "1500,7,3,1760000000,1400,1760000000;1600,1550,1500;1500:2,1600:5", "schema 2 price records stay as they are")
-eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 7", "schema 2 is raised to 7, with its gold by hour")
+eq(stored(fromSchema2.gold["A-R"]) .. " " .. fromSchema2.version, "488879:5 6", "schema 2 is raised to 6, with its gold by hour")
 local fromSchema3 = Database.Init({ version = 3, gold = { ["A-R"] = { [20368] = 100, [20369] = 120, [20370] = 250 } } })
 eq(stored(fromSchema3.gold["A-R"]), "488855:100 488879:120 488888:250", "schema 3 gold per day goes to each day's last hour, and today's to the current hour")
 local reopened = Database.Init({ version = 3, gold = { ["A-R"] = { [488800] = 90, [20370] = 250 } } })
@@ -331,7 +331,7 @@ scanned(back, NOW, 80)
 eq(back.hours["R-F"]["1"], "480001:95:1:0", "a scan from a clock set back leaves the newer hour as it is")
 
 local fromSchema4 = Database.Init({ version = 4, history = { ["R-F"] = { ["1"] = "20369:80:2:0,20370:100:3:105" } } })
-eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "7 20369:80:2:0,20370:100:3:105 nil",
+eq(fromSchema4.version .. " " .. fromSchema4.history["R-F"]["1"] .. " " .. tostring(next(fromSchema4.hours)), "6 20369:80:2:0,20370:100:3:105 nil",
   "schema 4 history is kept as it is, with no hours yet")
 -- Server data, as the Goldbook app writes it to ServerData.lua.
 local function serverData(scannedAt)
