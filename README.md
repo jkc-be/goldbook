@@ -1234,7 +1234,8 @@ embeds the web assets.
 Set `WEB_DIR` to a folder to override them during development.
 With `GOLDBOOK_BATTLENET_AUCTIONS=1` and the same Battle.net client, the
 server polls the WoW Forever EU PvP and EU PvE auction houses of both factions
-when it starts and then at 30 minutes past each hour UTC, as
+and their neutral houses when it starts and then at 30 minutes past each hour
+UTC, as
 [docs/ah-api/README.md](docs/ah-api/README.md#polling-from-the-server)
 describes.
 
