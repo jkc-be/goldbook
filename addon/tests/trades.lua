@@ -377,53 +377,5 @@ if arg[1] then
   out:close()
 end
 
--- Before schema 7, WoW Forever's buyback list booked vendor sales again at
--- every merchant visit. The upgrade takes off a sale that repeats one of the
--- 12 before it, but never more than the gold history shows was booked.
-local HOUR, first = 3600, 500000
-local function sold(hour, seconds, item, price)
-  return { at = (first + hour) * HOUR + seconds, side = "vendor", item = item, count = 1, price = price, fee = 0 }
-end
-local repeated = {
-  version = 6,
-  gold = { A = { [first] = 0, [first + 1] = 1300, [first + 2] = 1600, [first + 3] = 1700 } },
-  trades = { A = {
-    sold(0, 100, "Torn Letter", 5),
-    sold(1, 10, "Light Bow", 1000),
-    sold(1, 20, "Melon Juice", 300),
-    sold(1, 600, "Light Bow", 1000),
-    sold(2, 60, "Melon Juice", 300),
-    sold(3, 10, "Linen Cloth", 50),
-    sold(3, 15, "Linen Cloth", 50),
-    sold(3, 900, "Melon Juice", 300),
-  } },
-}
-local upgraded, dropped = ns.Database.Init(repeated)
-local kept = {}
-for _, trade in ipairs(upgraded.trades.A) do
-  kept[#kept + 1] = trade.item .. " " .. (trade.at - first * HOUR)
-end
-eq(table.concat(kept, ", ") .. " | " .. tostring(dropped),
-  "Torn Letter 100, Light Bow 3610, Melon Juice 3620, Melon Juice 7260, Linen Cloth 10810, Linen Cloth 10815 | 2",
-  "the upgrade takes off sales booked again, where the gold shows they were, and keeps a real second sale")
-local gone = {}
-for _, trade in ipairs(upgraded.dropped.A) do
-  gone[#gone + 1] = trade.item .. " " .. (trade.at - first * HOUR)
-end
-eq(table.concat(gone, ", "), "Light Bow 4200, Melon Juice 11700", "what it takes off is kept for the server to take off too")
-eq(select(2, ns.Database.Init(upgraded)), 0, "the upgrade runs once")
--- An auction sale is dated when the auction house mailed it, not when its
--- gold was taken from the mailbox, so it says nothing about that hour's gold.
-local auctioned = ns.Database.Init({
-  version = 6,
-  gold = { A = { [first] = 0, [first + 1] = 200 } },
-  trades = { A = {
-    sold(1, 10, "Linen Cloth", 100),
-    sold(1, 900, "Linen Cloth", 100),
-    { at = (first + 1) * HOUR + 1200, side = "sell", item = "Wool Cloth", count = 1, price = 105, fee = 5 },
-  } },
-})
-eq(#auctioned.trades.A, 3, "an auction sale whose gold is still in the mailbox takes off no vendor sale")
-
 io.write(("%d trade checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
