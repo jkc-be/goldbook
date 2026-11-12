@@ -8,6 +8,27 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.5.5 - 2026-11-13
+
+### Addon
+
+- Scans and order books taken at a neutral auction house, such as the one in
+  Booty Bay or Gadgetzan, are filed under Neutral instead of your character's
+  faction, so goblin prices no longer mix into your faction's prices. The
+  website lists them under the realm's Neutral market, and the addon keeps
+  showing your faction's prices. Automatic scans now wait 15 minutes per
+  auction house.
+
+### Server
+
+- With `GOLDBOOK_BATTLENET_AUCTIONS=1`, the server also fetches the WoW
+  Forever EU PvE Alliance auction prices from Battle.net every hour, so EU PvE
+  Alliance players get website and server-data prices when nobody scanned
+  recently.
+- With `GOLDBOOK_BATTLENET_AUCTIONS=1`, the server also fetches the WoW
+  Forever EU PvP and EU PvE neutral auction prices from Battle.net every
+  hour. The website lists them as each realm's Neutral market.
+
 ## 0.5.4 - 2026-11-12
 
 ### Addon
