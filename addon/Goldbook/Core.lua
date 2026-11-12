@@ -510,8 +510,12 @@ frame:RegisterEvent("BANKFRAME_CLOSED")
 frame:RegisterEvent("PLAYER_LOGOUT")
 frame:SetScript("OnEvent", function(_, event, first, second)
   if event == "ADDON_LOADED" and first == ADDON then
-    GoldbookDB = Database.Init(GoldbookDB)
+    local dropped
+    GoldbookDB, dropped = Database.Init(GoldbookDB)
     ns.db = GoldbookDB
+    if dropped > 0 then
+      ns.Print("Took off " .. plural(dropped, "vendor sale") .. " booked more than once. Type /gb accounting.")
+    end
     local taken = Database.MergeServer(ns.db, GoldbookServerData)
     if taken > 0 then
       ns.Print("Took " .. plural(taken, "newer price") .. " from the Goldbook server.")
