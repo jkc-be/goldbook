@@ -340,9 +340,10 @@ end
 local REPEAT_AFTER = 30
 -- A vendor sale this long after the one before starts a merchant visit.
 local VISIT_GAP = 30
--- WoW Forever booked the buyback list again within a second as a merchant
--- opened: a sale this close after the one before is part of the same burst.
-local BURST = 1
+-- WoW Forever booked the buyback list again all at once as a merchant
+-- opened, in the second the visit's first sale was booked. Fewer repeats than
+-- this in that second may be real sales made quickly.
+local REPLAYED = 3
 -- The buyback list holds the BUYBACK_SLOTS sales made last, but junk sold all
 -- at once never reaches it, so a sale it booked again can lie further back
 -- among the sales booked.
@@ -366,17 +367,17 @@ local function serverKey(entry)
 end
 
 -- Before schema 7, WoW Forever's buyback list booked vendor sales again at
--- every merchant visit, see Trades.Merchant: a burst of sales as the visit
+-- every merchant visit, see Trades.Merchant: sales in the second the visit
 -- began, each repeating one of the RECENT sales kept before it, REPEAT_AFTER
--- or more later. Takes off the repeats such a burst starts with when there
--- are at least two, as long as the entries between two hours of gold history
--- book more than the gold did by at least their price. A repeat on its own or
--- later in a visit may be a real second sale, and gold that went without
--- being booked yet, such as an auction bid, also looks like a sale that never
--- paid, so neither is taken off alone. Equal sales booked in the same second
--- go or stay together, as the server keeps them as copies of one trade. What
--- it takes off goes to db.dropped, for the sync agent to take off the server
--- too. Returns how many it took off.
+-- or more later. Takes off the repeats a visit starts with in that second
+-- when there are at least REPLAYED, as long as the entries between two hours
+-- of gold history book more than the gold did by at least their price. Fewer
+-- repeats, or one later in a visit, may be a real second sale, and gold that
+-- went without being booked yet, such as an auction bid, also looks like a
+-- sale that never paid, so neither is taken off alone. Equal sales booked in
+-- the same second go or stay together, as the server keeps them as copies of
+-- one trade. What it takes off goes to db.dropped, for the sync agent to take
+-- off the server too. Returns how many it took off.
 function Trades.DropRepeatedSales(db)
   local dropped = 0
   for character, booked in pairs(db.trades) do
@@ -421,27 +422,31 @@ function Trades.DropRepeatedSales(db)
     for _, entry in pairs(db.accruing[character] or {}) do
       count(entry)
     end
-    local bursts, last = {}, nil
+    local visits, last = {}, nil
     for _, entry in ipairs(booked) do
       if entry.side == "vendor" then
-        if not last or entry.at - last.at > BURST then
-          bursts[#bursts + 1] = { visit = not last or entry.at - last.at >= VISIT_GAP }
+        if not last or entry.at - last.at >= VISIT_GAP then
+          visits[#visits + 1] = {}
         end
-        table.insert(bursts[#bursts], entry)
+        table.insert(visits[#visits], entry)
         last = entry
       end
     end
     local gone, recent = {}, {}
-    for _, burst in ipairs(bursts) do
-      local replayed = 0
-      while burst.visit and burst[replayed + 1] and repeats(burst[replayed + 1], recent) do
+    for _, visit in ipairs(visits) do
+      local began, replayed = visit[1].at, 0
+      while visit[replayed + 1] and visit[replayed + 1].at == began and repeats(visit[replayed + 1], recent) do
         replayed = replayed + 1
       end
-      if replayed >= 2 then
-        -- The burst's trades as the server keeps them: their copies, what
-        -- those were booked for, and whether every copy is a repeat.
+      if replayed >= REPLAYED then
+        -- The trades booked in that second as the server keeps them: their
+        -- copies, what those were booked for, and whether every copy repeats.
         local trades = {}
-        for index, entry in ipairs(burst) do
+        for index = 1, #visit do
+          local entry = visit[index]
+          if entry.at ~= began then
+            break
+          end
           local key = serverKey(entry)
           local trade = trades[key] or { copies = {}, price = 0, repeated = true }
           trades[key] = trade
@@ -449,9 +454,10 @@ function Trades.DropRepeatedSales(db)
           trade.price = trade.price + entry.price
           trade.repeated = trade.repeated and index <= replayed
         end
+        local hour = stretch(began)
         for index = 1, replayed do
-          local trade, hour = trades[serverKey(burst[index])], stretch(burst[index].at)
-          if trade.repeated and not gone[burst[index]] and hour and excess[hour] >= trade.price then
+          local trade = trades[serverKey(visit[index])]
+          if trade.repeated and not gone[visit[index]] and hour and excess[hour] >= trade.price then
             excess[hour] = excess[hour] - trade.price
             for _, copy in ipairs(trade.copies) do
               gone[copy] = true
@@ -459,7 +465,7 @@ function Trades.DropRepeatedSales(db)
           end
         end
       end
-      for _, entry in ipairs(burst) do
+      for _, entry in ipairs(visit) do
         if not gone[entry] then
           recent[#recent + 1] = entry
           if #recent > RECENT then
