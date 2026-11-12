@@ -233,6 +233,9 @@ local function settle()
     end
     if now - claim.at > GRACE and not wanted then
       table.remove(claims, index)
+      if claim.unpaid then
+        claim.unpaid()
+      end
     end
   end
   for index = #spans, 1, -1 do
@@ -258,7 +261,24 @@ end
 -- A claim from elsewhere: { side, sign, amount, item, party, stacks, id,
 -- booked, exact, window }, where `booked` is called once gold has confirmed
 -- it, and `window` names the window that must be open when the gold moves.
+-- See Accounting.Unclaim for `unpaid`.
 Accounting.Claim = claim
+
+-- Takes back the newest claim still waiting that `match` accepts, as when
+-- the sale it claims is bought back: gold that comes for it books nothing.
+-- `otherwise` runs when there is none, or once the claim goes without gold,
+-- as one for a buyback entry that showed up late does: what was bought back
+-- then is a sale booked before.
+function Accounting.Unclaim(match, otherwise)
+  for index = #claims, 1, -1 do
+    local waiting = claims[index]
+    if match(waiting) then
+      waiting.side, waiting.booked, waiting.unpaid = "skip", nil, otherwise
+      return
+    end
+  end
+  otherwise()
+end
 
 local function open(name)
   spans[#spans + 1] = { name = name, from = GetTime() }
