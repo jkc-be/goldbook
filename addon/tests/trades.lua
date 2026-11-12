@@ -440,6 +440,27 @@ local auctioned = ns.Database.Init({
   } },
 })
 eq(#auctioned.trades.A, 7, "an auction sale whose gold is still in the mailbox takes off no vendor sale")
+-- Junk sold with the Sell All Junk button is booked all in one second too.
+local function junk(seconds, key, item, price)
+  local entry = sold(1, seconds, item, price)
+  entry.key = key
+  return entry
+end
+local junked = ns.Database.Init({
+  version = 6,
+  items = { ["1001"] = "0|Broken Fang", ["1002"] = "0|Gnawed Bone", ["1003"] = "0|Torn Letter" },
+  -- An auction bid of 200 books nothing yet.
+  gold = { A = { [first] = 0, [first + 1] = 200 } },
+  trades = { A = {
+    junk(10, "1001", "Broken Fang", 100),
+    junk(10, "1002", "Gnawed Bone", 60),
+    junk(10, "1003", "Torn Letter", 40),
+    junk(900, "1001", "Broken Fang", 100),
+    junk(900, "1002", "Gnawed Bone", 60),
+    junk(900, "1003", "Torn Letter", 40),
+  } },
+})
+eq(#junked.trades.A, 6, "junk sold all at once at two visits takes off no sale, also beside an auction bid")
 
 io.write(("%d trade checks, %d failed.\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
