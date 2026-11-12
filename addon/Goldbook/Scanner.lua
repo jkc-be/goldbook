@@ -31,6 +31,11 @@ local frame = CreateFrame("Frame")
 local subscribers = {}
 local MODES = {}
 local job
+-- "Neutral" after the auction house was last opened at a neutral auctioneer,
+-- such as the goblins of Booty Bay and Gadgetzan, which have no faction
+-- group. Kept after closing, so an order book read just before still files
+-- under the house it came from.
+local neutral
 
 function Scanner.Subscribe(listener)
   subscribers[#subscribers + 1] = listener
@@ -53,6 +58,14 @@ function Scanner.Identity()
   }
 end
 
+-- The player's identity with the faction of the auction house last opened,
+-- which files its scans and order books.
+function Scanner.MarketIdentity()
+  local identity = Scanner.Identity()
+  identity.faction = neutral or identity.faction
+  return identity
+end
+
 local function stop()
   for event in pairs(MODES[job.mode].on) do
     frame:UnregisterEvent(event)
@@ -72,7 +85,7 @@ local function finish(rows, names)
     fail("the auction house returned no items")
     return
   end
-  local scan = Scanner.Identity()
+  local scan = Scanner.MarketIdentity()
   scan.at = job.at or time()
   scan.mode = job.mode
   scan.rows = rows
@@ -274,16 +287,19 @@ local function skip(link, itemID)
   end
 end
 
--- The suffixes quick scans have seen, per item id.
+-- The suffixes quick scans have seen, per item id, in the player's market and
+-- in a neutral one being scanned: an item comes in the same variants in both.
 local function knownSuffixes()
   local identity = Scanner.Identity()
   local suffixes = {}
-  for key in pairs(ns.db.prices[ns.Database.RealmKey(identity.realm, identity.faction)] or {}) do
-    local itemID, suffix = key:match("^(%d+):(%-?%d+)$")
-    if itemID then
-      itemID = tonumber(itemID)
-      suffixes[itemID] = suffixes[itemID] or {}
-      suffixes[itemID][tonumber(suffix)] = true
+  for _, faction in ipairs({ identity.faction, neutral }) do
+    for key in pairs(ns.db.prices[ns.Database.RealmKey(identity.realm, faction)] or {}) do
+      local itemID, suffix = key:match("^(%d+):(%-?%d+)$")
+      if itemID then
+        itemID = tonumber(itemID)
+        suffixes[itemID] = suffixes[itemID] or {}
+        suffixes[itemID][tonumber(suffix)] = true
+      end
     end
   end
   return suffixes
@@ -455,6 +471,7 @@ frame:RegisterEvent("AUCTION_HOUSE_CLOSED")
 frame:SetScript("OnEvent", function(_, event, ...)
   if event == "AUCTION_HOUSE_SHOW" then
     Scanner.open = true
+    neutral = UnitExists("npc") and not UnitFactionGroup("npc") and "Neutral" or nil
   elseif event == "AUCTION_HOUSE_CLOSED" then
     Scanner.open = false
     if job then

@@ -93,7 +93,7 @@ local function capture(item, commodity)
       offers[#offers + 1] = row
     end
   end
-  local identity = ns.Scanner.Identity()
+  local identity = ns.Scanner.MarketIdentity()
   local key = commodity and ns.Codec.ItemKey(item) or ns.Codec.ItemKey(item.itemID, item.itemSuffix)
   local snapshot = {
     realm = identity.realm, faction = identity.faction, itemKey = key,

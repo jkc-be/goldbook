@@ -503,11 +503,13 @@ end
 -- Keeps prices fresh without a click. Waits a moment so the auction house
 -- window finishes its own first query.
 local function autoScan()
-  if not ns.db.settings.autoScan or time() - (ns.db.scanned[ns.RealmKey()] or 0) < AUTO_SCAN_INTERVAL then
+  if not ns.db.settings.autoScan then
     return
   end
   C_Timer.After(AUTO_SCAN_DELAY, function()
-    if Scanner.open and Scanner.state == "idle" then
+    local market = Scanner.MarketIdentity()
+    local scanned = ns.db.scanned[Database.RealmKey(market.realm, market.faction)] or 0
+    if Scanner.open and Scanner.state == "idle" and time() - scanned >= AUTO_SCAN_INTERVAL then
       Scanner.Start("browse")
     end
   end)
