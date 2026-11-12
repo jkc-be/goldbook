@@ -216,6 +216,26 @@ pub(super) fn upload_account(input: &Input, db: &mut Connection) -> Result<Reply
             ])?;
             *copy += 1;
         }
+        // A trade the addon dropped goes, now and whenever an upload, such
+        // as one from another installation of the ID, still holds it.
+        let mut dropped = tx.prepare("INSERT INTO dropped_trades (account_id,name,realm,at,side,item,count,price,fee) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9) ON CONFLICT DO NOTHING")?;
+        for t in &account.dropped_trades {
+            dropped.execute(params![
+                account.id,
+                t.name,
+                t.realm,
+                t.at as i64,
+                t.side,
+                t.item,
+                t.count as i64,
+                t.price as i64,
+                t.fee as i64
+            ])?;
+        }
+        tx.execute(
+            "DELETE FROM trades WHERE account_id=?1 AND EXISTS (SELECT 1 FROM dropped_trades d WHERE d.account_id=trades.account_id AND d.name=trades.name AND d.realm=trades.realm AND d.at=trades.at AND d.side=trades.side AND d.item=trades.item AND d.count=trades.count AND d.price=trades.price AND d.fee=trades.fee)",
+            [&account.id],
+        )?;
     }
     if let Some(fingerprint) = &input.uploader {
         tx.execute(

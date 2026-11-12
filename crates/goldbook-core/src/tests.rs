@@ -230,6 +230,30 @@ fn account_rejections_keep_original_field_messages() {
         assert_eq!(parse_account_upload(&input).unwrap_err(), message, "{path}");
     }
 }
+#[test]
+fn an_account_upload_carries_the_trades_the_addon_took_off() {
+    let mut v = json!({"id":"K7Q2M9PX","keyHash":key_hash("7KQ2M9PXABCDEFGHJKMN"),"characters":[]});
+    assert_eq!(
+        parse_account_upload(&v).unwrap().dropped_trades,
+        vec![],
+        "none when left out"
+    );
+    v["droppedTrades"] = json!([entry("vendor", "Light Bow", 1184)]);
+    let parsed = parse_account_upload(&v).unwrap();
+    assert_eq!(
+        (
+            parsed.dropped_trades.len(),
+            parsed.dropped_trades[0].item.as_str(),
+            parsed.trades.len()
+        ),
+        (1, "Light Bow", 0)
+    );
+    v["droppedTrades"][0]["price"] = json!(-1);
+    assert_eq!(
+        parse_account_upload(&v).unwrap_err(),
+        "droppedTrades[0].price must be a positive integer"
+    );
+}
 fn entry(side: &str, item: &str, price: i64) -> Value {
     json!({"name":"Sultan","realm":"Faramon","at":1760000000,"side":side,"item":item,"itemKey":null,"count":1,"price":price,"fee":0})
 }
