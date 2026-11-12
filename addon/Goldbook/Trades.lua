@@ -367,6 +367,24 @@ local function repeats(entry, recent)
   return false
 end
 
+-- Junk sold with the Sell All Junk button is booked all in one second too, so
+-- a visit that began with junk alone did not book the buyback list again. An
+-- item whose quality is not known may be junk as well.
+local JUNK = 0
+
+local function junkOnly(db, visit)
+  for _, entry in ipairs(visit) do
+    if entry.at ~= visit[1].at then
+      break
+    end
+    local quality = entry.key and select(2, Database.Item(db, entry.key))
+    if quality and quality ~= JUNK then
+      return false
+    end
+  end
+  return true
+end
+
 -- What tells a trade apart on the server; equal ones are copies of it.
 local function serverKey(entry)
   return table.concat({ entry.at, entry.item, entry.count, entry.price, entry.fee or 0 }, "|")
@@ -375,15 +393,15 @@ end
 -- Before schema 7, WoW Forever's buyback list booked vendor sales again at
 -- every merchant visit, see Trades.Merchant: sales in the second the visit
 -- began, each repeating one of the RECENT sales kept before it, REPEAT_AFTER
--- or more later. Takes off the repeats a visit starts with in that second
--- when there are at least REPLAYED, as long as the entries between two hours
--- of gold history book more than the gold did by at least their price. Fewer
--- repeats, or one later in a visit, may be a real second sale, and gold that
--- went without being booked yet, such as an auction bid, also looks like a
--- sale that never paid, so neither is taken off alone. Equal sales booked in
--- the same second go or stay together, as the server keeps them as copies of
--- one trade. What it takes off goes to db.dropped, for the sync agent to take
--- off the server too. Returns how many it took off.
+-- or more later. Takes off the repeats a visit starts with in that second when
+-- there are at least REPLAYED and that second is not junk alone, as long as
+-- the entries between two hours of gold history book more than the gold did by
+-- at least their price. Fewer repeats, or one later in a visit, may be a real
+-- second sale, and gold that went without being booked yet, such as an auction
+-- bid, also looks like a sale that never paid, so neither is taken off alone.
+-- Equal sales booked in the same second go or stay together, as the server
+-- keeps them as copies of one trade. What it takes off goes to db.dropped, for
+-- the sync agent to take off the server too. Returns how many it took off.
 function Trades.DropRepeatedSales(db)
   local dropped = 0
   for character, booked in pairs(db.trades) do
@@ -443,6 +461,9 @@ function Trades.DropRepeatedSales(db)
       local began, replayed = visit[1].at, 0
       while visit[replayed + 1] and visit[replayed + 1].at == began and repeats(visit[replayed + 1], recent) do
         replayed = replayed + 1
+      end
+      if junkOnly(db, visit) then
+        replayed = 0
       end
       if replayed >= REPLAYED then
         -- The trades booked in that second as the server keeps them: their
