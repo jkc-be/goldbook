@@ -462,6 +462,18 @@ eq(sold("Malachite") .. " " .. booked() .. "|" .. accruing(), "0 vendor Ceranium
   "buying back what was sold at an earlier visit takes off its sale, also while gold for other sales waits")
 Stub.fire("MERCHANT_CLOSED")
 
+-- Logging out settles what still waits, as no claim or gold comes after.
+Stub.advance(GRACE * 2)
+Stub.fire("MERCHANT_SHOW")
+Stub.buyback[#Stub.buyback + 1] = { "Copper Ore", 1, 40 }
+Stub.buyback[#Stub.buyback + 1] = { "Tin Ore", 1, 60 }
+Stub.fire("MERCHANT_UPDATE")
+gain(100)
+Stub.advance(2)
+Stub.fire("PLAYER_LOGOUT")
+eq(booked(), "vendor Tin Ore nil 1 60 nil / vendor Copper Ore nil 1 40 nil", "logging out books two sales whose shared gold still waits")
+Stub.fire("MERCHANT_CLOSED")
+
 booked()
 Stub.fire("PLAYER_LOGOUT")
 eq(booked() .. "|" .. accruing(), "|otherIn 1 12", "logging out within the hour leaves its gold adding up")
