@@ -216,8 +216,15 @@ local function settle()
     end
   end
   changes = waiting
+  -- A claim older than GRACE explains no new change, but one made around a
+  -- change still waiting may yet explain it in its final pass.
   for index = #claims, 1, -1 do
-    if now - claims[index].at > GRACE then
+    local claim = claims[index]
+    local wanted = false
+    for _, change in ipairs(changes) do
+      wanted = wanted or math.abs(claim.at - change.at) <= GRACE
+    end
+    if now - claim.at > GRACE and not wanted then
       table.remove(claims, index)
     end
   end

@@ -374,6 +374,23 @@ local eleventh = chip.menu.options[11]
 eq(table.concat({ chip.menu.width, chip.menu.height, eleventh.point[2], eleventh.point[3] }, " "), "400 228 201 -4",
   "twenty choices run in two columns of ten")
 
+-- Gold that pays two sales at once is booked once no other claim can still
+-- come, and the sales wait for it.
+Stub.fire("MERCHANT_SHOW")
+Stub.buyback[6] = { "Light Feather", 1, 7 }
+Stub.buyback[7] = { "Malachite", 1, 15 }
+Stub.fire("MERCHANT_UPDATE")
+Stub.advance(1)
+gain(22)
+Stub.advance(GRACE - 0.5)
+pay(3)
+Stub.advance(1)
+eq(booked(), "vendor Malachite nil 1 15 nil / vendor Light Feather nil 1 7 nil",
+  "two sales paid with one change of gold wait for it, also when other gold moves before it is booked")
+Stub.advance(GRACE)
+eq(booked(), "repair Repairs nil 1 3 nil", "and the other gold is booked on its own")
+Stub.fire("MERCHANT_CLOSED")
+
 booked()
 Stub.fire("PLAYER_LOGOUT")
 eq(booked() .. "|" .. accruing(), "|otherIn 1 12", "logging out within the hour leaves its gold adding up")
