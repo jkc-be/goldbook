@@ -8,6 +8,27 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.5.4 - 2026-11-12
+
+### Addon
+
+- Buying in Goldbook's auction window takes fewer clicks. Clicking a listing
+  opens its purchase review directly; for a commodity it quotes every unit up
+  to that listing's price. A deal's **Buy** button loads the live listings and
+  reviews the cheapest one from another seller, so **Buy now** completes it.
+  After a purchase the item's listings reload, ready for the next one.
+- **Sell** in Goldbook's auction house window lists a commodity once, with
+  the quantity of all its bag stacks, and one post takes from every stack,
+  as the game's own sell frame does. It used to list each bag stack and cap
+  a post at that stack, so 12 stacks took 12 posts and 12 deposits.
+  **Automation** posts the same way, up to **Items per auction** in each
+  post.
+- A vendor sale is booked only once the gold the vendor paid comes in. WoW
+  Forever fills a merchant's buyback list over a moment after it opens, and
+  Goldbook booked what was already in it again at every merchant visit, so
+  Revenue and Net in Accounting came out higher than the gold you have.
+  Gold a merchant pays that no sale explains is now other income.
+
 ## 0.5.3 - 2026-11-10
 
 ### Addon
