@@ -893,6 +893,38 @@ function GetTitleText()
   return Stub.questTitle
 end
 
+-- The open profession window's rows, Stub.tradeSkills[index] = { name, kind,
+-- link }, kind "header" for a header; Stub.crafts the same for the Craft
+-- window Enchanting has. Stub.spells[spellID] is true for a spell the
+-- character knows, and Stub.spellNames[spellID] a spell's name.
+Stub.tradeSkills, Stub.crafts, Stub.spells, Stub.spellNames = {}, {}, {}, {}
+function GetSpellInfo(spell)
+  return Stub.spellNames[spell]
+end
+function GetNumTradeSkills()
+  return #Stub.tradeSkills
+end
+function GetTradeSkillInfo(index)
+  local row = Stub.tradeSkills[index]
+  return row[1], row[2], 0, row[2] == "header"
+end
+function GetTradeSkillItemLink(index)
+  return Stub.tradeSkills[index][3]
+end
+function GetNumCrafts()
+  return #Stub.crafts
+end
+function GetCraftInfo(index)
+  local row = Stub.crafts[index]
+  return row[1], nil, row[2], 0, row[2] == "header", 0, 1
+end
+function GetCraftItemLink(index)
+  return Stub.crafts[index][3]
+end
+function IsPlayerSpell(spell)
+  return Stub.spells[spell] == true
+end
+
 function C_AuctionHouse.PostItem() end
 function C_AuctionHouse.PostCommodity() end
 function C_AuctionHouse.PlaceBid() end

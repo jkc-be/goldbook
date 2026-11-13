@@ -881,6 +881,13 @@ local CHARACTERS = {
   { "Grokk-Faramon", 702000, 655000, 0.3, 12 },
 }
 
+-- The recipes each character knows, by the items they make: { character, profession, item keys }.
+local RECIPES = {
+  { "Sultan-Faramon", "alchemy", { "13510", "13512", "12360", "13452", "13457", "7078", "13446", "13444", "13454", "12808",
+    "3928", "9206" } },
+  { "Mirelle-Faramon", "tailoring", { "4305", "14048" } },
+}
+
 -- Same numbers every run, so that previews before and after a change compare.
 local seed = 20370
 local function random()
@@ -978,7 +985,19 @@ local function seededDB()
     settings = {},
     account = { id = "K7Q2M9PX", key = "7KQ2M9PXABCDEFGHJKMN" },
     merchant = { [8925] = 100 },
+    recipes = {},
   }
+  for _, known in ipairs(RECIPES) do
+    local character, profession, keys = unpack(known)
+    db.recipes[character] = {}
+    for _, key in ipairs(keys) do
+      for _, spell in ipairs(ns.Crafting.SpellsFor(key)) do
+        if ns.CraftData[spell].profession == profession then
+          db.recipes[character][spell] = true
+        end
+      end
+    end
+  end
   for _, item in ipairs(ITEMS) do
     local key, name, quality, vendor, price = unpack(item)
     local itemID = Codec.BaseID(key)
@@ -1186,6 +1205,22 @@ local function captureViews(suffix)
     run(view)
     captureWindow(view .. suffix)
   end
+  run("crafting")
+  -- The theme captured first leaves another recipe picked.
+  local first = GoldbookWindow.rows[1].hit
+  first.scripts.OnClick(first)
+  captureWindow("crafting" .. suffix)
+  local known = GoldbookWindow.filters.controls.known
+  known.scripts.OnClick(known)
+  captureWindow("crafting-known" .. suffix)
+  known.scripts.OnClick(known)
+  -- Icecap was last seen days ago; nothing prices Sungrass.
+  for _, recipe in ipairs({ { "Major Mana Potion", "stale" }, { "Superior Healing Potion", "unpriced" } }) do
+    local row = rowFor(recipe[1])
+    row.scripts.OnClick(row)
+    captureWindow("crafting-" .. recipe[2] .. suffix)
+  end
+  run("accounting")
   local expenses = GoldbookWindow.segments.buttons[3]
   expenses.scripts.OnClick(expenses)
   captureWindow("accounting-expenses" .. suffix)

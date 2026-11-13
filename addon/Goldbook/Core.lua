@@ -266,6 +266,9 @@ local COMMANDS = {
   movers = function(argument)
     ns.UI.Show("movers", argument)
   end,
+  crafting = function(argument)
+    ns.UI.Show("crafting", argument)
+  end,
   mail = function(argument)
     ns.UI.Show("mail", argument)
   end,
@@ -347,7 +350,7 @@ SlashCmdList.GOLDBOOK = function(input)
   if run then
     run(argument)
   else
-    ns.Print("/gb ah  |  /gb scan  |  /gb scan full  |  /gb deals  |  /gb bags  |  /gb movers  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb items  |  /gb show [text]")
+    ns.Print("/gb ah  |  /gb scan  |  /gb scan full  |  /gb deals  |  /gb bags  |  /gb movers  |  /gb crafting  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb items  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
     ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end
