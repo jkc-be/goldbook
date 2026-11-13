@@ -198,28 +198,35 @@ function Advisor.PostPrice(record, vendor, newestScan)
   return math.min(undercut, normal * CEILING_RATIO)
 end
 
+-- What selling one of the item brings in: `each` is what posting it pays
+-- after the cut when that beats a vendor, else what a vendor pays, nil when
+-- neither is known. An item whose lowest listing already pays less than a
+-- vendor goes to the vendor, and so does one that merchants sell, which no
+-- informed buyer pays the auction price for.
+-- { action = "auction", "vendor" or "unknown", each, post, vendor (0 when a vendor buys none) }
+function Advisor.SaleValue(db, realmKey, key, newestScan)
+  local record = Database.Lookup(db, realmKey, key)
+  local vendor = Database.Vendor(db, key) or 0
+  local underVendor = record and record.seen == newestScan and Advisor.Proceeds(record.min) <= vendor
+  local post = record and not underVendor and not Database.MerchantSells(db, key) and Advisor.PostPrice(record, vendor, newestScan)
+  if post and Advisor.Proceeds(post) > vendor then
+    return { action = "auction", each = Advisor.Proceeds(post), post = post, vendor = vendor }
+  elseif vendor > 0 then
+    return { action = "vendor", each = vendor, vendor = vendor }
+  end
+  return { action = "unknown", vendor = vendor }
+end
+
 -- bag = { { key, count }, ... }. Says for each item whether to auction it or
--- vendor it, and what that brings in. An item whose lowest listing already
--- pays less than a vendor goes to the vendor, and so does one that merchants
--- sell, which no informed buyer pays the auction price for.
+-- vendor it, and what that brings in.
 function Advisor.Sell(db, realmKey, bag)
   local newestScan = Database.NewestScan(db, realmKey)
   local rows, total = {}, 0
   for _, held in ipairs(bag) do
-    local record = Database.Lookup(db, realmKey, held.key)
-    local vendor = Database.Vendor(db, held.key) or 0
     local name, quality = Database.Item(db, held.key)
-    local row = { key = held.key, name = name or ("item " .. held.key), quality = quality or 1, count = held.count, vendor = vendor }
-    local underVendor = record and record.seen == newestScan and Advisor.Proceeds(record.min) <= vendor
-    local stocked = Database.MerchantSells(db, held.key)
-    local post = record and not underVendor and not stocked and Advisor.PostPrice(record, vendor, newestScan)
-    if post and Advisor.Proceeds(post) > vendor then
-      row.action, row.post, row.value = "auction", post, Advisor.Proceeds(post) * held.count
-    elseif vendor > 0 then
-      row.action, row.value = "vendor", vendor * held.count
-    else
-      row.action, row.value = "unknown", 0
-    end
+    local sale = Advisor.SaleValue(db, realmKey, held.key, newestScan)
+    local row = { key = held.key, name = name or ("item " .. held.key), quality = quality or 1, count = held.count,
+      vendor = sale.vendor, action = sale.action, post = sale.post, value = (sale.each or 0) * held.count }
     total = total + row.value
     rows[#rows + 1] = row
   end
