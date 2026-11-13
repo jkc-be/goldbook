@@ -1,4 +1,4 @@
-# Classic profession item catalog
+# Classic profession catalogs
 
 `professions.json` contains item IDs grouped by profession and role: materials,
 recipe items, and crafted products. A material can belong to several professions.
@@ -7,7 +7,7 @@ at runtime.
 
 The source is the factual item, recipe, and reagent data in the installed
 AtlasLoot Classic Forever 1.60.1 snapshot's `Data/Profession.lua` and
-`Data/Recipe.lua`. The JSON records SHA-256 hashes of those two source files.
+`Data/Recipe.lua`. `professions.json` records the SHA-256 hashes of both files.
 Only their `CLASSIC` tables are used. No item names or translated descriptions
 are copied. AtlasLoot's recipe index also contains some finished goods; the
 generator excludes those from the recipe role when they are crafting outputs.
@@ -34,16 +34,33 @@ file, update its `source` line with the date checked, and regenerate. The
 generator stops with an error if AtlasLoot ever lists Herbalism or Skinning
 itself.
 
-Refresh both the JSON and Lua data from a local AtlasLoot snapshot:
+`crafts.json` holds the reagents of each Classic recipe, for crafting cost
+estimates. Only the addon uses it, as `addon/Goldbook/CraftData.lua`. The
+server does not read it. Each recipe has its `spell` ID, the `item` it makes,
+its `profession`, the `skill` level needed to learn it, the number of items one
+craft `makes`, and its `reagents` as item ID and count pairs in the source's
+order. `makes` is 1 when the source gives no number. Recipes that make no
+item, such as most enchants, are left out. The recipes come from the same
+`Data/Profession.lua` rows as `professions.json`, and the file records that
+source's SHA-256 hash.
+
+Refresh both JSON catalogs and both Lua files from a local AtlasLoot snapshot:
 
 ```sh
 python3 scripts/generate-profession-catalog.py --atlasloot-data "/path/to/AtlasLootClassic/Data"
 ```
 
-Regenerate both from the committed JSON and the gathering lists:
+Regenerate all four from the committed JSON and the gathering lists:
 
 ```sh
 python3 scripts/generate-profession-catalog.py
+```
+
+Check that all four match without writing them. The command names the file to
+regenerate when one differs:
+
+```sh
+python3 scripts/generate-profession-catalog.py --check
 ```
 
 Verify that both representations agree and exercise the filters through the

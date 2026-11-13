@@ -13,6 +13,7 @@ ServerData.lua
 Stats.lua
 Codec.lua
 ProfessionData.lua
+CraftData.lua
 Professions.lua
 ItemFilters.lua
 Database.lua
