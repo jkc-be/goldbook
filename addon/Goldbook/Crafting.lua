@@ -7,18 +7,76 @@ local Codec, Database, Advisor = ns.Codec, ns.Database, ns.Advisor
 local Crafting = {}
 ns.Crafting = Crafting
 
--- makers[itemID] = the spells that make the item, lowest first.
-local makers = {}
+-- makers[itemID] = the spells that make the item, and taught[profession]
+-- those of a profession, taught[""] of them all; lowest first.
+local makers, taught = {}, { [""] = {} }
 for spell, recipe in pairs(ns.CraftData) do
   makers[recipe.item] = makers[recipe.item] or {}
   table.insert(makers[recipe.item], spell)
+  taught[recipe.profession] = taught[recipe.profession] or {}
+  table.insert(taught[recipe.profession], spell)
+  table.insert(taught[""], spell)
 end
-for _, spells in pairs(makers) do
-  table.sort(spells)
+for _, index in ipairs({ makers, taught }) do
+  for _, spells in pairs(index) do
+    table.sort(spells)
+  end
 end
 
 function Crafting.SpellsFor(key)
   return makers[Codec.BaseID(key)] or {}
+end
+
+function Crafting.Spells(profession)
+  return taught[profession] or {}
+end
+
+-- The professions with recipes, as their ns.ProfessionData entries.
+function Crafting.Professions()
+  local professions = {}
+  for _, profession in ipairs(ns.ProfessionData) do
+    if taught[profession.id] then
+      professions[#professions + 1] = profession
+    end
+  end
+  return professions
+end
+
+-- The spells a profession window lists, from its rows: { item, name }, the
+-- item each makes and the row's name. Of the recipes for an item several
+-- make, a row is the one `nameOf` (spell) names as the row is named, or
+-- else that of the profession most of the window's items belong to.
+function Crafting.SpellsListed(rows, nameOf)
+  local votes, window = {}, nil
+  for _, row in ipairs(rows) do
+    for _, spell in ipairs(makers[row.item] or {}) do
+      local profession = ns.CraftData[spell].profession
+      votes[profession] = (votes[profession] or 0) + 1
+    end
+  end
+  for profession, count in pairs(votes) do
+    if not window or count > votes[window] or (count == votes[window] and profession < window) then
+      window = profession
+    end
+  end
+  local spells = {}
+  for _, row in ipairs(rows) do
+    local candidates, found = makers[row.item] or {}, {}
+    for _, spell in ipairs(candidates) do
+      if #candidates == 1 or nameOf(spell) == row.name then
+        found[#found + 1] = spell
+      end
+    end
+    for _, spell in ipairs(#found == 0 and candidates or {}) do
+      if ns.CraftData[spell].profession == window then
+        found[#found + 1] = spell
+      end
+    end
+    for _, spell in ipairs(found) do
+      spells[#spells + 1] = spell
+    end
+  end
+  return spells
 end
 
 local names = {}
