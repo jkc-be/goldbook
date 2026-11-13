@@ -32,6 +32,7 @@ local PARK_MILLER = 2147483647
 --   bank[character]            = { at, items = { { key, count }, ... } }, the unbound items in the bank when last open
 --   trades[character][]        = { at, side, item, key, count, price, fee, party }, revenue and expenses,
 --                                  oldest first, see Trades
+--   recipes[character]         = { [spellID] = true }, the recipes the character is known to know, see KnownRecipes
 --   accruing[character][side]  = the entry of gold added up this hour, booked once the hour has ended,
 --                                  see Trades.Accrue
 --   scans[]                    = scans waiting for the sync agent
@@ -153,6 +154,7 @@ function Database.Init(saved)
   db.bags = db.bags or {}
   db.bank = db.bank or {}
   db.trades = db.trades or {}
+  db.recipes = db.recipes or {}
   db.accruing = db.accruing or {}
   db.account = db.account or newAccount()
   db.fromServer = db.fromServer or {}

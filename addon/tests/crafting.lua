@@ -206,5 +206,171 @@ Stub.shift, GameTooltip.owner = false, nil
 eq(plain(table.concat(GameTooltip.lines, " / ")):match("Crafting.*%)"), "Crafting cost = 35s 00c /   Craft profit = +40s 80c (+54%)",
   "Shift over 20 bars prices 20 of the two a smelt makes")
 
+-- The recipes recorded for a character, lowest spell first.
+local function known(character)
+  local spells = {}
+  for spell in pairs(GoldbookDB.recipes[character] or {}) do
+    spells[#spells + 1] = spell
+  end
+  table.sort(spells)
+  return table.concat(spells, " ")
+end
+
+-- The side panel's title and aside, then each line as "key = value".
+local function side()
+  local panel = GoldbookWindow.side
+  local texts = { plain(panel.heading.label.text .. " | " .. panel.heading.aside.text) }
+  for _, line in ipairs(panel.lines) do
+    if line.key.text ~= "" then
+      texts[#texts + 1] = plain(line.key.text .. " = " .. line.value.text)
+    end
+  end
+  return table.concat(texts, " / ")
+end
+
+-- A chip's menu as its labels, or picks the option labelled `choice`.
+local function chip(name, choice)
+  local control = GoldbookWindow.filters.controls[name]
+  click(control)
+  local labels = {}
+  for _, option in ipairs(GoldbookWindow.menu.options) do
+    if option.shown then
+      labels[#labels + 1] = option.label.text
+      if option.label.text == choice then
+        click(option)
+        return
+      end
+    end
+  end
+  click(control)
+  return table.concat(labels, " / ")
+end
+
+local function picked()
+  local rows = {}
+  for index, row in ipairs(GoldbookWindow.rows) do
+    if row.pick.shown and row.pickBar.shown then
+      rows[#rows + 1] = index
+    end
+  end
+  return table.concat(rows, " ")
+end
+
+for itemID, item in pairs({ [3577] = { "Gold Bar", 1 }, [3575] = { "Iron Bar", 1 }, [13512] = { "Flask of Supreme Power", 1 },
+  [13463] = { "Dreamfoil", 1 }, [13465] = { "Mountain Silversage", 1 }, [11287] = { "Lesser Magic Wand", 2 },
+  [2997] = { "Bolt of Woolen Cloth", 1 } }) do
+  Stub.items[itemID] = { name = item[1], quality = item[2], vendor = 0, cached = true }
+end
+local stocked = {}
+for key, min in pairs(TITANS) do
+  stocked[key] = min
+end
+stocked["3577"], stocked["3575"], stocked["13465"], stocked["13512"] = 900, 500, 3200, 920000
+scan(GoldbookDB, NOW, stocked)
+
+SlashCmdList.GOLDBOOK("crafting")
+eq(GoldbookWindow.filters.controls.known.label.text .. " / " .. cells(1), "Known by Sultan /  |  | ",
+  "the Crafting tab starts on the recipes of the character playing, none recorded yet")
+eq(GoldbookWindow.status.text, "No recipes recorded for Sultan yet. Open a profession window, or pick All recipes.",
+  "the status says how to record them")
+
+Stub.spellNames = { [3308] = "Smelt Gold", [11479] = "Transmute: Iron to Gold" }
+Stub.tradeSkills = {
+  { "Flasks", "header" },
+  { "Flask of the Titans", "optimal", "|cffffffff|Hitem:13510::::::::60:::::|h[Flask of the Titans]|h|r" },
+  { "Transmutes", "header" },
+  { "Transmute: Iron to Gold", "medium", "|cffffffff|Hitem:3577::::::::60:::::|h[Gold Bar]|h|r" },
+}
+Stub.fire("TRADE_SKILL_SHOW")
+eq(known("Sultan-Faramon"), "11479 17635",
+  "a profession window records its recipes by the items they make, a bar both smelted and transmuted by the row's name")
+local SPELLS = { [17561] = "Transmute: Earth to Water", [17563] = "Transmute: Undeath to Water", [3308] = "Smelt Gold",
+  [11479] = "Transmute: Iron to Gold", [10098] = "Smelt Truesilver", [11480] = "Transmute: Mithril to Truesilver" }
+local function listed(rows, names)
+  return table.concat(Crafting.SpellsListed(rows, function(spell)
+    return names[spell]
+  end), " ")
+end
+eq(listed({ { item = 7080, name = "Transmute: Undeath to Water" } }, SPELLS), "17563",
+  "of two transmutes making one essence, only the one the window lists is recorded")
+eq(listed({ { item = 3577, name = "Smelt Gold" }, { item = 6037, name = "Smelt Truesilver" } }, SPELLS), "3308 10098",
+  "a smelting window listing only bars an alchemist can also transmute records the smelts")
+eq(listed({ { item = 3577, name = "Goldbarren" }, { item = 13510, name = "Fläschchen der Titanen" } }, {}), "11479 17635",
+  "without the recipes' names, the profession most of the window's items belong to decides")
+Stub.advance(0.3)
+eq(cells(1) .. " / " .. cells(2), "Flask of the Titans | +44g 35s 23c | +43% / Gold Bar | +3s 54c | +41%",
+  "the tab lists the recorded recipes, most profit first")
+eq(plain(GoldbookWindow.head.sub.text), "2 recipes · 2 in profit", "the title counts the recipes and those in profit")
+eq(picked() .. " / " .. side(), "1 / Flask of the Titans | Alchemy 300 / Gromsblood x30 = 2g 55s 00c / Stonescale Oil x10 = 6g 20s 00c"
+  .. " / Black Lotus x1 = 49g 87s 99c / Crystal Vial x1 · merchant = 1s 00c / Input cost = 58g 63s 99c"
+  .. " / Sells for = 102g 99s 22c / Profit = +44g 35s 23c / Margin = +43%",
+  "the first recipe is picked and broken down beside the list")
+click(GoldbookWindow.rows[2].hit)
+eq(picked() .. " / " .. side(), "2 / Gold Bar | Alchemy 225 / Iron Bar x1 = 5s 00c / Input cost = 5s 00c / Sells for = 8s 54c"
+  .. " / Profit = +3s 54c / Margin = +41%", "a click picks another recipe")
+
+Stub.crafts = {
+  { "Wands", "header" },
+  { "Lesser Magic Wand", "optimal", "|cffffffff|Henchant:14293|h[Lesser Magic Wand]|h|r" },
+  { "Enchant Bracer - Minor Health", "optimal", "|cffffffff|Henchant:7418|h[Enchant Bracer - Minor Health]|h|r" },
+}
+Stub.fire("CRAFT_SHOW")
+eq(known("Sultan-Faramon"), "11479 14293 17635", "Enchanting's window records the recipe its link names, not an enchant that makes no item")
+Stub.fire("NEW_RECIPE_LEARNED", 17637)
+eq(known("Sultan-Faramon"), "11479 14293 17635 17637", "the recipe learned is recorded")
+Stub.advance(0.3)
+eq(cells(3) .. " / " .. cells(4) .. " / " .. picked(), "Lesser Magic Wand | – | – / Flask of Supreme Power | – | – / 2",
+  "recipes with a reagent unpriced have no profit and come last, and the picked recipe stays picked")
+GoldbookWindow.headerButtons[2].scripts.OnClick()
+eq(cells(1) .. " / " .. cells(3), "Gold Bar | +3s 54c | +41% / Lesser Magic Wand | – | –", "they stay last in the other order")
+GoldbookWindow.headerButtons[2].scripts.OnClick()
+
+GoldbookDB.recipes["Mirelle-Faramon"] = { [2964] = true }
+eq(chip("known"), "All recipes / Known by my characters / Known by Sultan / Known by Mirelle",
+  "the chip offers every recipe, all characters', the playing character's and each other's")
+chip("known", "Known by Mirelle")
+eq(cells(1) .. " / " .. cells(2), "Bolt of Woolen Cloth | – | – /  |  | ", "another character's recipes")
+chip("known", "Known by my characters")
+eq(cells(5) .. " / " .. cells(6), "Bolt of Woolen Cloth | – | – /  |  | ", "every character's recipes together")
+chip("known", "All recipes")
+chip("craft", "Alchemy")
+eq(plain(GoldbookWindow.head.sub.text), "131 Alchemy recipes · 2 in profit", "All recipes lists every recipe of the profession picked")
+Stub.advance(10)
+GoldbookWindow.scripts.OnMouseWheel(GoldbookWindow, -3)
+local top = cells(1)
+click(GoldbookWindow.rows[5].hit)
+Stub.advance(0.3)
+eq(cells(1) .. " / " .. picked(), top .. " / 5", "picking a recipe further down keeps the list where it is")
+GoldbookWindow.search:SetText("gold")
+eq(cells(1) .. " / " .. cells(2), "Gold Bar | +3s 54c | +41% /  |  | ", "the search matches the crafted item's name")
+click(GoldbookWindow.filters.clear)
+eq(GoldbookWindow.filters.controls.known.label.text .. " / " .. GoldbookWindow.filters.controls.craft.label.text,
+  "Known by Sultan / All professions", "Clear filters returns to the playing character's recipes")
+
+GoldbookDB.recipes = {}
+chip("known", "Known by my characters")
+eq(GoldbookWindow.status.text, "No recipes recorded yet. Open a profession window on each character, or pick All recipes.",
+  "with no character's recipes recorded the status says how to record them")
+click(GoldbookWindow.filters.clear)
+Stub.fire("TRADE_SKILL_UPDATE")
+Stub.advance(0.3)
+chip("craft", "Alchemy")
+GoldbookWindow.search:SetText("a")
+click(GoldbookWindow.rows[2].hit)
+Stub.alt = true
+click(GoldbookWindow.rows[1].hit)
+Stub.alt = false
+eq(head() .. " / " .. choices(GoldbookWindow.modes) .. " / " .. GoldbookWindow.head.back.label.text,
+  "Flask of the Titans | 108g 41s 30c | Alchemy +43% / History [Crafting] / Back to Crafting",
+  "Alt+click opens the recipe on the item page")
+click(GoldbookWindow.modes.buttons[1])
+click(GoldbookWindow.head.back)
+eq(tostring(GoldbookWindow.tabs.crafting.selected.shown) .. " / " .. GoldbookWindow.filters.controls.craft.label.text .. " / "
+  .. GoldbookWindow.search.text .. " / " .. picked(), "true / Alchemy / a / 2", "Back from either mode returns to the tab as it was left")
+
+Stub.spells = { [17571] = true }
+Stub.fire("NEW_RECIPE_LEARNED")
+eq(known("Sultan-Faramon"), "11479 17571 17635", "a recipe the client says the character knows is recorded")
+
 io.write(("%d checks, %d failures\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)

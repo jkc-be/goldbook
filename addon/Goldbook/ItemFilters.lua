@@ -2,8 +2,10 @@ local _, ns = ...
 local ItemFilters = {}
 ns.ItemFilters = ItemFilters
 
+-- `craft` and `known` pick the Crafting tab's recipes: their profession, and
+-- whose recipes they are, those of the character playing ("self") at first.
 function ItemFilters.New()
-  return { profession = "", kind = "all" }
+  return { profession = "", kind = "all", craft = "", known = "self" }
 end
 
 function ItemFilters.Matches(key, quality, filters)

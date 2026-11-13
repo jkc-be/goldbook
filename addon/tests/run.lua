@@ -764,7 +764,7 @@ local function selectedTabs()
 end
 
 -- The hubs drawn picked in the rail, then the tabs shown at the top of the
--- page in the order they run, the picked ones in brackets: "Market: [Prices] Deals Movers".
+-- page in the order they run, the picked ones in brackets: "Market: [Prices] Deals Movers Crafting".
 local function navigation()
   local hubs, following, isTab, tabs = {}, {}, {}, {}
   for _, entry in pairs(GoldbookWindow.hubs) do
@@ -860,7 +860,7 @@ eq(head(), "Prices |  | 1 item scanned on Faramon-Horde", "the price list's titl
 eq(GoldbookWindow.status.text, "Click an item to search the auction house · Alt+click for its history", "price list status")
 eq(GoldbookWindow.rows[1].spark.shown, true, "the price list draws the last 7 days of each item")
 eq(selectedTabs(), "prices", "the open view's tab is drawn selected and every tab stays clickable")
-eq(navigation(), "Market: [Prices] Deals Movers", "the price list is the first tab of the Market hub")
+eq(navigation(), "Market: [Prices] Deals Movers Crafting", "the price list is the first tab of the Market hub")
 eq(GoldbookWindow.search.hint.shown, false, "a search box with text shows no hint")
 eq(GoldbookWindow.scroll.shown, false, "a list that fits has no scroll marker")
 GameTooltip.lines = {}
@@ -887,7 +887,7 @@ GoldbookWindow.tabs.deals.scripts.OnClick()
 eq(GoldbookWindow.search.text, "cloth", "switching views keeps the search text")
 eq(head(), "Deals |  | 0 in the scan of 3m ago", "deals are filtered by the search text")
 eq(selectedTabs(), "deals", "the selection follows the tab clicked")
-eq(navigation(), "Market: Prices [Deals] Movers", "a tab click switches the view within the hub")
+eq(navigation(), "Market: Prices [Deals] Movers Crafting", "a tab click switches the view within the hub")
 SlashCmdList.GOLDBOOK("deals")
 eq(GoldbookWindow.search.text, "", "/gb deals without text clears the search")
 eq(GoldbookWindow.search.hint.shown, true, "an empty search box shows its hint")
@@ -1010,16 +1010,16 @@ GoldbookWindow.segments.buttons[1].scripts.OnClick(GoldbookWindow.segments.butto
 
 -- Each command lands on its own hub and tab; a hub opens the tab it showed last.
 local landed = {}
-for _, command in ipairs({ "show", "deals", "movers", "bags", "sell", "mail", "gold", "items", "accounting", "trades" }) do
+for _, command in ipairs({ "show", "deals", "crafting", "movers", "bags", "sell", "mail", "gold", "items", "accounting", "trades" }) do
   SlashCmdList.GOLDBOOK(command)
   landed[#landed + 1] = command .. " " .. navigation()
 end
-eq(table.concat(landed, " / "), "show Market: [Prices] Deals Movers / deals Market: Prices [Deals] Movers"
-  .. " / movers Market: Prices Deals [Movers] / bags Inventory: [Bags] Mail / sell Inventory: [Bags] Mail"
+eq(table.concat(landed, " / "), "show Market: [Prices] Deals Movers Crafting / deals Market: Prices [Deals] Movers Crafting"
+  .. " / crafting Market: Prices Deals Movers [Crafting] / movers Market: Prices Deals [Movers] Crafting / bags Inventory: [Bags] Mail / sell Inventory: [Bags] Mail"
   .. " / mail Inventory: Bags [Mail] / gold Ledger: [Gold] Accounting By item / items Ledger: Gold Accounting [By item]"
   .. " / accounting Ledger: Gold [Accounting] By item / trades Ledger: Gold [Accounting] By item", "every command opens its view under its hub, /gb sell as /gb bags")
 GoldbookWindow.hubs.market.scripts.OnClick()
-eq(navigation(), "Market: Prices Deals [Movers]", "a hub opens on the tab it showed last")
+eq(navigation(), "Market: Prices Deals [Movers] Crafting", "a hub opens on the tab it showed last")
 GoldbookWindow.hubs.inventory.scripts.OnClick()
 GoldbookWindow.tabs.bags.scripts.OnClick()
 GoldbookWindow.hubs.ledger.scripts.OnClick()
@@ -1030,7 +1030,7 @@ eq(GoldbookDB.settings.hubViews.market .. " " .. GoldbookDB.settings.hubViews.in
   "movers bags accounting", "each hub's last tab is saved")
 GoldbookDB.settings.hubViews.market = "gold"
 GoldbookWindow.hubs.market.scripts.OnClick()
-eq(navigation(), "Market: [Prices] Deals Movers", "a saved tab of another hub opens the hub's first")
+eq(navigation(), "Market: [Prices] Deals Movers Crafting", "a saved tab of another hub opens the hub's first")
 
 SlashCmdList.GOLDBOOK("show")
 eq(GoldbookWindow.headers[1].text .. " " .. cells(1), "ITEM ↑ Bandit Cinch of the Monkey | 3g 00s 00c | 3g 00s 00c | 1 | 3m ago", "price list starts in name order")
@@ -1172,7 +1172,7 @@ eq(navigation(), "Inventory: [Bags] Mail", "and Back returns to the Bags tab")
 GoldbookWindow.search:SetText("test ore")
 GoldbookWindow:Hide()
 ns.UI.ShowItem("9001")
-eq(GoldbookWindow.head.back.label.text .. " / " .. navigation(), "Back to Prices / Market: Prices Deals Movers",
+eq(GoldbookWindow.head.back.label.text .. " / " .. navigation(), "Back to Prices / Market: Prices Deals Movers Crafting",
   "an item opened with the window closed goes back to the price list, under Market")
 GoldbookWindow.head.back.scripts.OnClick(GoldbookWindow.head.back)
 eq(head(), "Prices |  | 30 items scanned on Faramon-Horde", "and Back goes there")
@@ -1589,7 +1589,7 @@ Stub.fire("ADDON_LOADED", "Goldbook")
 eq(tostring(GoldbookDB.account ~= account) .. " " .. GoldbookDB.account.id .. " " .. GoldbookDB.account.key, "true " .. beforeReload,
   "the ID and key read back from the file are kept")
 
-Stub.name, Stub.class, Stub.level = "Mirelle", "MAGE", 42
+Stub.name, Stub.class, Stub.level, Stub.spells = "Mirelle", "MAGE", 42, { [2964] = true }
 Stub.fire("PLAYER_LOGIN")
 Stub.fire("PLAYER_ENTERING_WORLD")
 Stub.fire("PLAYER_MONEY")
@@ -1616,8 +1616,10 @@ for name in pairs(fixture.GoldbookDB.characters) do
   characters[#characters + 1] = name
 end
 table.sort(characters)
-eq(fixture.GoldbookDB.account.key .. " " .. table.concat(characters, " ") .. " " .. #fixture.GoldbookDB.scans,
-  "7KQ2M9PXABCDEFGHJKMN Mirelle-Faramon Sultan-Faramon 3", "the fixture carries the account, both characters and the three scans")
+eq(fixture.GoldbookDB.account.key .. " " .. table.concat(characters, " ") .. " " .. #fixture.GoldbookDB.scans .. " "
+  .. tostring(fixture.GoldbookDB.recipes["Mirelle-Faramon"][2964]),
+  "7KQ2M9PXABCDEFGHJKMN Mirelle-Faramon Sultan-Faramon 3 true",
+  "the fixture carries the account, both characters, the three scans and the recipes a character knows")
 
 print = nil
 io.write(("%d checks, %d failed. Wrote %s\n"):format(checks, failures, path))
