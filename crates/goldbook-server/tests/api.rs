@@ -1495,14 +1495,17 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
         0
     )]);
     call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
-    // Rebuilding with the vendor migration again leaves the table as it was before accounting.
+    // Rebuilding with the vendor migration again leaves the table as it was
+    // before accounting, without the hidden column either.
     let mut db = db::connect(&f.database()).unwrap();
     db.execute_batch(include_str!(
         "../../../server/migrations/0008_vendor_trades.sql"
     ))
     .unwrap();
-    db.execute_batch("DELETE FROM migrations WHERE name='0012_accounting.sql'")
-        .unwrap();
+    db.execute_batch(
+        "DELETE FROM migrations WHERE name IN ('0012_accounting.sql','0018_hidden_trades.sql')",
+    )
+    .unwrap();
     assert!(
         db.execute("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy) VALUES ('K7Q2M9PX','Sultan','Faramon',1760000700,'quest','Q',1,1,0,0)", [])
             .is_err()

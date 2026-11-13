@@ -6,7 +6,7 @@ use rusqlite::{
 use serde_json::Value;
 use std::{path::Path, time::Duration};
 
-const MIGRATIONS: [(&str, &str); 17] = [
+const MIGRATIONS: [(&str, &str); 18] = [
     (
         "0001_init.sql",
         include_str!("../../../server/migrations/0001_init.sql"),
@@ -74,6 +74,10 @@ const MIGRATIONS: [(&str, &str); 17] = [
     (
         "0017_item_sources.sql",
         include_str!("../../../server/migrations/0017_item_sources.sql"),
+    ),
+    (
+        "0018_hidden_trades.sql",
+        include_str!("../../../server/migrations/0018_hidden_trades.sql"),
     ),
 ];
 
