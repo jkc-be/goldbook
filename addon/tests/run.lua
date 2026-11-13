@@ -1241,7 +1241,7 @@ eq(table.concat(marks, " ") .. " | " .. table.concat(lines, " "), "1@0 2@0 3@102
   "after the gold chart only this item's points and lines show, joined across a missing day as on the web")
 eq(cells(1) .. " / " .. cells(2), "Thu 09 Oct | 10g 00s 00c |  | 1 | 0.0% / Wed 08 Oct | 10g 00s 40c |  | 1 | 0.0%",
   "a change that rounds to nothing has no sign, up or down")
-eq(plain(GoldbookWindow.head.tags[1].label.text), "1 day 0.0%", "nor in the title")
+eq(head(), "Bolt of Woolen Cloth | 10g 00s 00c |  | Tailoring +99%", "a crafted item's margin takes the place of its change over a day")
 local chart = GoldbookWindow.chart
 eq(("%.0f %.0f"):format(chart.hits[1].x, chart.hits[4].x), "0 563", "four days recorded span the whole plot, from the first to today")
 local legend = {}
@@ -1361,7 +1361,7 @@ eq(ns.UI.Theme(), "dark", "the window starts dark")
 SlashCmdList.GOLDBOOK("theme light")
 eq(lastPrint() .. " " .. GoldbookDB.settings.theme, "Goldbook The window is light. Change it with /gb theme light or /gb theme dark. light",
   "/gb theme light switches the window and keeps the choice")
-eq(("%.2f %s"):format(GoldbookWindow.version.textColor[1], GoldbookWindow.head.tags[1].label.text:sub(1, 10)), "0.25 |cff41362c",
+eq(("%.2f %s"):format(GoldbookWindow.version.textColor[1], GoldbookWindow.head.tags[1].label.text:match("|c%x+")), "0.25 |cff0c4210",
   "the frames already drawn are painted again, and the view redrawn, in the light palette")
 SlashCmdList.GOLDBOOK("theme sepia")
 eq(plain(Stub.printed[#Stub.printed - 1]) .. " / " .. lastPrint(),
