@@ -20,21 +20,13 @@ local CELL_PAD, ICON_SIZE = 10, 18
 local SPARK_WIDTH, SPARK_HEIGHT, SPARK_DAYS = 64, 16, 7
 local TAG_HEIGHT, ACTION_WIDTH, ACTION_HEIGHT = 18, 150, 24
 local SEARCH_WIDTH, CHIP_HEIGHT, MENU_WIDTH, MENU_ROW = 240, 24, 200, 22
--- A longer menu runs in columns, so that it ends within the window.
-local MENU_ROWS = 12
-local SIDE_ROW = 26
 -- The plot sits right of its axis labels and left of the latest values'
 -- labels, under its legend, over the band of amounts and the dates.
 local AXIS_WIDTH, AXIS_HEIGHT, VALUE_WIDTH, CHART_PAD = 50, 20, 58, 4
 local PLOT_TOP, LEGEND_TOP, BAND_HEIGHT, BAND_GAP = 8, 28, 30, 14
 local AXIS_STEPS, MAX_GRID, MAX_DATES = 4, 8, 10
--- The area under a chart line is drawn as vertical strips this wide.
-local STRIP = 3
 local CHART_DAYS = 30
--- A chart of few days still spans this many, so its points do not crowd one edge.
-local MIN_SPAN_DAYS = 3
 local SELL_ACTIONS = { auction = "Auction", vendor = "Vendor", unknown = "No price" }
-local REFRESH_DELAY = 0.2
 -- The window's own scale, over the game's UI scale.
 local MIN_SCALE, MAX_SCALE = 0.7, 1.4
 local DAY = 24 * 3600
@@ -346,6 +338,12 @@ local function percent(value)
   return signed(tenths, text)
 end
 
+-- A margin, given as a share, in whole percent.
+local function marginText(margin)
+  local whole = math.floor(margin * 100 + 0.5)
+  return signed(whole, whole == 0 and "0%" or ("%+d%%"):format(whole))
+end
+
 local function dayText(day)
   return date("!%a %d %b", day * DAY)
 end
@@ -383,6 +381,11 @@ end
 
 local function shownHistory()
   return Database.History(ns.db, ns.RealmKey(), shownItem.key)
+end
+
+-- The recipe the shown item is best made by, nil when none makes it.
+local function shownCraft()
+  return ns.Crafting.ForItem(ns.db, ns.RealmKey(), shownItem.key)
 end
 
 local function keepItem(row)
@@ -470,6 +473,8 @@ end
 -- The time axis starts at the first price in the range, so that an item
 -- seen on a few days fills the plot.
 local function itemChart(range)
+  -- A chart of few days still spans this many, so its points do not crowd one edge.
+  local MIN_SPAN_DAYS = 3
   local now = time()
   local today = math.floor(now / DAY)
   local start = range == 1 and now - DAY or (today - range + 1) * DAY
@@ -497,19 +502,16 @@ local function itemChart(range)
   }
 end
 
+-- The item's name and lowest buyout, and the margin of crafting it.
 local function itemHead()
   local head = { title = itemText(shownItem), icon = shownItem.key, quality = shownItem.quality, tags = {} }
+  local craft = shownCraft()
+  if craft then
+    local margin = craft.margin and marginText(craft.margin) or tint("muted", "–")
+    head.tags[1] = ns.Crafting.ProfessionName(craft.profession) .. " " .. margin
+  end
   local record = Database.Lookup(ns.db, ns.RealmKey(), shownItem.key)
-  if not record then
-    return head
-  end
-  local moved = evolution()
-  head.figure = money(record.min)
-  for _, span in ipairs({ { "1 day", moved.day }, { "7 days", moved.week } }) do
-    if span[2] then
-      head.tags[#head.tags + 1] = labelled(span[1], percent(span[2]))
-    end
-  end
+  head.figure = record and money(record.min)
   return head
 end
 
@@ -587,6 +589,8 @@ end
 --   items     rows are items to hover and click; `icons` puts the item's icon, or the row's
 --             own `icon`, before its name
 --   sort      { column, descending }, the order rows come in; a segment may set its own
+--   modes     { view, label } choices at the right of the toolbar between views of the shown item,
+--             when something crafts it
 --   segments  { key, label } choices at the right of the title, `segment` the first one picked;
 --             `counts` (search text) -> { [key] = count } puts a count after each;
 --             `badge` instead shows a label and a value there, `aside` a line of text;
@@ -923,6 +927,8 @@ local VIEWS = {
     segments = { { 1, "1D" }, { 7, "1W" }, { 30, "1M" }, { 60, "2M" } },
     segment = 30,
     rangesOnChart = true,
+    -- The item page's two modes, each a view of its own.
+    modes = { { "item", "History" }, { "craft", "Crafting" } },
     rows = function()
       return evolution().rows
     end,
@@ -930,7 +936,19 @@ local VIEWS = {
       return dayText(row.day), money(row.min), row.mv > 0 and money(row.mv) or "", tostring(row.qty),
         row.change and percent(row.change) or ""
     end,
-    head = itemHead,
+    -- With how its price moved. A crafted item's margin takes the place of
+    -- its change over a day, as three tags overrun the line.
+    head = function()
+      local head = itemHead()
+      local moved = head.figure and evolution() or {}
+      local spans = { { "1 day", moved.day }, { "7 days", moved.week } }
+      for _, span in ipairs(#head.tags > 0 and { spans[2] } or spans) do
+        if span[2] then
+          head.tags[#head.tags + 1] = labelled(span[1], percent(span[2]))
+        end
+      end
+      return head
+    end,
     cards = itemCards,
     chart = { height = 200, spec = itemChart },
     status = function(rows, visible)
@@ -939,6 +957,53 @@ local VIEWS = {
       end
       return joinedStatus(scrollRange(rows, visible), plural(#rows, "day") .. " recorded for " .. itemText(shownItem),
         "Shift+click its name to link it in chat")
+    end,
+  },
+  craft = {
+    back = true,
+    items = true,
+    icons = true,
+    blocks = { "toolbar", "cards", "table" },
+    search = "Search items",
+    columns = { { "Reagent", "name", 250 }, { "Qty", "count", 70 }, { "Each", "each", 120 }, { "Bought at", "source", 110, words = true },
+      { "Cost", "cost", 129 } },
+    sort = { 5, true },
+    modes = { { "item", "History" }, { "craft", "Crafting" } },
+    rows = function()
+      return ns.NameItems(shownCraft().reagents)
+    end,
+    -- Where to buy each reagent, with the age of a buyout the newest scan did not see.
+    cells = function(row)
+      local none = tint("muted", "–")
+      local place = row.source == "auction" and "Auction" or row.source == "merchant" and "Merchant" or tint("warn", "No price")
+      if row.stale then
+        place = place .. tint("muted", " " .. Codec.Age(time() - row.seen))
+      end
+      return itemText(row), tostring(row.count), row.each and money(row.each) or none, place, row.cost and money(row.cost) or none
+    end,
+    head = itemHead,
+    -- One craft: what its reagents cost, what the items made sell for, and what is left.
+    cards = function()
+      local craft, none = shownCraft(), tint("muted", "–")
+      local made = craft.makes > 1 and (craft.makes .. " ") or ""
+      local cost = craft.unpriced > 0 and tint("warn", craft.unpriced .. " without a price")
+        or tint("muted", plural(#craft.reagents, "reagent") .. (craft.stale and ", older prices" or ""))
+      local sale = craft.action == "auction" and labelled(made == "" and "Posts at" or (made .. "post at"), money(craft.post))
+        or craft.action == "vendor" and tint("muted", made == "" and "To a vendor" or (made .. "to a vendor"))
+        or tint("muted", "No price yet")
+      return {
+        { "Input cost", money(craft.cost), cost },
+        { "Sells for", craft.sale and money(craft.sale) or none, sale },
+        { "Profit", craft.profit and change(craft.profit) or none, craft.action == "auction" and tint("muted", "After the 5% cut") or nil },
+        { "Margin", craft.margin and marginText(craft.margin) or none,
+          tint("muted", ns.Crafting.ProfessionName(craft.profession) .. " " .. craft.skill) },
+      }
+    end,
+    status = function(rows, visible)
+      local unpriced = shownCraft().unpriced
+      return joinedStatus(scrollRange(rows, visible),
+        unpriced > 0 and (plural(unpriced, "reagent") .. " without a price") or nil,
+        "Reagents cost the cheaper of the auction house and a merchant", unpriced == 0 and "Click a reagent to search for it" or nil)
     end,
   },
 }
@@ -1136,11 +1201,10 @@ local function segmentOf(definition, key)
   end
 end
 
--- Choices side by side from the right edge of the title line, each a
--- button framing its text; `on` is the one drawn picked. Without
--- `onClick` they are a label.
-local function showSegments(labels, on, onClick)
-  local control = window.segments
+-- Choices side by side from the right edge of a segmented control, each a
+-- button framing its text; `on` is the one drawn picked. Without `onClick`
+-- they are a label.
+local function showSegments(control, labels, on, onClick)
   for index = #labels, 1, -1 do
     local button = control.buttons[index]
     button.label:SetText(labels[index])
@@ -1343,6 +1407,15 @@ local function drawHead(definition)
     previous = tag
   end
   head.aside:SetText(definition.aside and definition.aside(results) or "")
+  local modes = definition.modes and shownCraft() and definition.modes or {}
+  local modeLabels, mode = {}, 0
+  for index, entry in ipairs(modes) do
+    modeLabels[index], mode = entry[2], entry[1] == view and index or mode
+  end
+  showSegments(window.modes, modeLabels, mode, function(choice)
+    setView(modes[choice][1])
+    refresh()
+  end)
 
   if definition.segments then
     local labels, on = {}, 1
@@ -1353,15 +1426,15 @@ local function drawHead(definition)
         on = index
       end
     end
-    showSegments(labels, on, function(choice)
+    showSegments(window.segments, labels, on, function(choice)
       chosen[view] = definition.segments[choice][1]
       sorting[view] = definition.segments[choice].sort and { unpack(definition.segments[choice].sort) } or sorting[view]
       refresh()
     end)
   elseif definition.badge then
-    showSegments(definition.badge(), 2)
+    showSegments(window.segments, definition.badge(), 2)
   else
-    showSegments({}, 0)
+    showSegments(window.segments, {}, 0)
   end
   local control = window.segments
   control:ClearAllPoints()
@@ -1486,6 +1559,8 @@ local showPointTip, hidePointTip
 -- draws each point's amount as a bar below the plot. A legend names them
 -- when there is more than one line or a band.
 local function drawChart(spec)
+  -- The area under a chart line is drawn as vertical strips this wide.
+  local STRIP = 3
   local chart = window.chart
   local plot, points, series, band = chart.plot, spec.points, spec.series, spec.band
   local width = chart.plotWidth
@@ -1893,6 +1968,8 @@ end
 
 -- One menu serves every chip; its options are those of the chip clicked.
 local function openMenu(chip, name)
+  -- A longer menu runs in columns, so that it ends within the window.
+  local MENU_ROWS = 12
   local menu = window.menu or addMenu()
   local same = menu.owner == chip and menu:IsShown()
   menu:Hide()
@@ -1937,6 +2014,45 @@ local function openMenu(chip, name)
   menu:Show()
 end
 
+-- A segmented control: a line around buttons that frame their text, placed
+-- by its right edge.
+local function addSegments(parent)
+  local control = CreateFrame("Frame", nil, parent)
+  control:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+  control:SetSize(1, 22)
+  control.edge = control:CreateTexture(nil, "BACKGROUND")
+  control.edge:SetPoint("TOPRIGHT")
+  control.edge:SetPoint("BOTTOMRIGHT")
+  UI.Fill(control.edge, "edge")
+  local fill = control:CreateTexture(nil, "BACKGROUND", nil, 1)
+  fill:SetPoint("TOPLEFT", control.edge, "TOPLEFT", 1, -1)
+  fill:SetPoint("BOTTOMRIGHT", control.edge, "BOTTOMRIGHT", -1, 1)
+  UI.Fill(fill, "bg")
+  control.buttons = {}
+  for index = 1, 6 do
+    local button = CreateFrame("Button", nil, control)
+    button.label = label(button, "status", "muted")
+    button:SetPoint("LEFT", button.label, "LEFT", -11, 0)
+    button:SetPoint("RIGHT", button.label, "RIGHT", 11, 0)
+    button:SetHeight(20)
+    button.picked = button:CreateTexture(nil, "BACKGROUND")
+    button.picked:SetAllPoints()
+    UI.Fill(button.picked, "on")
+    button.divider = button:CreateTexture(nil, "ARTWORK")
+    button.divider:SetPoint("TOPRIGHT", button, "TOPRIGHT", 1, 0)
+    button.divider:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, 0)
+    button.divider:SetWidth(1)
+    UI.Fill(button.divider, "edge")
+    button:SetScript("OnClick", function(self)
+      if self.onClick then
+        self.onClick(self.choice)
+      end
+    end)
+    control.buttons[index] = button
+  end
+  return control
+end
+
 local function addToolbar()
   local bar = CreateFrame("Frame", nil, window)
   bar:SetSize(PAGE_WIDTH, TOOLBAR_HEIGHT)
@@ -1952,10 +2068,10 @@ local function addToolbar()
   UI.Ink(search, "text")
   search.hint = label(search, "body", "muted")
   search.hint:SetPoint("LEFT", 9, 0)
-  -- Typing a name leaves the item view for the price list.
+  -- Typing a name leaves the item page for the price list.
   search:SetScript("OnTextChanged", function(self, userInput)
     self.hint:SetShown(self:GetText() == "" and not self:HasFocus())
-    if userInput and view == "item" then
+    if userInput and VIEWS[view].back then
       setView("prices")
     end
     refresh()
@@ -1977,6 +2093,7 @@ local function addToolbar()
     end)
     bar.controls[name] = chip
   end
+  window.modes = addSegments(bar)
   bar.clear = addChip(bar, "Clear filters")
   bar.clear:SetScript("OnClick", function()
     filters = noFilters()
@@ -2051,41 +2168,7 @@ local function addHead()
   end)
   head.back = back
 
-  -- The segmented control: a line around buttons that frame their text.
-  local control = CreateFrame("Frame", nil, head)
-  control:SetPoint("RIGHT", head, "RIGHT", 0, 0)
-  control:SetSize(1, 22)
-  control.edge = control:CreateTexture(nil, "BACKGROUND")
-  control.edge:SetPoint("TOPRIGHT")
-  control.edge:SetPoint("BOTTOMRIGHT")
-  UI.Fill(control.edge, "edge")
-  local fill = control:CreateTexture(nil, "BACKGROUND", nil, 1)
-  fill:SetPoint("TOPLEFT", control.edge, "TOPLEFT", 1, -1)
-  fill:SetPoint("BOTTOMRIGHT", control.edge, "BOTTOMRIGHT", -1, 1)
-  UI.Fill(fill, "bg")
-  control.buttons = {}
-  for index = 1, 6 do
-    local button = CreateFrame("Button", nil, control)
-    button.label = label(button, "status", "muted")
-    button:SetPoint("LEFT", button.label, "LEFT", -11, 0)
-    button:SetPoint("RIGHT", button.label, "RIGHT", 11, 0)
-    button:SetHeight(20)
-    button.picked = button:CreateTexture(nil, "BACKGROUND")
-    button.picked:SetAllPoints()
-    UI.Fill(button.picked, "on")
-    button.divider = button:CreateTexture(nil, "ARTWORK")
-    button.divider:SetPoint("TOPRIGHT", button, "TOPRIGHT", 1, 0)
-    button.divider:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, 0)
-    button.divider:SetWidth(1)
-    UI.Fill(button.divider, "edge")
-    button:SetScript("OnClick", function(self)
-      if self.onClick then
-        self.onClick(self.choice)
-      end
-    end)
-    control.buttons[index] = button
-  end
-  window.segments = control
+  window.segments = addSegments(head)
 end
 
 local function addCards()
@@ -2168,6 +2251,7 @@ local function addRow(columns, index)
 end
 
 local function addTable()
+  local SIDE_ROW = 26
   local frame = panel(window)
   window.table = frame
   frame.heading = addHeading(frame)
@@ -2626,7 +2710,7 @@ function UI.ShowItem(linkOrKey)
   -- One item after another keeps the view the first came from.
   if not (window and window:IsShown()) then
     origin = nil
-  elseif view ~= "item" then
+  elseif not VIEWS[view].back then
     local sort = sorting[view]
     origin = { view = view, search = window.search:GetText(), filters = copy(filters), sort = sort and { unpack(sort) },
       segment = chosen[view], offset = offset }
@@ -2679,6 +2763,7 @@ end
 -- Changes that come in bursts, like gold changing for each of ten deals
 -- bought or item names arriving, redraw the window once.
 function UI.RefreshSoon()
+  local REFRESH_DELAY = 0.2
   if refreshPending or not (window and window:IsShown()) then
     return
   end
