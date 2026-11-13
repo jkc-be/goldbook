@@ -1,5 +1,6 @@
 pub mod auctions;
 mod auth;
+mod balance;
 pub mod db;
 pub mod house;
 mod oauth;
