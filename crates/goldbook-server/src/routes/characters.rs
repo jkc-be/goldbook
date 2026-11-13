@@ -109,8 +109,8 @@ pub(super) fn character(input: &Input, db: &Connection) -> Result<Reply> {
     c["bank"] = container(c["bank"].take())?;
     Ok(Reply::json(c))
 }
-// The viewer's trades, newest first, or one character's with name and realm. A
-// trade that more than one ID uploaded counts once.
+// The viewer's trades that are not hidden, newest first, or one character's
+// with name and realm. A trade that more than one ID uploaded counts once.
 pub(super) fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     let viewer = Viewer::of(input, db)?;
     let (visible, key) = viewer.visible();
@@ -123,7 +123,7 @@ pub(super) fn trades(input: &Input, db: &Connection) -> Result<Reply> {
     let rows = db::query(
         db,
         &format!(
-            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee,t.party FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy,MAX(party) AS party FROM trades WHERE account_id IN ({visible}) AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
+            "SELECT t.name,t.realm,t.at,t.side,t.item,t.itemKey,i.quality,t.count,t.price,t.fee,t.party FROM (SELECT name,realm,at,side,item,MAX(item_key) AS itemKey,count,price,fee,copy,MAX(party) AS party FROM trades WHERE account_id IN ({visible}) AND hidden=0 AND (?2='' OR (name=?2 AND realm=?3)) GROUP BY name,realm,at,side,item,count,price,fee,copy) t LEFT JOIN items i ON i.item_key=t.itemKey ORDER BY t.at DESC,t.name,t.realm,t.item,t.copy"
         ),
         &[&key, &name, &realm],
     )?;
