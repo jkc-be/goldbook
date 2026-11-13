@@ -21,6 +21,15 @@ function Crafting.SpellsFor(key)
   return makers[Codec.BaseID(key)] or {}
 end
 
+local names = {}
+for _, profession in ipairs(ns.ProfessionData) do
+  names[profession.id] = profession.name
+end
+
+function Crafting.ProfessionName(id)
+  return names[id]
+end
+
 -- A buyout of any age counts, but one missing from the newest scan is `stale`.
 local function priced(db, realmKey, newestScan, itemID, count)
   local key = Codec.ItemKey(itemID)

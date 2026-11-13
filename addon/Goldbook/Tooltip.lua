@@ -1,5 +1,5 @@
 local _, ns = ...
-local Codec, Database, Advisor = ns.Codec, ns.Database, ns.Advisor
+local Codec, Database, Advisor, Crafting = ns.Codec, ns.Database, ns.Advisor, ns.Crafting
 
 local TOOLTIPS = { GameTooltip = true, ItemRefTooltip = true }
 
@@ -8,6 +8,27 @@ local function stackSize(tooltip)
   local owner = IsShiftKeyDown() and tooltip:GetOwner()
   local count = owner and owner.count
   return type(count) == "number" and count > 1 and count or 1
+end
+
+-- What crafting one costs and makes, from the recipe it is best made by,
+-- or how many of its reagents have no price.
+local function addCraft(tooltip, craft, stack)
+  if craft.unpriced > 0 then
+    local count = craft.unpriced == 1 and "1 reagent has" or (craft.unpriced .. " reagents have")
+    tooltip:AddLine("  Crafting cost: " .. count .. " no price", 0.6, 0.6, 0.6)
+    return
+  end
+  -- A craft's share for the items priced, as it may make several.
+  local function share(copper)
+    return Codec.Money(math.floor(math.abs(copper) * stack / craft.makes + 0.5))
+  end
+  tooltip:AddDoubleLine("  Crafting cost", share(craft.cost), 1, 1, 1, 1, 1, 1)
+  if craft.profit then
+    local whole = math.floor(craft.margin * 100 + 0.5)
+    local gain = craft.profit >= 0
+    tooltip:AddDoubleLine("  Craft profit", (gain and "+" or "-") .. share(craft.profit) .. " (" .. ("%+d%%"):format(whole) .. ")",
+      1, 1, 1, gain and 0.25 or 1, gain and 1 or 0.35, gain and 0.25 or 0.3)
+  end
 end
 
 local function addPrices(tooltip, link)
@@ -24,7 +45,8 @@ local function addPrices(tooltip, link)
   local vendor = Database.Vendor(ns.db, key) or ns.SellPrice(link) or 0
   local stocked = Database.MerchantSells(ns.db, key)
   local newestScan = Database.NewestScan(ns.db, realmKey)
-  if not record and vendor == 0 then
+  local craft = Crafting.ForItem(ns.db, realmKey, key)
+  if not record and vendor == 0 and not craft then
     return
   end
 
@@ -64,6 +86,10 @@ local function addPrices(tooltip, link)
     else
       tooltip:AddLine("  Sold by merchants", 0.6, 0.6, 0.6)
     end
+  end
+
+  if craft then
+    addCraft(tooltip, craft, stack)
   end
 
   local deal = record and Advisor.Deal(record, vendor, newestScan, stocked)
