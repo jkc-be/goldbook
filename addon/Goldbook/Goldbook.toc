@@ -18,6 +18,7 @@ Professions.lua
 ItemFilters.lua
 Database.lua
 Advisor.lua
+Crafting.lua
 Ledger.lua
 Trades.lua
 Scanner.lua
