@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 VERSIONED = ["package.json", "package-lock.json", "desktop/src-tauri/tauri.conf.json", "addon/Goldbook/Goldbook.toc",
              "web/index.html", "Cargo.lock", "crates/goldbook-core/Cargo.toml", "crates/goldbook-server/Cargo.toml",
              "crates/goldbook-sync/Cargo.toml", "desktop/src-tauri/Cargo.toml"]
+SET_VERSION_USAGE = ("usage: scripts/set-version.py <major.minor.patch>, such as 0.1.5, "
+                     "--stamp <major.minor.patch[-beta.N]>, such as 0.2.0-beta.1, or --check\n")
 CHANGELOG = """# Changelog
 
 The changes in each Goldbook version, newest first.
@@ -112,6 +114,10 @@ The changes in each Goldbook version, newest first.
         self.assert_refused("1.2.8", "1.2.8 is not higher than the current version 1.2.9")
         self.assert_refused("1.2.9", "1.2.9 is not higher than the current version 1.2.9")
 
+    def test_refuses_a_beta_version(self):
+        self.add("addon-alpha.md", "- Alpha.\n")
+        self.assert_refused("1.2.10-beta.1", "usage: scripts/prepare-release.py <major.minor.patch>, such as 0.2.5")
+
     def test_refuses_when_the_version_fields_disagree(self):
         self.add("addon-alpha.md", "- Alpha.\n")
         index = self.root / "web/index.html"
@@ -124,6 +130,70 @@ The changes in each Goldbook version, newest first.
         self.add("server-blank.md", "\n")
         self.assert_refused("1.2.10", "changes/docs-readme.md: unknown section docs; use one of addon, app, website, server, build\n"
                                       "changes/server-blank.md: the file is empty; write one or more Markdown bullets")
+
+
+class SetVersionStampTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name) / "repo"
+        for path in VERSIONED + ["scripts/set-version.py"]:
+            (self.root / path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(ROOT / path, self.root / path)
+        bin = Path(temporary.name) / "bin"
+        bin.mkdir()
+        cargo = bin / "cargo"
+        cargo.write_text("#!/bin/sh\nexit 0\n")
+        cargo.chmod(0o755)
+        self.env = dict(os.environ, PATH=f"{bin}{os.pathsep}{os.environ['PATH']}")
+        self.assertEqual(self.set_version("1.2.9").returncode, 0)
+        # From here cargo fails, so a stamp that ran it would fail too.
+        cargo.write_text("#!/bin/sh\nexit 1\n")
+        self.release = self.files()
+
+    def set_version(self, *args):
+        return subprocess.run([sys.executable, self.root / "scripts/set-version.py", *args],
+                              env=self.env, capture_output=True, text=True)
+
+    def files(self):
+        return {path.relative_to(self.root).as_posix(): path.read_bytes()
+                for path in self.root.rglob("*") if path.is_file()}
+
+    def test_stamps_a_beta_in_every_version_field_without_running_cargo(self):
+        result = self.set_version("--stamp", "1.2.10-beta.1")
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (0, "Stamped the client and addon version 1.2.10-beta.1.\n", ""))
+        stamped = self.files()
+        self.assertEqual({path: stamped[path].count(b"1.2.10-beta.1") for path in VERSIONED}, {
+            "package.json": 1, "package-lock.json": 2, "desktop/src-tauri/tauri.conf.json": 1,
+            "addon/Goldbook/Goldbook.toc": 1, "web/index.html": 1, "Cargo.lock": 4,
+            "crates/goldbook-core/Cargo.toml": 1, "crates/goldbook-server/Cargo.toml": 1,
+            "crates/goldbook-sync/Cargo.toml": 1, "desktop/src-tauri/Cargo.toml": 1})
+        self.assertEqual({path: content.replace(b"1.2.10-beta.1", b"1.2.9") for path, content in stamped.items()},
+                         self.release)
+
+    def test_stamps_a_release(self):
+        self.assertEqual(self.set_version("--stamp", "1.2.10").returncode, 0)
+        result = self.set_version("--check")
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "1.2.10\n", ""))
+
+    def test_refuses_any_other_version_without_changing_a_file(self):
+        for version in ("1.2.10-beta", "1.2.10-beta.0", "1.2.10-beta.01", "1.2.10-rc.1", "1.2.10-beta.1.2", "1.2"):
+            with self.subTest(version=version):
+                result = self.set_version("--stamp", version)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", SET_VERSION_USAGE))
+                self.assertEqual(self.files(), self.release)
+
+    def test_the_committed_form_still_refuses_a_beta(self):
+        result = self.set_version("1.2.10-beta.1")
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", SET_VERSION_USAGE))
+        self.assertEqual(self.files(), self.release)
+
+    def test_check_refuses_a_stamped_tree(self):
+        self.assertEqual(self.set_version("--stamp", "1.2.10-beta.1").returncode, 0)
+        result = self.set_version("--check")
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (1, "", "package.json: expected 1 version field(s), found 0\n"))
 
 
 class SetVersionCheckTests(unittest.TestCase):

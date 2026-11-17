@@ -3,11 +3,16 @@
 
     python3 scripts/set-version.py 0.1.5
     python3 scripts/set-version.py --check   prints the version, or fails naming the files that differ
+    python3 scripts/set-version.py --stamp 0.2.0-beta.1   sets a release or beta version in a build checkout
 
 The desktop updater compares tauri.conf.json, the addon feed reads the TOC,
 the website's title bar shows it as the addon's does, and npm and Cargo
 refuse a lock file that disagrees with its manifest. Each
 file is edited in place, so its formatting stays as it is.
+
+--stamp skips the Cargo check, because a build runner may not have the crates
+downloaded and its `--locked` build refuses a disagreeing Cargo.lock anyway. A
+stamped version is never committed.
 """
 from collections import Counter
 from pathlib import Path
@@ -23,6 +28,7 @@ CRATES = {
     "goldbook-desktop": "desktop/src-tauri/Cargo.toml",
 }
 VERSION = r"\d+\.\d+\.\d+"
+STAMP = rf"{VERSION}(?:-beta\.[1-9][0-9]*)?"
 # Each version field: its file and a pattern whose two groups surround the version.
 FIELDS = [
     ("package.json", rf'(\A\{{\n  "name": "goldbook",\n  "version": "){VERSION}(")'),
@@ -67,8 +73,14 @@ def check():
 def main():
     if sys.argv[1:] == ["--check"]:
         return check()
+    if len(sys.argv) == 3 and sys.argv[1] == "--stamp" and re.fullmatch(STAMP, sys.argv[2]):
+        for path, pattern in FIELDS:
+            replace(path, pattern, sys.argv[2], 1)
+        print(f"Stamped the client and addon version {sys.argv[2]}.")
+        return
     if len(sys.argv) != 2 or not re.fullmatch(VERSION, sys.argv[1]):
-        sys.exit("usage: scripts/set-version.py <major.minor.patch>, such as 0.1.5, or --check")
+        sys.exit("usage: scripts/set-version.py <major.minor.patch>, such as 0.1.5, "
+                 "--stamp <major.minor.patch[-beta.N]>, such as 0.2.0-beta.1, or --check")
     version = sys.argv[1]
     for path, pattern in FIELDS:
         replace(path, pattern, version, 1)
