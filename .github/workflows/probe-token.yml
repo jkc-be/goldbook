@@ -1,0 +1,33 @@
+name: Probe token reads
+on:
+  push:
+    branches: [probe/release-state-token]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base=https://api.github.com/repos/jkc-be/goldbook-addon
+          for path in commits/main contents/upstream.json releases/tags/v0.5.5 releases/tags/v9.9.9 git/ref/tags/v0.5.5 \
+                      'actions/workflows/release.yml/runs?head_sha=98699e5004c1abba4d5894614f07e7d423b180c0' \
+                      actions/runs/43391472660/jobs?filter=all; do
+            anon=$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: application/vnd.github+json' "$base/$path")
+            token=$(curl -s -D headers -o /dev/null -w '%{http_code}' -H 'Accept: application/vnd.github+json' \
+                    -H "Authorization: Bearer $GH_TOKEN" "$base/$path")
+            echo "$path anonymous=$anon token=$token $(grep -i '^x-ratelimit-limit' headers | tr -d '\r')"
+          done
+          python3 scripts/release-state.py state --version 0.5.5 --revision 5edb50386a897b0a91f5d61531b65e8332999d61 --build > with-token.txt 2>&1 || true
+          GH_TOKEN= python3 scripts/release-state.py state --version 0.5.5 --revision 5edb50386a897b0a91f5d61531b65e8332999d61 --build > without-token.txt 2>&1 || true
+          cat with-token.txt
+          diff with-token.txt without-token.txt && echo "state output identical with and without the token"
+          python3 scripts/release-state.py wait-addon-release --commit 98699e5004c1abba4d5894614f07e7d423b180c0 --interval 1 --timeout 60
