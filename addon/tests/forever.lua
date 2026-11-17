@@ -38,8 +38,11 @@ end
 local served = time() - 600
 GoldbookServerData = {
   version = 1, server = "x",
-  items = { ["2589"] = "1|Linen Cloth" },
-  realms = { ["CAMWOWEU4Realm6PvP-Horde"] = { scannedAt = served, prices = { ["2589"] = "10000,50,3," .. served .. ",0,0" } } },
+  items = { ["2589"] = "1|Linen Cloth", ["3824"] = "1|Shadow Oil" },
+  realms = { ["CAMWOWEU4Realm6PvP-Horde"] = { scannedAt = served, prices = {
+    ["2589"] = "10000,50,3," .. served .. ",0,0",
+    ["3824"] = "2624,1099,52," .. served .. ",2628," .. served,
+  } } },
 }
 Stub.fire("ADDON_LOADED", "Goldbook")
 Stub.fire("PLAYER_LOGIN")
@@ -47,12 +50,21 @@ UIParent:SetSize(1920, 1080)
 
 eq(ns.RealmKey(), "CAMWOWEU4Realm6PvP-Horde", "prices stay filed under the shard")
 SlashCmdList.GOLDBOOK("show")
-eq(GoldbookWindow.head.sub.text, "1 item scanned on EU PvP-Horde", "the price list names the auction house")
+eq(GoldbookWindow.head.sub.text, "2 items scanned on EU PvP-Horde", "the price list names the auction house")
 SlashCmdList.GOLDBOOK("item nothing like it")
 eq(printed(), "Goldbook No item priced on EU PvP-Horde matches \"nothing like it\". Type /gb item <link or name>.",
   "/gb item names the auction house")
 SlashCmdList.GOLDBOOK("status")
-eq(printed(1):match("%d+ items priced on [^,]+"), "1 items priced on EU PvP-Horde", "/gb status names the auction house")
+eq(printed(1):match("%d+ items priced on [^,]+"), "2 items priced on EU PvP-Horde", "/gb status names the auction house")
+
+-- A recipe's tooltip data on WoW Forever has the recipe's id and the link of
+-- the item it teaches to make.
+Stub.items[6068] = { name = "Recipe: Shadow Oil", quality = 1, vendor = 375, cached = true }
+ItemRefTooltip.lines, ItemRefTooltip.itemID = {}, 6068
+ItemRefTooltip.itemLink = "|cffffffff|Hitem:3824::::::::24:::::::::|h[Shadow Oil]|h|r"
+Stub.tooltipCalls[1](ItemRefTooltip)
+eq((table.concat(ItemRefTooltip.lines, " / "):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")), "  / Goldbook =  /   Vendor = 3s 75c",
+  "a recipe's tooltip prices the recipe, not the item it makes")
 
 io.write(("%d checks, %d failures\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)

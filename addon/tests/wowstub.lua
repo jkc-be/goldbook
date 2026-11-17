@@ -684,7 +684,7 @@ function TooltipDataProcessor.AddTooltipPostCall(_, handler)
 end
 TooltipUtil = {}
 function TooltipUtil.GetDisplayedItem(tooltip)
-  return tooltip.itemName, tooltip.itemLink
+  return tooltip.itemName, tooltip.itemLink, tooltip.itemID
 end
 
 Enum = {
