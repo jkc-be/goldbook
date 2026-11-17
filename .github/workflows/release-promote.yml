@@ -60,15 +60,22 @@ jobs:
           persist-credentials: false
           ref: ${{ steps.run.outputs.revision }}
           path: source
-      - name: Read the built version
-        id: version
-        run: python3 scripts/release-state.py version --source source
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: Goldbook-update-feed
           path: build-feed
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
+      # A beta version is stamped at build time, not committed, so the feed names it.
+      - name: Read the built version
+        id: version
+        run: |
+          built=$(jq -r .version build-feed/latest.json)
+          if [[ "$built" == *-* ]]; then
+            python3 scripts/release-state.py version --source source --built "$built"
+          else
+            python3 scripts/release-state.py version --source source
+          fi
       - name: Compare every release output with the build run
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -172,6 +179,8 @@ jobs:
     with:
       revision: ${{ needs.guard.outputs.revision }}
       guard-attempt: ${{ needs.guard.outputs.attempt }}
+      # A release mirrors its committed version; only a beta is stamped.
+      version: ${{ contains(needs.guard.outputs.version, '-beta.') && needs.guard.outputs.version || '' }}
 
   addon-release:
     if: github.repository == 'jkc-be/goldbook' && github.ref == 'refs/heads/main' && github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be'
@@ -218,7 +227,7 @@ jobs:
           VERSION: ${{ needs.guard.outputs.version }}
           REVISION: ${{ needs.guard.outputs.revision }}
         run: |
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version: $VERSION" >&2; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[1-9][0-9]*)?$ ]] || { echo "Invalid version: $VERSION" >&2; exit 1; }
           [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid revision: $REVISION" >&2; exit 1; }
           tag="v$VERSION"
           # The commit the tag points at, following an annotated tag; empty when absent.

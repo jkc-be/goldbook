@@ -68,7 +68,7 @@ class MakeHelpTests(unittest.TestCase):
 
     def test_release_help_describes_revision_and_promotion(self):
         output = self.make("help", "release")
-        self.assertIn("Usage: make release [REVISION=<commit-sha>]", output)
+        self.assertIn("Usage: make release [REVISION=<commit-sha>] [BETA=<x.y.z-beta.n>]", output)
         self.assertIn("Without it, uses current main.", output)
         self.assertIn("asks whether to run Release promote", output)
         self.assertIn("docs/releasing.md", output)
@@ -97,7 +97,10 @@ class MakeHelpTests(unittest.TestCase):
     def test_normal_commands_keep_their_recipes(self):
         output = self.make("-n", "release", "REVISION=1a2b3c4", "HELP=0")
         self.assertIn('python3 scripts/release.py --revision "1a2b3c4"', output)
+        self.assertNotIn("--beta", output)
         self.assertNotIn("scripts/make-help.py", output)
+        output = self.make("-n", "release", "REVISION=1a2b3c4", "BETA=0.6.0-beta.1")
+        self.assertIn('python3 scripts/release.py --revision "1a2b3c4" --beta "0.6.0-beta.1"', output)
         output = self.make("-n", "build")
         self.assertIn("npm ci", output)
         self.assertIn("npm run desktop:pack", output)

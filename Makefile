@@ -189,19 +189,25 @@ prepare-release: ## Turn changes/ into a CHANGELOG.md section and set VERSION
 
 # Runs Release build on GitHub as you, through gh, for the current main or for
 # a commit of main, such as make release REVISION=1a2b3c4. Then asks whether to
-# run Release promote for that build. See docs/releasing.md.
-#| Usage: make release [REVISION=<commit-sha>]
+# run Release promote for that build. BETA builds a beta instead, such as
+# make release REVISION=1a2b3c4 BETA=0.6.0-beta.1. See docs/releasing.md.
+#| Usage: make release [REVISION=<commit-sha>] [BETA=<x.y.z-beta.n>]
 #| REVISION is a full or abbreviated commit SHA on main. Without it, uses current main.
 #| Use the merged release PR's commit so later change files do not block the build.
+#| BETA builds and promotes a beta, such as 0.6.0-beta.1, above the committed
+#| version. A beta needs no release PR. Its app and addon reach only players
+#| who turned on betas; its server and website reach everyone. The script
+#| checks that the build built that beta before it offers promotion.
 #| Needs Python 3 and gh signed in as jkc-be, with network access.
 #| Starts and follows Release build on GitHub. Environment approvals are required.
 #| After a successful build, asks whether to run Release promote. Answering y
 #| ships that build's server, update feed and addon, then tags its commit.
 #| Example: make release REVISION=1a2b3c4
+#| Beta example: make release REVISION=1a2b3c4 BETA=0.6.0-beta.1
 #| Prepare first: make help prepare-release
 #| Details: docs/releasing.md
 release: ## Run Release build on GitHub, then offer Release promote
-	python3 scripts/release.py $(if $(REVISION),--revision "$(REVISION)")
+	python3 scripts/release.py $(if $(REVISION),--revision "$(REVISION)") $(if $(BETA),--beta "$(BETA)")
 
 # Run once per clone: makes git use .githooks, so every push runs make check.
 #| Usage: make hooks
