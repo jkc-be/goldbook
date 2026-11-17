@@ -259,6 +259,8 @@ local origin
 local sorting = {}
 -- chosen[view] = the key of the segment picked in a view with segments.
 local chosen = {}
+-- picks[view] = the row picked in a view whose rows are picked by a click.
+local picks = {}
 local refreshPending = false
 local refresh
 local noFilters = ns.ItemFilters.New
@@ -583,11 +585,13 @@ end
 --   blocks    what stacks under the title, top to bottom; the table takes the height left over
 --   columns   { label, field, width }; a header click sorts by the field; `words` sets a
 --             column after the first in words, to the left; `tag` draws (row) -> text,
---             colour from the view's `tag` as a framed tag
+--             colour from the view's `tag` as a framed tag; `blankLast` sorts the rows
+--             without the field last either way
 --   cells     the text of a row's columns, the sparkline and tag columns left out
 --   rows      (search text, segment) -> the rows; `keep` then filters them by the toolbar's chips
 --   items     rows are items to hover and click; `icons` puts the item's icon, or the row's
---             own `icon`, before its name
+--             own `icon`, before its name; `pick` makes a click pick the row instead of
+--             searching for it, and `opens` names the item page Alt+click opens
 --   sort      { column, descending }, the order rows come in; a segment may set its own
 --   modes     { view, label } choices at the right of the toolbar between views of the shown item,
 --             when something crafts it
@@ -603,7 +607,8 @@ end
 --             `back` puts a button before it that returns to the view the item came from
 --   cards     (rows) -> up to four { key, value, detail }
 --   chart     { height, spec(segment) }, see drawChart
---   heading   a heading over the table; `side` a panel of { label, value } lines beside it
+--   heading   a heading over the table; `side` a panel of { label, value } lines beside it,
+--             under a title; with `pick`, its title and lines are (picked row) -> title, aside
 --   status    (rows, visible rows) -> the line under the page
 local VIEWS = {
   prices = {
@@ -918,6 +923,88 @@ local VIEWS = {
         cod and "COD mails are skipped" or nil)
     end,
   },
+  crafting = {
+    tab = "Crafting",
+    items = true,
+    icons = true,
+    pick = true,
+    opens = "craft",
+    blocks = { "toolbar", "table" },
+    search = "Search recipes",
+    chips = { "craft", "known" },
+    columns = { { "Crafted item", "name", 200 }, { "Profit", "profit", 108, blankLast = true },
+      { "Margin", "margin", 60, blankLast = true } },
+    sort = { 2, true },
+    -- An item's better recipe among those the chips let through.
+    rows = function(text)
+      local who = filters.known == "self" and ns.CharacterKey() or filters.known
+      local spells = {}
+      for _, spell in ipairs(ns.Crafting.Spells(filters.craft)) do
+        if ns.KnownRecipes.Knows(ns.db, who, spell) then
+          spells[#spells + 1] = spell
+        end
+      end
+      local estimates, reagents = ns.NameItems(ns.Crafting.Estimates(ns.db, ns.RealmKey(), spells)), {}
+      -- Named with the list, so that picking a recipe asks for nothing and
+      -- no redraw moves the list.
+      for _, estimate in ipairs(estimates) do
+        for _, reagent in ipairs(estimate.reagents) do
+          reagents[#reagents + 1] = reagent
+        end
+      end
+      ns.NameItems(reagents)
+      return matching(estimates, text)
+    end,
+    cells = function(row)
+      local none = tint("muted", "–")
+      return itemText(row), row.profit and change(row.profit) or none, row.margin and marginText(row.margin) or none
+    end,
+    head = function(rows)
+      local profitable = 0
+      for _, row in ipairs(rows) do
+        profitable = profitable + ((row.profit or 0) > 0 and 1 or 0)
+      end
+      local profession = ns.Crafting.ProfessionName(filters.craft)
+      return { sub = plural(#rows, (profession and (profession .. " ") or "") .. "recipe") .. " · " .. profitable .. " in profit" }
+    end,
+    side = {
+      title = function(row)
+        if row then
+          return row.name, ns.Crafting.ProfessionName(row.profession) .. " " .. row.skill
+        end
+      end,
+      -- Each reagent's cost, then what the craft adds up to.
+      lines = function(row)
+        if not row then
+          return {}
+        end
+        local lines, none = {}, tint("muted", "–")
+        for _, reagent in ipairs(row.reagents) do
+          local note = reagent.source == "merchant" and " · merchant" or reagent.stale and (" · " .. Codec.Age(time() - reagent.seen)) or ""
+          lines[#lines + 1] = { itemText(reagent) .. tint("muted", " x" .. reagent.count .. note),
+            reagent.cost and money(reagent.cost) or tint("warn", "no price") }
+        end
+        lines[#lines + 1] = { "Input cost", (row.unpriced > 0 and tint("muted", "at least ") or "") .. money(row.cost) }
+        lines[#lines + 1] = { "Sells for" .. (row.makes > 1 and tint("muted", " x" .. row.makes) or ""), row.sale and money(row.sale) or none }
+        lines[#lines + 1] = { "Profit", row.profit and change(row.profit) or none }
+        lines[#lines + 1] = { "Margin", row.margin and marginText(row.margin) or none }
+        return lines
+      end,
+    },
+    status = function(rows, visible)
+      local character = ns.CharacterKey()
+      if filters.known == "self" and not ns.db.recipes[character] then
+        return "No recipes recorded for " .. character:match("^[^-]+") .. " yet. Open a profession window, or pick All recipes."
+      elseif filters.known == "any" and next(ns.db.recipes) == nil then
+        return "No recipes recorded yet. Open a profession window on each character, or pick All recipes."
+      end
+      local picked = picks.crafting
+      return joinedStatus(scrollRange(rows, visible),
+        picked and picked.stale and "Some reagent prices are older than the newest scan"
+          or "Reagents cost the cheaper of the auction house and a merchant",
+        ns.db.settings.altClick ~= false and "Alt+click for the recipe" or nil)
+    end,
+  },
   item = {
     back = true,
     blocks = { "toolbar", "chart", "cards", "table" },
@@ -1011,7 +1098,7 @@ local VIEWS = {
 -- The rail's hubs, top to bottom, each with the views its tabs open, in
 -- order. Each view listed gets its `hub`; the item view has none.
 local HUBS = {
-  { key = "market", label = "Market", icon = "chart", views = { "prices", "deals", "movers" } },
+  { key = "market", label = "Market", icon = "chart", views = { "prices", "deals", "movers", "crafting" } },
   { key = "inventory", label = "Inventory", icon = "chest", views = { "bags", "mail" } },
   { key = "ledger", label = "Ledger", icon = "scales", views = { "gold", "accounting", "items" } },
 }
@@ -1045,6 +1132,24 @@ local FILTERS = {
     for _, side in ipairs(Trades.SIDES) do
       if present[side[1]] then
         options[#options + 1] = { side[1], side[2] }
+      end
+    end
+    return options
+  end,
+  craft = function()
+    local options = { { "", "All professions" } }
+    for _, profession in ipairs(ns.Crafting.Professions()) do
+      options[#options + 1] = { profession.id, profession.name }
+    end
+    return options
+  end,
+  -- "self" is the character playing, whichever that is.
+  known = function()
+    local playing = ns.CharacterKey()
+    local options = { { "all", "All recipes" }, { "any", "Known by my characters" }, { "self", "Known by " .. playing:match("^[^-]+") } }
+    for _, character in ipairs(ns.KnownRecipes.Characters(ns.db)) do
+      if character ~= playing then
+        options[#options + 1] = { character, "Known by " .. character:match("^[^-]+") }
       end
     end
     return options
@@ -1155,6 +1260,8 @@ local function render()
     end
     row.hit.item = item
     row.hit:SetShown(item ~= nil and definition.items == true)
+    row.pick:SetShown(item ~= nil and item == picks[view])
+    row.pickBar:SetShown(item ~= nil and item == picks[view])
   end
   placeScrollMarker(visible)
   local action = definition.action and definition.action(results)
@@ -1169,10 +1276,13 @@ local function render()
   window.status:SetText(definition.status and definition.status(results, visible) or "")
 end
 
--- Rows missing the field sort as the lowest value.
-local function sortBy(rows, field, descending)
+-- Rows missing the field sort as the lowest value, or last with `blankLast`.
+local function sortBy(rows, field, descending, blankLast)
   table.sort(rows, function(a, b)
     local left, right = a[field], b[field]
+    if blankLast and (left == nil) ~= (right == nil) then
+      return right == nil
+    end
     if left == nil then
       left = type(right) == "string" and "" or 0
     end
@@ -1467,9 +1577,14 @@ local function drawCards(definition)
 end
 
 local function drawSide(definition)
-  local side = window.side
-  side.heading.label:SetText(definition.side and definition.side.title or "")
-  local lines = definition.side and definition.side.lines() or {}
+  local side, spec = window.side, definition.side or {}
+  local title, aside = spec.title, nil
+  if definition.pick then
+    title, aside = title(picks[view])
+  end
+  side.heading.label:SetText(title or "")
+  side.heading.aside:SetText(aside or "")
+  local lines = spec.lines and spec.lines(picks[view]) or {}
   for index, line in ipairs(side.lines) do
     local spec = lines[index]
     line.key:SetText(spec and spec[1] or "")
@@ -1782,7 +1897,18 @@ function refresh()
   end
   local sort = sorting[view]
   if sort then
-    sortBy(results, definition.columns[sort[1]][2], sort[2])
+    local column = definition.columns[sort[1]]
+    sortBy(results, column[2], sort[2], column.blankLast)
+  end
+  -- The row picked before, or else the first.
+  if definition.pick then
+    local key = picks[view] and picks[view].key
+    picks[view] = results[1]
+    for _, row in ipairs(results) do
+      if row.key == key then
+        picks[view] = row
+      end
+    end
   end
   offset = 0
   if not definition.chips and window.menu then
@@ -1911,8 +2037,12 @@ local function addHeading(parent)
   heading:SetPoint("TOPLEFT", 1, -1)
   heading:SetPoint("TOPRIGHT", -1, -1)
   heading:SetHeight(HEADING_HEIGHT - 1)
+  heading.aside = label(heading, "small", "muted")
+  heading.aside:SetPoint("RIGHT", -9, 0)
   heading.label = label(heading, "heading", "goldhi")
   heading.label:SetPoint("LEFT", 9, 0)
+  heading.label:SetPoint("RIGHT", heading.aside, "LEFT", -8, 0)
+  heading.label:SetJustifyH("LEFT")
   local rule = heading:CreateTexture(nil, "ARTWORK")
   rule:SetPoint("BOTTOMLEFT")
   rule:SetPoint("BOTTOMRIGHT")
@@ -2211,12 +2341,26 @@ local function addRow(columns, index)
   end)
   hit:SetScript("OnLeave", GameTooltip_Hide)
   hit:SetScript("OnClick", function(self)
+    local definition = VIEWS[view]
     if IsAltKeyDown() then
-      UI.ShowItem(self.item.key)
+      UI.ShowItem(self.item.key, definition.opens)
+    elseif definition.pick then
+      picks[view] = self.item
+      render()
+      drawSide(definition)
     else
       searchAuctionHouse(self.item.name)
     end
   end)
+  -- A picked row stays lit, as the website marks a selected row.
+  local pick = hit:CreateTexture(nil, "BACKGROUND")
+  pick:SetAllPoints()
+  UI.Fill(pick, "gold", 0.16)
+  local pickBar = hit:CreateTexture(nil, "ARTWORK")
+  pickBar:SetPoint("TOPLEFT")
+  pickBar:SetPoint("BOTTOMLEFT")
+  pickBar:SetWidth(3)
+  UI.Fill(pickBar, "gold")
   -- Its text sizes the frame around it; the table places the text.
   local tag = addChip(columns, "")
   tag.label:SetFontObject(FONT.status)
@@ -2247,11 +2391,12 @@ local function addRow(columns, index)
       spark.lines[segment] = line
     end
   end
-  return { cells = cells, rule = rule, icon = icon, frame = frame, spark = spark, tag = tag, hit = hit }
+  return { cells = cells, rule = rule, icon = icon, frame = frame, spark = spark, tag = tag, hit = hit, pick = pick, pickBar = pickBar }
 end
 
 local function addTable()
-  local SIDE_ROW = 26
+  -- A recipe's seven reagents at most, and its four sums.
+  local SIDE_ROW, SIDE_LINES = 26, 11
   local frame = panel(window)
   window.table = frame
   frame.heading = addHeading(frame)
@@ -2288,15 +2433,17 @@ local function addTable()
   local side = panel(window)
   side.heading = addHeading(side)
   side.lines = {}
-  for index = 1, 5 do
+  for index = 1, SIDE_LINES do
     local line = CreateFrame("Frame", nil, side)
     line:SetPoint("TOPLEFT", 1, -HEADING_HEIGHT - (index - 1) * SIDE_ROW)
     line:SetPoint("TOPRIGHT", -1, -HEADING_HEIGHT - (index - 1) * SIDE_ROW)
     line:SetHeight(SIDE_ROW - 1)
-    line.key = label(line, "body", "text")
-    line.key:SetPoint("LEFT", 10, 0)
     line.value = label(line, "number", "text")
     line.value:SetPoint("RIGHT", -10, 0)
+    line.key = label(line, "body", "text")
+    line.key:SetPoint("LEFT", 10, 0)
+    line.key:SetPoint("RIGHT", line.value, "LEFT", -8, 0)
+    line.key:SetJustifyH("LEFT")
     line.rule = line:CreateTexture(nil, "BORDER")
     line.rule:SetPoint("TOPLEFT", line, "BOTTOMLEFT")
     line.rule:SetPoint("TOPRIGHT", line, "BOTTOMRIGHT")
@@ -2698,8 +2845,9 @@ function UI.Show(name, text)
   end
 end
 
--- Opens the price history of an item, given its link or its key.
-function UI.ShowItem(linkOrKey)
+-- Opens the page of an item, given its link or its key: its price history,
+-- or with `page` "craft" what crafting it costs when a recipe makes it.
+function UI.ShowItem(linkOrKey, page)
   local key = Database.KeyFromLink(ns.db, ns.RealmKey(), linkOrKey) or linkOrKey
   local name, quality = Database.Item(ns.db, key)
   if not name then
@@ -2715,7 +2863,7 @@ function UI.ShowItem(linkOrKey)
     origin = { view = view, search = window.search:GetText(), filters = copy(filters), sort = sort and { unpack(sort) },
       segment = chosen[view], offset = offset }
   end
-  UI.Show("item")
+  UI.Show(page == "craft" and #ns.Crafting.SpellsFor(key) > 0 and "craft" or "item")
 end
 
 -- From the item view to where it was opened from, as it was left; to the
