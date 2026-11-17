@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts/migration-baseline.json"
 KEY = "7KQ2M9PXABCDEFGHJKMN"
 NEW_KEY = "ABCDEFGHJKMNPQRSTVWX"
+# Migrations that crates/goldbook-server/src/db.rs runs as code, without a file in server/migrations.
+CODE_MIGRATIONS = ("0019_balance_correction",)
 # The original server's shared upload tokens; the current one takes only tokens registered with Battle.net.
 TOKEN = "dev-token"
 FRIEND_TOKEN = "friend-token"
@@ -338,8 +340,12 @@ def exercise_upgrade(directory, old_repo, server_binary):
     with sqlite3.connect(database) as db:
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("SELECT id, uploaded_at FROM scans").fetchall() == [(7, 1760000010)], "upgrade lost or duplicated a historical scan"
-        migrations = 5 if old_repo else len(list((ROOT / "server/migrations").glob("*.sql")))
-        assert db.execute("SELECT COUNT(*) FROM migrations").fetchone()[0] == migrations
+        recorded = {name for (name,) in db.execute("SELECT name FROM migrations")}
+        if old_repo:
+            assert len(recorded) == 5
+        else:
+            files = {path.name for path in (ROOT / "server/migrations").glob("*.sql")}
+            assert recorded == files | set(CODE_MIGRATIONS), recorded ^ (files | set(CODE_MIGRATIONS))
     with server(directory, old_repo, server_binary) as restarted:
         restarted.check("upgrade-restart", "GET", "/api/character?name=Legacy&realm=Legacy", cookie="goldbook_session=legacy-session")
         api.transcript.update(restarted.transcript)

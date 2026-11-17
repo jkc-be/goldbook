@@ -1495,14 +1495,17 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
         0
     )]);
     call(&f.app, "POST", "/api/account", upload.clone(), &f.auth()).await;
-    // Rebuilding with the vendor migration again leaves the table as it was before accounting.
+    // Rebuilding with the vendor migration again leaves the table as it was
+    // before accounting, without the hidden column either.
     let mut db = db::connect(&f.database()).unwrap();
     db.execute_batch(include_str!(
         "../../../server/migrations/0008_vendor_trades.sql"
     ))
     .unwrap();
-    db.execute_batch("DELETE FROM migrations WHERE name='0012_accounting.sql'")
-        .unwrap();
+    db.execute_batch(
+        "DELETE FROM migrations WHERE name IN ('0012_accounting.sql','0018_hidden_trades.sql')",
+    )
+    .unwrap();
     assert!(
         db.execute("INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy) VALUES ('K7Q2M9PX','Sultan','Faramon',1760000700,'quest','Q',1,1,0,0)", [])
             .is_err()
@@ -1538,6 +1541,211 @@ async fn upgrading_to_accounting_keeps_the_trades_booked_before() {
         [
             ("quest", "The Defias Brotherhood", Value::Null),
             ("vendor", "Broken Fang", Value::Null)
+        ]
+    );
+}
+// What the website shows of each trade: when, whose, what kind, what, and the price.
+fn ledger(body: &Value) -> Vec<(u64, &str, &str, &str, u64)> {
+    body["trades"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| {
+            (
+                t["at"].as_u64().unwrap(),
+                t["name"].as_str().unwrap(),
+                t["side"].as_str().unwrap(),
+                t["item"].as_str().unwrap(),
+                t["price"].as_u64().unwrap(),
+            )
+        })
+        .collect()
+}
+// A deployment's database with the vendor sales that addons before 0.5.4
+// booked again each time a merchant opened. The first start hides them and
+// books the gold the ledger is then off by; uploading the hidden sales again
+// or restarting changes neither.
+#[tokio::test]
+async fn the_first_start_hides_the_vendor_sales_booked_again_at_a_merchant() {
+    let f = Fixture::build(|database| {
+        let db = migrated_until(database, "0018");
+        db.execute(
+            "INSERT INTO accounts (id,key_hash,updated_at) VALUES ('K7Q2M9PX',?1,0)",
+            [goldbook_core::key_hash("7KQ2M9PXABCDEFGHJKMN")],
+        )
+        .unwrap();
+        db.execute_batch(r#"
+            INSERT INTO characters (account_id,name,realm,updated_at,gold) VALUES ('K7Q2M9PX','Sultan','Faramon',1760005000,'[[1760000400,900],[1760004000,2500]]');
+            INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy,item_key) VALUES
+              ('K7Q2M9PX','Sultan','Faramon',1760000000,'vendor','Broken Fang',1,85,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760000000,'vendor','Jagged Star of the Eagle',1,3100,0,0,'15301:1019'),
+              ('K7Q2M9PX','Sultan','Faramon',1760000000,'vendor','Ruined Pelt',1,55,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760000600,'vendor','Broken Fang',1,85,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760000600,'vendor','Broken Fang',1,85,0,1,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760000600,'vendor','Jagged Star of the Eagle',1,3100,0,0,'15301:1019'),
+              ('K7Q2M9PX','Sultan','Faramon',1760000600,'vendor','Light Leather',1,40,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760000600,'vendor','Ruined Pelt',1,55,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760000610,'vendor','Ruined Pelt',1,55,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001200,'vendor','Broken Fang',1,85,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001200,'vendor','Ruined Pelt',1,55,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001200,'vendor','Wool Cloth',1,20,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001800,'vendor','Mageweave Cloth',1,40,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001800,'vendor','Runecloth',1,50,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001800,'vendor','Silk Cloth',1,30,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001829,'vendor','Mageweave Cloth',1,40,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001829,'vendor','Runecloth',1,50,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001829,'vendor','Silk Cloth',1,30,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001859,'vendor','Mageweave Cloth',1,40,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001859,'vendor','Runecloth',1,50,0,0,NULL),
+              ('K7Q2M9PX','Sultan','Faramon',1760001859,'vendor','Silk Cloth',1,30,0,0,NULL);
+        "#).unwrap();
+    })
+    .await;
+    let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    let expected = [
+        (1760007599, "Sultan", "otherOut", "Balance correction", 1235),
+        (1760001829, "Sultan", "vendor", "Mageweave Cloth", 40),
+        (1760001829, "Sultan", "vendor", "Runecloth", 50),
+        (1760001829, "Sultan", "vendor", "Silk Cloth", 30),
+        (1760001800, "Sultan", "vendor", "Mageweave Cloth", 40),
+        (1760001800, "Sultan", "vendor", "Runecloth", 50),
+        (1760001800, "Sultan", "vendor", "Silk Cloth", 30),
+        (1760001200, "Sultan", "vendor", "Broken Fang", 85),
+        (1760001200, "Sultan", "vendor", "Ruined Pelt", 55),
+        (1760001200, "Sultan", "vendor", "Wool Cloth", 20),
+        (1760000610, "Sultan", "vendor", "Ruined Pelt", 55),
+        (1760000600, "Sultan", "vendor", "Light Leather", 40),
+        (1760000000, "Sultan", "vendor", "Broken Fang", 85),
+        (
+            1760000000,
+            "Sultan",
+            "vendor",
+            "Jagged Star of the Eagle",
+            3100,
+        ),
+        (1760000000, "Sultan", "vendor", "Ruined Pelt", 55),
+    ];
+    assert_eq!(
+        ledger(&get(&f.app, "/api/trades?name=Sultan&realm=Faramon", &cookie).await),
+        expected,
+        "the re-bookings at 1760000600 and 1760001859 are hidden, and the correction brings the rest to the 2500 copper held"
+    );
+
+    let mut upload = account();
+    let mut star = entry(
+        1760000600,
+        "vendor",
+        "Jagged Star of the Eagle",
+        1,
+        3100,
+        None,
+    );
+    star["itemKey"] = json!("15301:1019");
+    upload["trades"] = json!([
+        entry(1760000600, "vendor", "Broken Fang", 1, 85, None),
+        entry(1760000600, "vendor", "Broken Fang", 1, 85, None),
+        star,
+        entry(1760000600, "vendor", "Ruined Pelt", 1, 55, None),
+        entry(1760001859, "vendor", "Mageweave Cloth", 1, 40, None),
+        entry(1760001859, "vendor", "Runecloth", 1, 50, None),
+        entry(1760001859, "vendor", "Silk Cloth", 1, 30, None),
+    ]);
+    assert_eq!(
+        call(&f.app, "POST", "/api/account", upload, &f.auth())
+            .await
+            .2,
+        json!({"stored":true,"characters":1})
+    );
+    assert_eq!(
+        ledger(&get(&f.app, "/api/trades?name=Sultan&realm=Faramon", &cookie).await),
+        expected,
+        "an upload of the hidden sales leaves them hidden"
+    );
+    let restarted = router(battlenet(f.database())).unwrap();
+    assert_eq!(
+        ledger(&get(&restarted, "/api/trades?name=Sultan&realm=Faramon", &cookie).await),
+        expected,
+        "a restart books no second correction"
+    );
+}
+// Each character's correction is the gold the ledger misses or overstates,
+// merged over every ID that uploaded it as the website shows it, and is
+// booked under the ID that uploaded the character last.
+#[tokio::test]
+async fn the_first_start_books_one_balance_correction_per_character() {
+    let f = Fixture::build(|database| {
+        let db = migrated_until(database, "0018");
+        db.execute(
+            "INSERT INTO accounts (id,key_hash,updated_at) VALUES ('K7Q2M9PX',?1,0)",
+            [goldbook_core::key_hash("7KQ2M9PXABCDEFGHJKMN")],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO accounts (id,key_hash,updated_at,owner_id) VALUES ('ABCDEFGH',?1,0,'K7Q2M9PX')",
+            [goldbook_core::key_hash("ABCDEFGHJKMNPQRSTVWX")],
+        )
+        .unwrap();
+        db.execute_batch(r#"
+            INSERT INTO characters (account_id,name,realm,updated_at,gold) VALUES
+              ('K7Q2M9PX','Mirelle','Faramon',1760005000,'[[1760004000,5000]]'),
+              ('K7Q2M9PX','Thorn','Faramon',1760005000,'[[1760004000,1000]]'),
+              ('K7Q2M9PX','Ruk','Faramon',1760005000,'[[1760004000,2000]]'),
+              ('K7Q2M9PX','Sultan','Faramon',1760005000,'[[1760000400,500],[1760004000,700]]'),
+              ('ABCDEFGH','Sultan','Faramon',1760009000,'[[1760004000,1200]]');
+            INSERT INTO trades (account_id,name,realm,at,side,item,count,price,fee,copy) VALUES
+              ('K7Q2M9PX','Mirelle','Faramon',1760000000,'quest','The Defias Brotherhood',1,3500,0,0),
+              ('K7Q2M9PX','Thorn','Faramon',1760000100,'vendor','Broken Fang',1,85,0,0),
+              ('K7Q2M9PX','Thorn','Faramon',1760000200,'sell','Linen Cloth',20,3000,150,0),
+              ('K7Q2M9PX','Thorn','Faramon',1760000300,'buy','Elemental Water',5,500,0,0),
+              ('K7Q2M9PX','Sultan','Faramon',1760000400,'sell','Linen Cloth',20,2000,100,0),
+              ('ABCDEFGH','Sultan','Faramon',1760000400,'sell','Linen Cloth',20,2000,100,0),
+              ('ABCDEFGH','Sultan','Faramon',1760000500,'repair','Repairs',1,300,0,0),
+              ('K7Q2M9PX','Sultan','Faramon',1760000600,'vendor','Ruined Pelt',1,85,0,0),
+              ('K7Q2M9PX','Ruk','Faramon',1760000700,'quest','Report to Goldshire',1,2000,0,0);
+        "#).unwrap();
+    })
+    .await;
+    let cookie = log_in(&f.app, "K7Q2M9PX", "7KQ2M9PXABCDEFGHJKMN").await;
+    let trades = get(&f.app, "/api/trades", &cookie).await;
+    assert_eq!(
+        ledger(&trades),
+        [
+            (1760007599, "Mirelle", "otherIn", "Balance correction", 1500),
+            (1760007599, "Sultan", "otherOut", "Balance correction", 485),
+            (1760007599, "Thorn", "otherOut", "Balance correction", 1435),
+            (1760000700, "Ruk", "quest", "Report to Goldshire", 2000),
+            (1760000600, "Sultan", "vendor", "Ruined Pelt", 85),
+            (1760000500, "Sultan", "repair", "Repairs", 300),
+            (1760000400, "Sultan", "sell", "Linen Cloth", 2000),
+            (1760000300, "Thorn", "buy", "Elemental Water", 500),
+            (1760000200, "Thorn", "sell", "Linen Cloth", 3000),
+            (1760000100, "Thorn", "vendor", "Broken Fang", 85),
+            (
+                1760000000,
+                "Mirelle",
+                "quest",
+                "The Defias Brotherhood",
+                3500
+            ),
+        ],
+        "Ruk's ledger already matches its gold; Sultan's 1200 copper is the newer upload's"
+    );
+    assert_eq!(
+        trades["trades"][0],
+        json!({"name":"Mirelle","realm":"Faramon","at":1760007599,"side":"otherIn","item":"Balance correction","itemKey":null,"quality":null,"count":1,"price":1500,"fee":0,"party":null})
+    );
+    let db = db::connect(&f.database()).unwrap();
+    assert_eq!(
+        db::query(
+            &db,
+            "SELECT name,account_id FROM trades WHERE item='Balance correction' ORDER BY name",
+            &[]
+        )
+        .unwrap(),
+        [
+            json!({"name":"Mirelle","account_id":"K7Q2M9PX"}),
+            json!({"name":"Sultan","account_id":"ABCDEFGH"}),
+            json!({"name":"Thorn","account_id":"K7Q2M9PX"})
         ]
     );
 }
