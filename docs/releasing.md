@@ -76,7 +76,8 @@ workflow, or `make help prepare-release` for the preparation step.
    [Promote](#promote).
 
 `make release` stops at the first failure and says what to do next. It needs
-`gh` signed in as `jkc-be`, and refuses any other account.
+`gh` signed in as `jkc-be`, and refuses any other account. To ship a beta
+instead of a release, see [Beta releases](#beta-releases).
 
 The script only starts and watches the two runs. They stay separate on
 GitHub: the build never ships anything, and a promotion takes a build run ID.
@@ -143,8 +144,10 @@ The `guard` job refuses to build when:
 - the revision is not a SHA, does not name exactly one commit, or is not in
   the history of `main`.
 - `scripts/set-version.py --check` finds version fields that disagree.
+- the `beta` input is set but is not a beta version above the revision's
+  version, or the revision's `scripts/set-version.py` cannot stamp it.
 - `CHANGELOG.md` has no `## <version> - ` section, or `changes/` still holds
-  change files.
+  change files. A beta skips this check.
 - any output of this version is not `absent`. When the version is partly
   released, the message names the build run to promote. When it is fully
   released or no build run can finish it, the message asks for a new version.
@@ -203,10 +206,10 @@ The jobs, in order:
 
 | Job | Does |
 | --- | --- |
-| `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed, three updater artifacts and server image artifact unexpired. Takes the revision from `image.json` and requires the build's `addon.json` to name it and the commit the build run started on to contain it. Checks out the revision, reads its version, downloads its `Goldbook-update-feed` and requires every output to be `absent` or `matches`. |
+| `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed, three updater artifacts and server image artifact unexpired. Takes the revision from `image.json` and requires the build's `addon.json` to name it and the commit the build run started on to contain it. Checks out the revision and downloads its `Goldbook-update-feed`. Takes the version from the feed's `latest.json` and requires it to be the revision's version or a beta above it. Requires every output to be `absent` or `matches`. |
 | `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The helper compares the revision with the one the server runs. It skips the deploy when the server already runs that commit or a later one, and refuses one whose history diverged. |
 | `publish` | Runs the helper's `publish` for the build run. |
-| `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. |
+| `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. For a beta, it first stamps the beta version into `Goldbook.toc`. |
 | `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge and Wago jobs. It polls every 3 minutes for at most 120 minutes. |
 | `tag` | Creates `v<version>` at the revision. A tag already on that commit passes. |
 
@@ -407,3 +410,99 @@ built and promoted from that branch. Release branches require changes to:
 
 Add them the first time you need one. After a branch release, the next release
 from `main` bumps at least the minor number.
+
+## Beta releases
+
+A beta is a build of a commit of `main` under a prerelease version, such as
+`0.6.0-beta.1`. Only players who opt in receive its app and addon, so they
+can test a whole build before the release. It goes through the same
+**Release build** and **Release promote** as a release, with the same
+approvals.
+
+### Start a beta
+
+Run `make release` with the beta version:
+
+```sh
+make release REVISION=<commit of main> BETA=0.6.0-beta.1
+```
+
+Without `make release`, open **Actions > Release build > Run workflow** and
+enter the beta version as `beta`. The run is named like
+`Release build of <revision> as 0.6.0-beta.1`, and the `verify` summary says
+that the build is a beta. Before it offers promotion, `make release` checks
+that the build built the beta you asked for.
+
+A beta needs no release PR. The repository keeps its release version. The
+installer, addon and feed jobs stamp the beta version into their own checkout
+with `scripts/set-version.py --stamp`, and the promotion's mirror job stamps
+it into the `Goldbook.toc` it pushes to goldbook-addon. The server image is not
+stamped, because the server and website have no channels.
+
+The `guard` job skips the release PR check for a beta. A beta has no
+`CHANGELOG.md` section, and it leaves the files in `changes/` for the next
+release PR. So a beta can build any commit of `main`, even with change files
+pending.
+
+### Beta version rules
+
+- A beta version is `X.Y.Z-beta.N`, where `N` is a positive integer without
+  leading zeros. Versions sort as semantic versions, so `0.6.0-beta.1` is
+  below `0.6.0-beta.2`, which is below `0.6.0`.
+- A beta must be above the version committed at the revision. With `0.5.5`
+  committed, `0.5.6-beta.1` and `0.6.0-beta.1` are valid, and `0.5.5-beta.1`
+  is not. The `guard` job refuses a lower version.
+- Every beta needs a new version, like a release. The `guard` job refuses a
+  version that is already partly released.
+- Every beta also needs a new revision. The helper keeps a revision's packages
+  under `updates/beta/<revision>/` and refuses different packages for it, so
+  the `guard` job refuses a beta of a revision that the beta feed already
+  publishes under another version.
+- The next release after any `X.Y.Z-beta.N` is at least `X.Y.Z`. After a
+  promotion, goldbook-addon's HEAD holds the beta version in its
+  `Goldbook.toc`. The release-state checks read it and refuse to build a lower
+  version, so after `0.6.0-beta.2` the next release is `0.6.0` or higher.
+
+### Where a beta goes
+
+| Output | A release | A beta |
+| --- | --- | --- |
+| Update feed | `https://app.jkc-be.com/goldbook/updates/` | `https://app.jkc-be.com/goldbook/updates/beta/`, with the same files |
+| goldbook-addon release | `v<version>` | `v<version>`, marked as a prerelease |
+| CurseForge | A release file | A beta file |
+| Wago | A stable version | A beta version, when the workflow's own Wago uploads are on |
+| WoWInterface | Uploaded | Skipped |
+| Server and website | Deployed | Deployed, for every player |
+| Source tag | `v<version>` | `v<version>` |
+
+Players receive betas in the desktop app after they turn on beta updates in
+its settings. The app then reads the beta feed as well as the release feed
+and installs the higher version, so it moves on to the release that follows a
+beta.
+
+`addon/upload-curseforge.py` and `addon/upload-wago.py` mark a version that
+contains `beta` as a beta. While Wago still takes releases through its webhook,
+check on Wago that the first beta arrived as a beta. **Publish to
+WoWInterface** skips a beta with a notice in its run, because WoWInterface has
+no beta stream, and it asks for no `wowinterface` approval.
+
+A beta promotion deploys the revision's server like a release does.
+`AGENTS.md` requires every commit of `main` to be safe to release, which
+covers this deploy.
+
+### Before the first beta
+
+- Rerun `bash scripts/setup-deploy.sh <your-OVH-SSH-alias>` after the beta
+  scripts are merged. The server keeps running the helper it last installed,
+  and an older helper does not know the beta feed.
+- Build a revision with `@tauri-apps/cli` 2.12.5 or later. Older versions
+  write `0.6.0-beta.1` unchanged into the RPM version, which RPM refuses, so
+  the Linux installer job fails. 2.12.5 writes `0.6.0~beta.1`, which RPM
+  sorts below `0.6.0`.
+- Build a revision that contains the beta scripts. The build and mirror jobs
+  run the scripts of the revision they build. A beta of an older revision
+  fails in the `guard` job, before any approval, and ships nothing. A release
+  of any revision is not affected.
+
+Betas are outside the support floor in `fixtures/clients/`. See
+[Client fixtures](../fixtures/clients/README.md).

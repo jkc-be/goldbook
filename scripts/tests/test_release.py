@@ -24,8 +24,9 @@ class GitHub:
     """Answers the gh commands release.py runs. A dispatch adds the runs in
     `starts`, and every listing after it shows them."""
 
-    def __init__(self, login="jkc-be", conclusions=None, built=REVISION, image_revision=None, head_sha=HEAD):
-        self.login = login
+    def __init__(self, login="jkc-be", conclusions=None, built=REVISION, image_revision=None, head_sha=HEAD,
+                 version="0.2.5"):
+        self.login, self.version = login, version
         self.runs = {"release-build.yml": [run(100, "Release build of " + HEAD)],
                      "release-promote.yml": [run(200, "Release promote of build run 100")]}
         # A title's {request} is the request identifier of the dispatch that starts it.
@@ -66,7 +67,7 @@ class GitHub:
                 (Path(directory) / "Goldbook-server-image").mkdir()
                 (Path(directory) / "Goldbook-server-image/image.json").write_text(
                     json.dumps({"revision": self.image_revision, "digest": "sha256:" + "e" * 64}))
-                payload = json.dumps({"version": "0.2.5", "sequence": 1, "revision": self.built, "files": {}})
+                payload = json.dumps({"version": self.version, "sequence": 1, "revision": self.built, "files": {}})
                 (Path(directory) / "Goldbook-addon-feed").mkdir()
                 (Path(directory) / "Goldbook-addon-feed/addon.json").write_text(
                     json.dumps({"payload": base64.b64encode(payload.encode()).decode(), "signature": "s"}))
@@ -105,6 +106,31 @@ class Release(unittest.TestCase):
                       "  Goldbook-server-image  ID 6  sha256:e\n  Goldbook-update-feed  ID 7  sha256:f\n", out)
         self.assertIn(f"Release promote run 201: {RUNS}201\n", out)
         self.assertTrue(out.endswith(f"Released Goldbook 0.2.5 from {REVISION}.\n"))
+
+    def test_a_beta_is_built_with_the_beta_input_then_promoted_after_a_yes(self):
+        github = GitHub(version="0.6.0-beta.1")
+        code, prompts, out, _ = self.release(github, ["y"], argv=("--revision", REVISION, "--beta", "0.6.0-beta.1"))
+        self.assertEqual(code, 0)
+        self.assertEqual(github.dispatched(), [
+            ["release-build.yml", "--repo", "jkc-be/goldbook", "--ref", "main", "-f", f"revision={REVISION}",
+             "-f", "beta=0.6.0-beta.1", "-f", "request=build-request"],
+            ["release-promote.yml", "--repo", "jkc-be/goldbook", "--ref", "main", "-f", "build_run_id=101",
+             "-f", "request=promote-request"]])
+        self.assertEqual(prompts, [f"Promote build run 101 (version 0.6.0-beta.1, revision {REVISION})? [y/N] "])
+        self.assertTrue(out.endswith(f"Released Goldbook 0.6.0-beta.1 from {REVISION}.\n"))
+
+    def test_a_build_of_another_version_than_the_beta_is_not_offered(self):
+        code, prompts, _, error = self.release(GitHub(version="0.5.5"), argv=("--revision", REVISION,
+                                                                             "--beta", "0.6.0-beta.1"))
+        self.assertEqual((code, prompts), (1, []))
+        self.assertEqual(error, "Build run 101 built version 0.5.5, not the beta 0.6.0-beta.1 as requested. "
+                                "Do not promote it.")
+
+    def test_a_beta_must_be_a_beta_version(self):
+        for beta in ("0.6.0", "0.6.0-beta.0", "0.6.0-beta.01", "0.6.0-rc.1", "v0.6.0-beta.1", "0.6.0-beta"):
+            with self.subTest(beta=beta), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                RELEASE.main(["--beta", beta], release=RELEASE.Release(run=GitHub()))
 
     def test_without_a_revision_builds_the_current_main(self):
         github = GitHub(head_sha=REVISION)

@@ -206,7 +206,8 @@ The packaging command checks that the TOC's files are present and produces
 `dist/Goldbook-<version>.zip` and `dist/release.json`. The release workflow
 tests and packages each mirror update. Existing release assets are immutable;
 change the version in `Goldbook.toc` upstream before publishing different addon
-code.
+code. A beta version, such as `0.6.0-beta.1`, becomes a GitHub prerelease, so
+it is never the latest release.
 
 `release.json` uses the format of the
 [BigWigs packager](https://github.com/BigWigsMods/packager). It names the ZIP
@@ -256,6 +257,8 @@ release** succeeds, including its CurseForge upload or verified receipt. It
 has its own `wowinterface` approval and concurrency group. Approval delays,
 failed uploads and moderation cannot block promotion, tagging or the next
 release. Retry this workflow separately after checking the project page.
+WoWInterface has no beta stream, so the workflow skips a beta version with a
+notice in its run and asks for no `wowinterface` approval.
 
 It checks out the successful run's exact commit and downloads its GitHub
 release ZIP. Before uploading, it compares the ZIP with that commit's package

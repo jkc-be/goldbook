@@ -10,8 +10,46 @@ concurrency:
   group: addon-wowinterface
   cancel-in-progress: false
 jobs:
-  publish:
+  # Outside the wowinterface environment, so a beta skips without waiting for approval.
+  version:
     if: >-
+      github.repository == 'jkc-be/goldbook-addon' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.actor.login == 'jkc-be' &&
+      github.event.workflow_run.triggering_actor.login == 'jkc-be' &&
+      vars.WOWINTERFACE_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      beta: ${{ steps.version.outputs.beta }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Skip a beta
+        id: version
+        run: |
+          expected=$(python3 package.py expected)
+          archive=$(basename "$expected")
+          version=${archive#Goldbook-}
+          version=${version%.zip}
+          if [[ "$version" == *-* ]]; then
+            echo "::notice::Goldbook $version is a prerelease. WoWInterface has no beta stream, so it is not uploaded."
+            echo 'beta=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "Goldbook $version is a release; publishing it to WoWInterface."
+            echo 'beta=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: version
+    if: >-
+      needs.version.outputs.beta == 'false' &&
       github.repository == 'jkc-be/goldbook-addon' &&
       github.ref == 'refs/heads/main' &&
       github.actor == 'jkc-be' && github.triggering_actor == 'jkc-be' &&

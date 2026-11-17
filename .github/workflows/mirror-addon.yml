@@ -13,6 +13,10 @@ on:
         description: The run attempt in which the caller's guard passed
         required: true
         type: string
+      version:
+        description: Beta version to stamp into the mirrored addon; empty mirrors its committed version
+        type: string
+        default: ''
     outputs:
       commit:
         description: The goldbook-addon commit that holds the revision
@@ -44,6 +48,11 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ inputs.revision }}
+      - name: Stamp the beta version
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: python3 scripts/set-version.py --stamp "$VERSION"
       - name: Mirror the public upstream
         id: mirror
         env:
