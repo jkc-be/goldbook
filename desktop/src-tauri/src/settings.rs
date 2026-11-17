@@ -18,6 +18,7 @@ pub struct Settings {
     pub open_at_login: bool,
     pub auto_sync: bool,
     pub sync_minutes: u32,
+    pub beta_updates: bool,
 }
 
 pub const MAX_SYNC_MINUTES: u32 = 1440;
@@ -35,6 +36,7 @@ impl Default for Settings {
             open_at_login: true,
             auto_sync: true,
             sync_minutes: 15,
+            beta_updates: false,
         }
     }
 }
@@ -253,6 +255,20 @@ mod tests {
         assert_eq!(minutes(99999), MAX_SYNC_MINUTES);
     }
     #[test]
+    fn beta_updates_are_off_unless_the_player_ticks_them() {
+        let old: Settings = serde_json::from_str(r#"{"wowDir":"/game"}"#).unwrap();
+        assert!(!old.beta_updates);
+        let ticked: Settings =
+            serde_json::from_str(r#"{"wowDir":"/game","betaUpdates":true}"#).unwrap();
+        assert!(ticked.beta_updates);
+        let saved = serde_json::to_value(Settings {
+            beta_updates: true,
+            ..Settings::default()
+        })
+        .unwrap();
+        assert_eq!(saved["betaUpdates"], true);
+    }
+    #[test]
     fn roundtrip_and_private_permissions() {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("settings.json");
@@ -264,6 +280,7 @@ mod tests {
             open_at_login: false,
             auto_sync: false,
             sync_minutes: 30,
+            beta_updates: true,
         };
         write(&file, &saved).unwrap();
         assert_eq!(
@@ -273,6 +290,7 @@ mod tests {
         assert!(!read(&file).open_at_login);
         assert!(!read(&file).auto_sync);
         assert_eq!(read(&file).sync_minutes, 30);
+        assert!(read(&file).beta_updates);
         write(&file, &saved).unwrap();
         #[cfg(unix)]
         {
