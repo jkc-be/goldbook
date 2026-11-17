@@ -149,6 +149,32 @@ class CheckChangesTests(unittest.TestCase):
             "but only a release pull request changes it. "
             f"Restore the version fields from main. {RELEASE_FIX}\n")))
 
+    def test_refuses_a_committed_beta_stamp_with_either_label(self):
+        refusals = {
+            '["release"]': (
+                "Release rule: a release pull request only edits CHANGELOG.md and the version fields and deletes "
+                "change files, but this one also changes Cargo.lock, addon/Goldbook/Goldbook.toc, "
+                "crates/goldbook-core/Cargo.toml, crates/goldbook-server/Cargo.toml, crates/goldbook-sync/Cargo.toml, "
+                "desktop/src-tauri/Cargo.toml, desktop/src-tauri/tauri.conf.json, package-lock.json, package.json, "
+                "web/index.html. Move those changes to their own pull request, and start the release from main "
+                "with make prepare-release VERSION=x.y.z.\n"
+                "Release rule: package.json: expected 1 version field(s), found 0. Set every field with "
+                "make prepare-release VERSION=x.y.z, or python3 scripts/set-version.py x.y.z.\n"
+                "Release rule: a release collects every change file, but this pull request keeps "
+                "changes/app-sync.md. Add its bullets to the new CHANGELOG.md section and delete it, "
+                "as make prepare-release does.\n"),
+            '["no-changes"]': (
+                "Version rule: this pull request changes the version from 1.2.9 to None, but only a release pull "
+                f"request changes it. Restore the version fields from main. {RELEASE_FIX}\n"
+                "Version rule: package.json: expected 1 version field(s), found 0. Only a release pull request "
+                f"changes version fields. Restore them from main. {RELEASE_FIX}\n"),
+        }
+        for labels, refusal in refusals.items():
+            with self.subTest(labels=labels):
+                self.git("reset", "-q", "--hard", self.base)
+                self.script("set-version.py", "--stamp", "1.2.10-beta.1")
+                self.assertEqual(self.check(labels), (1, "", refusal))
+
     def test_refuses_one_version_field_out_of_line(self):
         self.edit("web/index.html", '<span class="version">1.2.9<', '<span class="version">1.3.0<')
         self.write("changes/website-title.md", "- Show the version.\n")

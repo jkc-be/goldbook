@@ -34,6 +34,12 @@ def feed(version, revision, signature):
     return {"latest.json": latest, "addon.json": addon}
 
 
+def beta_feed(version, revision, signature):
+    """A feed of the beta channel, whose package URLs are one folder down."""
+    files = feed(version, revision, signature)
+    return {**files, "latest.json": files["latest.json"].replace(f"{FEED}/".encode(), f"{FEED}/beta/".encode())}
+
+
 OLD_FEED = feed(PREVIOUS, OLD, "old")
 B1_FEED = feed(VERSION, R1, "build-1")
 B2_FEED = feed(VERSION, R1, "build-2")  # the same commit, built and signed again
@@ -256,6 +262,66 @@ class Reasons(unittest.TestCase):
         world.urls[f"{SOURCE}/git/ref/tags/v{VERSION}"] = {"object": {"type": "tag", "sha": "c" * 40}}
         world.urls[f"{SOURCE}/git/tags/{'c' * 40}"] = {"object": {"type": "commit", "sha": R1}}
         self.assertEqual(self.verdicts(world, STATE.Build(VERSION, R1, B1_FEED))["source-tag"], "matches")
+
+
+class BetaVersions(unittest.TestCase):
+    BETA = "0.3.0-beta.1"
+
+    def verdicts(self, world, build):
+        observed = STATE.observe(world, build.version)
+        return {name: str(verdict) for name, verdict in STATE.evaluate(build, observed).items()
+                if name in ("client-feed", "addon-feed")}
+
+    def publish_beta(self, world, files):
+        for name in ("latest.json", "addon.json"):
+            world.urls[f"{FEED}/beta/{name}"] = files[name]
+
+    def test_versions_sort_by_semver_precedence(self):
+        versions = ["0.6.1-beta.1", "0.6.0", "0.6.0-beta.10", "0.5.5", "0.6.0-beta.2", "0.6.0-beta.1"]
+        self.assertEqual(sorted(versions, key=STATE.version_key),
+                         ["0.5.5", "0.6.0-beta.1", "0.6.0-beta.2", "0.6.0-beta.10", "0.6.0", "0.6.1-beta.1"])
+
+    def test_only_releases_and_betas_have_a_key(self):
+        versions = ["0.6.0-beta", "0.6.0-beta.0", "0.6.0-beta.01", "0.6.0-rc.1", "0.6.0-beta.1.2", "0.6",
+                    "0.6.0-beta.12", "0.6.0"]
+        self.assertEqual({version: STATE.version_key(version) for version in versions}, {
+            "0.6.0-beta": None, "0.6.0-beta.0": None, "0.6.0-beta.01": None, "0.6.0-rc.1": None,
+            "0.6.0-beta.1.2": None, "0.6": None, "0.6.0-beta.12": (0, 6, 0, 0, 12), "0.6.0": (0, 6, 0, 1, 0)})
+
+    def test_a_beta_reads_the_beta_feed_and_the_revision_from_its_urls(self):
+        world = World()
+        self.publish_beta(world, beta_feed(self.BETA, R1, "beta-1"))
+        self.assertEqual(self.verdicts(world, STATE.Build(self.BETA, R1, beta_feed(self.BETA, R1, "beta-1"))),
+                         {"client-feed": "matches", "addon-feed": "matches"})
+        self.assertEqual(self.verdicts(world, STATE.Build(self.BETA, R2, beta_feed(self.BETA, R2, "beta-2"))), {
+            "client-feed": "conflict (latest.json publishes 0.3.0-beta.1 from 111111111111, "
+                           "which differs from this build's latest.json)",
+            "addon-feed": "conflict (addon.json publishes 0.3.0-beta.1 from 111111111111, "
+                          "which differs from this build's addon.json)",
+        })
+
+    def test_a_second_beta_of_the_same_commit_conflicts(self):
+        world = World()
+        self.publish_beta(world, beta_feed(self.BETA, R1, "beta-1"))
+        self.assertEqual(self.verdicts(world, STATE.Build("0.3.0-beta.2", R1)), {
+            "client-feed": "conflict (latest.json publishes 0.3.0-beta.1 from 111111111111; "
+                           "build 0.3.0-beta.2 from a later commit)",
+            "addon-feed": "absent (addon.json publishes 0.3.0-beta.1 from 111111111111, an older release)",
+        })
+
+    def test_a_release_ignores_a_newer_beta_feed(self):
+        world = World()
+        self.publish_beta(world, beta_feed(self.BETA, R2, "beta-2"))
+        self.assertEqual(self.verdicts(world, STATE.Build(VERSION, R1, B1_FEED)), {
+            "client-feed": "absent (latest.json publishes 0.2.4 from 000000000000, an older release)",
+            "addon-feed": "absent (addon.json publishes 0.2.4 from 000000000000, an older release)",
+        })
+
+    def test_a_beta_ignores_a_newer_release_feed(self):
+        world = World()
+        world.publish(feed("0.3.0", R2, "release"))
+        self.assertEqual(self.verdicts(world, STATE.Build(self.BETA, R1, beta_feed(self.BETA, R1, "beta-1"))),
+                         {"client-feed": "absent", "addon-feed": "absent"})
 
 
 class CommandLine(unittest.TestCase):
@@ -535,6 +601,16 @@ class Feed(unittest.TestCase):
             f"addon.json holds 0.2.4 from {R2}, not 0.2.5 from {R1}",
         ])
 
+    def test_a_complete_beta_feed_passes(self):
+        root = self.folder({**beta_feed("0.3.0-beta.1", R1, "x"), f"{R1}/darwin-aarch64-Goldbook.app.tar.gz": b"package"})
+        self.assertEqual(STATE.feed_problems(root, "0.3.0-beta.1", R1), [])
+
+    def test_a_beta_feed_with_release_urls_is_refused(self):
+        root = self.folder({**feed("0.3.0-beta.1", R1, "x"), f"{R1}/darwin-aarch64-Goldbook.app.tar.gz": b"package"})
+        self.assertEqual(STATE.feed_problems(root, "0.3.0-beta.1", R1), [
+            f"latest.json darwin-aarch64 points at {FEED}/{R1}/darwin-aarch64-Goldbook.app.tar.gz, which is not in the feed",
+        ])
+
 
 class Version(unittest.TestCase):
     def source(self, check_output, code=0, version=VERSION):
@@ -566,6 +642,37 @@ class Version(unittest.TestCase):
     def test_refuses_a_check_that_reports_another_version(self):
         with self.assertRaisesRegex(STATE.Failure, "did not report 0.2.5: 0.2.50"):
             STATE.read_version(self.source("0.2.50"))
+
+    def test_refuses_a_committed_beta(self):
+        with self.assertRaisesRegex(STATE.Failure, "^tauri.conf.json has no release version: '0.3.0-beta.1'$"):
+            STATE.read_version(self.source("0.3.0-beta.1", version="0.3.0-beta.1"))
+
+    def built(self, version):
+        """`version --built` against a committed 0.2.5: (code, stdout, stderr, GITHUB_OUTPUT)."""
+        root = self.source("0.2.5")
+        output = root / "output"
+        output.touch()
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
+                mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}, clear=True), warnings.catch_warnings():
+            warnings.simplefilter("ignore", ResourceWarning)
+            code = STATE.main(["version", "--source", str(root), "--built", version], http=World())
+        return code, stdout.getvalue(), stderr.getvalue(), output.read_text()
+
+    def test_built_accepts_the_committed_version(self):
+        self.assertEqual(self.built("0.2.5"), (0, "0.2.5\n", "", "version=0.2.5\n"))
+
+    def test_built_accepts_a_beta_above_the_committed_version(self):
+        self.assertEqual(self.built("0.2.6-beta.1"), (0, "0.2.6-beta.1\n", "", "version=0.2.6-beta.1\n"))
+        self.assertEqual(self.built("0.3.0-beta.12"), (0, "0.3.0-beta.12\n", "", "version=0.3.0-beta.12\n"))
+
+    def test_built_refuses_another_release_a_beta_at_or_below_it_and_malformed_versions(self):
+        for version in ("0.2.5-beta.1", "0.2.4-beta.3", "0.2.6", "0.2.4", "0.2.6-rc.1", "0.2.6-beta.0",
+                        "0.2.6-beta", "0.2.6-beta.1\nversion=9.9.9"):
+            with self.subTest(version=version):
+                self.assertEqual(self.built(version), (1, "", (
+                    f"{version} is neither the committed version 0.2.5 nor a beta above it, "
+                    "such as 0.2.6-beta.1 or 0.3.0-beta.1.\n"), ""))
 
 
 if __name__ == "__main__":
