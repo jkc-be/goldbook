@@ -30,6 +30,7 @@ def addon(output):
 
 def client(output, artifacts):
     version = json.loads((ROOT / 'desktop/src-tauri/tauri.conf.json').read_text())['version']
+    base = BASE + '/beta' if '-beta.' in version else BASE
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     folder = output / revision
     folder.mkdir()
@@ -51,7 +52,7 @@ def client(output, artifacts):
             raise ValueError('Duplicate updater target ' + target)
         destination = folder / (target + '-' + name)
         shutil.copyfile(package, destination)
-        platforms[target] = {'url': f'{BASE}/{revision}/{destination.name}', 'signature': signature.read_text().strip()}
+        platforms[target] = {'url': f'{base}/{revision}/{destination.name}', 'signature': signature.read_text().strip()}
     expected = {'darwin-aarch64', 'windows-x86_64', 'linux-x86_64-deb', 'linux-x86_64-rpm'}
     if platforms.keys() != expected:
         raise ValueError(f'Missing signed client installers: {expected - platforms.keys()}')

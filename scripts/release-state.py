@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read Goldbook's release outputs and decide whether a build may create or finish them.
 
-    release-state.py version [--source DIR]
+    release-state.py version [--source DIR] [--built X]
     release-state.py state --version X --revision SHA (--build | --feed DIR)
     release-state.py check-feed --feed DIR --version X --revision SHA
     release-state.py check-build-run --run-id N
@@ -48,7 +48,8 @@ ADDON_WORKFLOW = "release.yml"
 # The artifacts a promotion depends on, as release-build.yml names them.
 BUILD_ARTIFACTS = ("Goldbook-update-feed", "Goldbook-addon-feed", "Goldbook-updater-macOS-ARM64",
                    "Goldbook-updater-Windows-X64", "Goldbook-updater-Linux-X64", "Goldbook-server-image")
-VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+RELEASE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+VERSION = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta\.([1-9][0-9]*))?")
 REVISION = re.compile(r"[0-9a-f]{40}")
 
 
@@ -137,20 +138,30 @@ def addon_payload(content):
     return json.loads(base64.b64decode(json.loads(content)["payload"]))
 
 
+def beta(version):
+    return "-beta." in version
+
+
+def feed_base(version):
+    """Where the channel of `version` publishes; the beta feed is a copy one folder down."""
+    return FEED + "/beta" if beta(version) else FEED
+
+
 def read_client_feed(http, version):
-    content = http.get(FEED + "/latest.json")
+    base = feed_base(version)
+    content = http.get(base + "/latest.json")
     if content is None:
         return None
     manifest = json.loads(content)
     urls = [platform["url"] for platform in manifest.get("platforms", {}).values()]
-    revisions = {url.removeprefix(FEED + "/").split("/", 1)[0] for url in urls}
+    revisions = {url.removeprefix(base + "/").split("/", 1)[0] for url in urls}
     revision = revisions.pop() if len(revisions) == 1 else None
     return Found(manifest["version"], revision,
                  f"latest.json publishes {manifest['version']} from {short(revision)}", content)
 
 
 def read_addon_feed(http, version):
-    content = http.get(FEED + "/addon.json")
+    content = http.get(feed_base(version) + "/addon.json")
     if content is None:
         return None
     payload = addon_payload(content)
@@ -229,7 +240,12 @@ OUTPUTS = (
 
 
 def version_key(version):
-    return tuple(int(part) for part in version.split(".")) if VERSION.fullmatch(version or "") else None
+    """Semver precedence, so a beta sorts before its release: 0.6.0-beta.2 < 0.6.0-beta.10 < 0.6.0."""
+    match = VERSION.fullmatch(version or "")
+    if match is None:
+        return None
+    major, minor, patch, number = match.groups()
+    return int(major), int(minor), int(patch), 0 if number else 1, int(number or 0)
 
 
 def judge(output, found, build):
@@ -241,6 +257,9 @@ def judge(output, found, build):
     actual = found.revision if output.file is None else found.content
     if expected is not None and actual == expected and found.version == build.version:
         return Verdict("matches")
+    # The helper keeps each revision's packages under <revision>/ and refuses different ones.
+    if output.file == "latest.json" and found.revision == build.revision and found.version != build.version:
+        return Verdict("conflict", f"{found.detail}; build {build.version} from a later commit")
     published, wanted = version_key(found.version), version_key(build.version)
     if published is not None and published < wanted:
         return Verdict("absent", f"{found.detail}, an older release")
@@ -442,7 +461,7 @@ def read_version(source):
     if check.returncode != 0:
         raise Failure("set-version.py --check failed:\n" + check.stdout + check.stderr)
     version = json.loads((source / "desktop/src-tauri/tauri.conf.json").read_text())["version"]
-    if not VERSION.fullmatch(version):
+    if not RELEASE.fullmatch(version):
         raise Failure(f"tauri.conf.json has no release version: {version!r}")
     if not re.search(rf"(?<![0-9.]){re.escape(version)}(?![0-9.])", check.stdout):
         raise Failure(f"set-version.py --check did not report {version}: {check.stdout.strip()}")
@@ -465,7 +484,7 @@ def feed_problems(feed, version, revision):
         if manifest.get("version") != version:
             problems.append(f"latest.json has version {manifest.get('version')}, not {version}")
         for target, platform in manifest.get("platforms", {}).items():
-            name = platform["url"].removeprefix(f"{FEED}/{revision}/")
+            name = platform["url"].removeprefix(f"{feed_base(version)}/{revision}/")
             if name == platform["url"] or f"{revision}/{name}" not in files:
                 problems.append(f"latest.json {target} points at {platform['url']}, which is not in the feed")
     if "addon.json" in files:
@@ -474,6 +493,16 @@ def feed_problems(feed, version, revision):
             problems.append(f"addon.json holds {payload.get('version')} from {payload.get('revision')}, "
                             f"not {version} from {revision}")
     return problems
+
+
+def built_version(built, committed):
+    """The version a build stamps: the committed release, or a beta above it."""
+    key = version_key(built)
+    if built == committed or (key is not None and beta(built) and key > version_key(committed)):
+        return built
+    major, minor, patch = map(int, committed.split("."))
+    raise Failure(f"{built} is neither the committed version {committed} nor a beta above it, "
+                  f"such as {major}.{minor}.{patch + 1}-beta.1 or {major}.{minor + 1}.0-beta.1.")
 
 
 def summary(text):
@@ -543,6 +572,7 @@ def main(argv=None, http=None):
     commands = parser.add_subparsers(dest="command", required=True)
     version = commands.add_parser("version", help="Print the checked-out version")
     version.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
+    version.add_argument("--built", help="The version the build stamps, if not the committed one")
     state = commands.add_parser("state", help="Report each release output")
     state.add_argument("--version", required=True)
     state.add_argument("--revision", required=True)
@@ -573,6 +603,8 @@ def main(argv=None, http=None):
     try:
         if args.command == "version":
             version = read_version(args.source)
+            if args.built is not None:
+                version = built_version(args.built, version)
             print(version)
             outputs(version=version)
         elif args.command == "state":

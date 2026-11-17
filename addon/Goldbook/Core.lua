@@ -118,6 +118,28 @@ local function inBatches(list, each, done, from)
   end
 end
 
+-- Names rows of items that neither a scan nor the bags brought in, such as
+-- reagents, asking once a session for the name and vendor price of those
+-- not loaded yet.
+local asked = {}
+function ns.NameItems(rows)
+  local missing = {}
+  for _, row in ipairs(rows) do
+    if not asked[row.key] and unresolved(row.key) then
+      asked[row.key] = true
+      missing[#missing + 1] = row.key
+    end
+  end
+  if #missing > 0 then
+    inBatches(missing, resolveItem, ns.UI.RefreshSoon)
+  end
+  for _, row in ipairs(rows) do
+    local name, quality = Database.Item(ns.db, row.key)
+    row.name, row.quality = name or ("item " .. row.key), quality or 1
+  end
+  return rows
+end
+
 -- Unbound items in `containers` as { key, count }, one entry per item.
 local function heldItems(containers)
   local byKey, held, realmKey = {}, {}, ns.RealmKey()
@@ -244,6 +266,9 @@ local COMMANDS = {
   movers = function(argument)
     ns.UI.Show("movers", argument)
   end,
+  crafting = function(argument)
+    ns.UI.Show("crafting", argument)
+  end,
   mail = function(argument)
     ns.UI.Show("mail", argument)
   end,
@@ -325,7 +350,7 @@ SlashCmdList.GOLDBOOK = function(input)
   if run then
     run(argument)
   else
-    ns.Print("/gb ah  |  /gb scan  |  /gb scan full  |  /gb deals  |  /gb bags  |  /gb movers  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb items  |  /gb show [text]")
+    ns.Print("/gb ah  |  /gb scan  |  /gb scan full  |  /gb deals  |  /gb bags  |  /gb movers  |  /gb crafting  |  /gb gold  |  /gb mail  |  /gb accounting  |  /gb items  |  /gb show [text]")
     ns.Print("/gb item <link or name>  |  /gb minprofit <gold>  |  /gb autoscan")
     ns.Print("/gb status  |  /gb minimap  |  /gb web  |  /gb theme light|dark  |  /gb scale <0.7-1.4>")
   end

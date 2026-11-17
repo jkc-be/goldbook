@@ -134,18 +134,30 @@ labelled image, such as the one the last deploy pinned, and restart the service.
 
 A feed must come from a run with exactly one unexpired `Goldbook-update-feed`
 artifact. Only a `release-build.yml` feed is accepted, and it publishes
-`latest.json`, its package folder and `addon.json`. The helper rejects the feed before
-it replaces anything when a manifest is missing, a package is missing, the
-revision already has different packages, or a manifest is older than the one
-already published. A `latest.json` is older when its `version` is lower; an
-`addon.json` is older when the `sequence` in its signed payload is lower. An
+`latest.json`, its package folder and `addon.json`. The `version` in
+`latest.json` sets the channel. A release publishes to
+`/opt/goldbook/data/updates`, with package URLs under
+`https://app.jkc-be.com/goldbook/updates/<revision>/`. A beta, such as
+`0.6.0-beta.1`, publishes to `/opt/goldbook/data/updates/beta`, with package
+URLs under `https://app.jkc-be.com/goldbook/updates/beta/<revision>/`. The
+helper rejects the feed before it replaces anything when a manifest is missing,
+the `version` in the signed payload of `addon.json` differs from the one in
+`latest.json`, a package is missing, the revision already has different
+packages, or a manifest is older than the one already published. A
+`latest.json` is older when its `version` is lower. A beta sorts before its
+release, so `0.6.0-beta.2` < `0.6.0-beta.10` < `0.6.0`. An `addon.json` is
+older when the `sequence` in its signed payload is lower. Every check compares
+with the channel's own folder only, so a release publish never reads or
+changes `beta/`, and a beta publish never touches the release feed. An
 equal version or sequence is accepted, so a retry can publish again. A missing
 or unreadable published manifest counts as nothing published. It moves the package folder into
 place first, then replaces `latest.json`, then `addon.json`. Publishing the same
 run again after an interruption finishes the publication with the same files.
 `check-publish` runs every one of these checks and prints
 `{"checked": [...], "revision": ...}`; `publish` prints
-`{"published": [...], "revision": ...}`.
+`{"published": [...], "revision": ...}`. Reinstall the helper with
+`scripts/setup-deploy.sh` before the first beta publish. An older helper
+refuses a beta feed before it changes anything.
 
 Use **Actions > Deploy to OVH > Run workflow** on `main`. The default
 `verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, records

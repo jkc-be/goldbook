@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Release Goldbook from this computer, as the signed-in gh user.
 
-    release.py [--revision SHA]
+    release.py [--revision SHA] [--beta X.Y.Z-beta.N]
 
 Starts Release build on main for the revision, or for the current main when
 none is given, and watches it while you approve its environments in the
 browser. Then it asks whether to promote that build and watches Release
 promote. The two runs stay separate on GitHub, so a build can also be
 promoted later on its own (docs/releasing.md).
+
+With --beta, the build stamps that beta version instead of the committed
+release version, and promoting it ships a beta.
 """
 import argparse
 import base64
@@ -24,6 +27,7 @@ REPOSITORY = "jkc-be/goldbook"
 MAINTAINER = "jkc-be"
 BUILD, PROMOTE = "release-build.yml", "release-promote.yml"
 REVISION = re.compile(r"[0-9a-f]{7,40}")
+BETA = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+-beta\.[1-9][0-9]*")
 
 
 class Failure(Exception):
@@ -92,13 +96,14 @@ class Release:
                           f"from {addon['revision']}. Do not promote it; start a new build.")
         return addon["version"], image["revision"]
 
-    def release(self, revision):
+    def release(self, revision, beta=None):
         login = self.run(["gh", "api", "user", "--jq", ".login"]).strip()
         if login != MAINTAINER:
             raise Failure(f"gh is signed in as {login}. Only {MAINTAINER} starts releases.")
         requested = self.run(["gh", "api", f"repos/{REPOSITORY}/commits/{revision}", "--jq", ".sha"]).strip() \
             if revision else None
-        build_id, build_url = self.dispatch(BUILD, {"revision": requested} if requested else {})
+        fields = {"revision": requested, "beta": beta}
+        build_id, build_url = self.dispatch(BUILD, {name: value for name, value in fields.items() if value})
         self.say(f"Release build run {build_id}: {build_url}")
         self.say("Approve release-signing, then production, in the browser.")
         build = self.watch(build_id)
@@ -111,6 +116,9 @@ class Release:
         expected = requested or build["head_sha"]
         if built != expected:
             raise Failure(f"Build run {build_id} built {built}, not {expected} as requested. Do not promote it.")
+        if beta and version != beta:
+            raise Failure(f"Build run {build_id} built version {version}, not the beta {beta} as requested. "
+                          "Do not promote it.")
         self.say(f"\nBuild run {build_id} built Goldbook {version} from revision {built}.")
         artifacts = self.api(f"repos/{REPOSITORY}/actions/runs/{build_id}/artifacts?per_page=100")["artifacts"]
         for artifact in sorted(artifacts, key=lambda a: a["name"]):
@@ -135,11 +143,14 @@ class Release:
 def main(argv=None, release=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--revision", help="Commit of main to build, as a full or abbreviated SHA")
+    parser.add_argument("--beta", help="Beta version to build and promote, such as 0.6.0-beta.1")
     args = parser.parse_args(argv)
     if args.revision is not None and not REVISION.fullmatch(args.revision):
         parser.error(f"--revision {args.revision!r} is not a commit SHA")
+    if args.beta is not None and not BETA.fullmatch(args.beta):
+        parser.error(f"--beta {args.beta!r} is not a beta version such as 0.6.0-beta.1")
     try:
-        (release or Release()).release(args.revision)
+        (release or Release()).release(args.revision, args.beta)
     except Failure as error:
         print(error, file=sys.stderr)
         return 1

@@ -234,12 +234,15 @@ def download_artifact(run_id, name, token, archive):
 
 
 def feed_order(name, text):
-    """Returns how a manifest sorts against another: by client version or addon sequence."""
+    """Returns how a manifest sorts against another: by client version or addon sequence.
+    Versions sort as semver does, so 0.6.0-beta.2 < 0.6.0-beta.10 < 0.6.0."""
     if name == "latest.json":
         version = json.loads(text)["version"]
-        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)(?:-beta\.([1-9][0-9]*))?", version)
+        if match is None:
             raise ValueError(version)
-        return tuple(map(int, version.split("."))), "version " + version
+        major, minor, patch, beta = match.groups()
+        return (int(major), int(minor), int(patch), 0 if beta else 1, int(beta or 0)), "version " + version
     sequence = json.loads(base64.b64decode(json.loads(text)["payload"], validate=True))["sequence"]
     if type(sequence) is not int:
         raise ValueError(sequence)
@@ -249,9 +252,9 @@ def feed_order(name, text):
 def publish_updates(run_id, revision, token, check_only=False):
     workflow = verify_run(run_id, revision, token, tuple(FEED_MANIFESTS))
     manifests = FEED_MANIFESTS[workflow]
-    destination = ROOT / "data/updates"
-    destination.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="goldbook-publish-", dir=destination.parent) as temporary:
+    (ROOT / "data/updates").mkdir(parents=True, exist_ok=True)
+    # Staging stays out of data/updates, which the public serves for both channels.
+    with tempfile.TemporaryDirectory(prefix="goldbook-publish-", dir=ROOT / "data") as temporary:
         archive = Path(temporary) / "feed.zip"
         download_artifact(run_id, "Goldbook-update-feed", token, archive)
         staged = Path(temporary) / "feed"
@@ -272,12 +275,24 @@ def publish_updates(run_id, revision, token, check_only=False):
         missing = [name for name in manifests if not (staged / name).is_file()]
         if missing:
             raise RuntimeError("Update feed is missing " + ", ".join(missing))
+        orders = {}
+        for name in manifests:
+            try:
+                orders[name] = feed_order(name, (staged / name).read_bytes())
+            except (ValueError, KeyError, TypeError) as error:
+                raise RuntimeError(f"Update feed has an invalid {name}") from error
+        manifest = json.loads((staged / "latest.json").read_text())
+        version = manifest["version"]
+        addon = json.loads(base64.b64decode(json.loads((staged / "addon.json").read_text())["payload"])).get("version")
+        if addon != version:
+            raise RuntimeError(f"addon.json has version {addon}, but latest.json has version {version}")
+        folder = "updates/beta" if "-beta." in version else "updates"
+        destination = ROOT / "data" / folder
+        prefix = f"https://app.jkc-be.com/goldbook/{folder}/{revision}/"
         package_dir = staged / revision
         existing = destination / revision
         if "latest.json" in manifests:
-            manifest = json.loads((staged / "latest.json").read_text())
             for platform in manifest["platforms"].values():
-                prefix = "https://app.jkc-be.com/goldbook/updates/" + revision + "/"
                 if not platform["url"].startswith(prefix) or not platform["signature"]:
                     raise RuntimeError("Invalid update download URL or signature")
                 if not (package_dir / platform["url"].removeprefix(prefix)).is_file():
@@ -288,10 +303,7 @@ def publish_updates(run_id, revision, token, check_only=False):
                 raise RuntimeError("This revision already has different update packages")
         # A stale promotion must not replace a newer feed; a retry republishes the same one.
         for name in manifests:
-            try:
-                staged_order, staged_label = feed_order(name, (staged / name).read_bytes())
-            except (ValueError, KeyError, TypeError) as error:
-                raise RuntimeError(f"Update feed has an invalid {name}") from error
+            staged_order, staged_label = orders[name]
             try:
                 published_order, published_label = feed_order(name, (destination / name).read_bytes())
             except (OSError, ValueError, KeyError, TypeError):
@@ -301,6 +313,7 @@ def publish_updates(run_id, revision, token, check_only=False):
         if check_only:
             print(json.dumps({"checked": list(manifests), "revision": revision}), flush=True)
             return
+        destination.mkdir(exist_ok=True)
         if "latest.json" in manifests and not existing.exists():
             os.rename(package_dir, existing)
         # Publish the manifests last; clients never see a partially copied package.

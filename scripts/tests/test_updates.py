@@ -18,8 +18,8 @@ SPEC.loader.exec_module(DEPLOY)
 REVISION = 'a' * 40
 
 
-def addon(sequence):
-    payload = json.dumps({'version': '0.1.3', 'sequence': sequence, 'revision': REVISION, 'files': {}})
+def addon(sequence, version='0.1.3'):
+    payload = json.dumps({'version': version, 'sequence': sequence, 'revision': REVISION, 'files': {}})
     return json.dumps({'payload': base64.b64encode(payload.encode()).decode(), 'signature': 'signed'})
 
 
@@ -62,6 +62,20 @@ class PublishUpdates(unittest.TestCase):
         (destination / 'latest.json').write_text('{"version": "0.1.2"}')
         (destination / 'addon.json').write_text(addon(1750000000))
         return self.snapshot()
+
+    def published_beta_before(self, version):
+        beta = self.root / 'data/updates/beta'
+        (beta / ('c' * 40)).mkdir(parents=True)
+        (beta / ('c' * 40) / 'client.tar.gz').write_text('old beta package')
+        (beta / 'latest.json').write_text(json.dumps({'version': version}))
+        (beta / 'addon.json').write_text(addon(1750000000, version))
+        return self.snapshot()
+
+    def use_beta(self, version='0.2.0-beta.1', base='https://app.jkc-be.com/goldbook/updates/beta/'):
+        """Makes the run's feed a beta of `version` whose package URLs start with `base`."""
+        self.manifest = {'version': version, 'platforms': {'darwin-aarch64': {
+            'url': base + REVISION + '/client.tar.gz', 'signature': 'signed'}}}
+        self.files.update({'latest.json': json.dumps(self.manifest), 'addon.json': addon(1760000000, version)})
 
     def snapshot(self, destination=None):
         destination = destination or self.root / 'data/updates'
@@ -272,6 +286,70 @@ class PublishUpdates(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Update package is missing'):
             self.publish(check_only=True)
         self.assertEqual(self.snapshot(), before)
+
+    def test_beta_feed_publishes_into_its_own_folder_and_leaves_a_newer_release_alone(self):
+        before = self.published_before()
+        (self.root / 'data/updates/latest.json').write_text('{"version": "0.3.0"}')
+        (self.root / 'data/updates/addon.json').write_text(addon(1770000000, '0.3.0'))
+        before.update({'latest.json': b'{"version": "0.3.0"}', 'addon.json': addon(1770000000, '0.3.0').encode()})
+        self.use_beta()
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.snapshot(), {
+            **before,
+            'beta/latest.json': json.dumps(self.manifest).encode(),
+            'beta/addon.json': addon(1760000000, '0.2.0-beta.1').encode(),
+            'beta/' + REVISION + '/client.tar.gz': b'signed package',
+        })
+
+    def test_check_publish_of_a_beta_changes_nothing_and_creates_no_beta_folder(self):
+        before = self.published_before()
+        self.use_beta()
+        self.assertEqual(self.publish(check_only=True), {'checked': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(sorted(path.name for path in (self.root / 'data/updates').iterdir()),
+                         ['addon.json', 'c' * 40, 'latest.json'])
+
+    def test_older_beta_does_not_replace_the_published_beta(self):
+        before = self.published_beta_before('0.2.0-beta.2')
+        self.use_beta('0.2.0-beta.1')
+        for check_only in (False, True):
+            with self.subTest(check_only=check_only), self.assertRaisesRegex(
+                    RuntimeError, '^latest.json has version 0.2.0-beta.1, older than the published version 0.2.0-beta.2$'):
+                self.publish(check_only=check_only)
+            self.assertEqual(self.snapshot(), before)
+        self.use_beta('0.2.0-beta.10')
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.snapshot()['beta/latest.json'], json.dumps(self.manifest).encode())
+
+    def test_beta_feed_with_release_urls_is_refused(self):
+        before = self.published_before()
+        self.use_beta(base='https://app.jkc-be.com/goldbook/updates/')
+        with self.assertRaisesRegex(RuntimeError, '^Invalid update download URL or signature$'):
+            self.publish()
+        self.assertEqual(self.snapshot(), before)
+
+    def test_addon_and_latest_versions_must_match(self):
+        self.published_before()
+        before = self.published_beta_before('0.2.0-beta.1')
+        self.files['addon.json'] = addon(1760000000, '0.2.0-beta.2')
+        with self.assertRaisesRegex(RuntimeError, '^addon.json has version 0.2.0-beta.2, but latest.json has version 0.1.3$'):
+            self.publish()
+        self.assertEqual(self.snapshot(), before)
+        self.use_beta('0.2.0-beta.2')
+        self.files['addon.json'] = addon(1760000000, '0.1.3')
+        with self.assertRaisesRegex(RuntimeError, '^addon.json has version 0.1.3, but latest.json has version 0.2.0-beta.2$'):
+            self.publish()
+        self.assertEqual(self.snapshot(), before)
+
+    def test_release_publish_leaves_a_newer_beta_alone(self):
+        before = self.published_beta_before('0.2.0-beta.2')
+        self.assertEqual(self.publish(), {'published': ['latest.json', 'addon.json'], 'revision': REVISION})
+        self.assertEqual(self.snapshot(), {
+            **before,
+            'latest.json': json.dumps(self.manifest).encode(),
+            'addon.json': ADDON.encode(),
+            REVISION + '/client.tar.gz': b'signed package',
+        })
 
 
 if __name__ == '__main__':

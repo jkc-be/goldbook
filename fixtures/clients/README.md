@@ -6,6 +6,11 @@ here holds the requests one released version of the desktop app sends, named by
 that version. The oldest folder is the support floor: the server must stay
 compatible with that version and every version after it.
 
+Betas, such as `0.6.0-beta.1`, are outside the support floor and get no
+folder, so the compatibility check replays released versions only. A later
+server may stop answering a beta as it expects. Its players must then update
+to a newer beta or release.
+
 `scripts/verify-client-compatibility.py` starts the current server on
 disposable databases and replays every folder. It checks the status, headers
 and response fields that the released app reads. `make check` runs it. A

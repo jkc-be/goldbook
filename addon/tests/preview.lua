@@ -853,6 +853,19 @@ local ITEMS = {
   { "6948", "Hearthstone", 1, 0 },
   { "2318", "Light Leather", 1, 15 },
   { "1524", "Bloodscalp Tusk", 1, 0 },
+  -- What the crafting views price, on set days, so that every item above keeps its numbers.
+  { "13512", "Flask of Supreme Power", 1, 3000, 920000, 4, seen = { { 2, 905000, 3, 0 }, { 1, 931000, 4, 0 }, { 0, 920000, 4, 965000 } } },
+  { "13454", "Greater Arcane Elixir", 1, 1000, 9100, 26, seen = { { 1, 9300, 22, 0 }, { 0, 9100, 26, 9400 } } },
+  { "9206", "Elixir of Giants", 1, 1000, 6400, 14, seen = { { 0, 6400, 14, 6600 } } },
+  { "13423", "Stonescale Oil", 1, 100, 6200, 60, seen = { { 1, 6400, 55, 0 }, { 0, 6200, 60, 6350 } } },
+  { "13466", "Plaguebloom", 1, 60, 1450, 80, seen = { { 0, 1450, 80, 1500 } } },
+  { "12363", "Arcane Crystal", 2, 0, 52000, 8, seen = { { 1, 53500, 7, 0 }, { 0, 52000, 8, 54000 } } },
+  { "7080", "Essence of Water", 1, 500, 8200, 25, seen = { { 0, 8200, 25, 8400 } } },
+  { "7076", "Essence of Earth", 1, 500, 5600, 30, seen = { { 0, 5600, 30, 5800 } } },
+  { "7068", "Elemental Fire", 1, 100, 1100, 70, seen = { { 0, 1100, 70, 1150 } } },
+  { "3358", "Khadgar's Whisker", 1, 30, 140, 150, seen = { { 0, 140, 150, 145 } } },
+  { "8925", "Crystal Vial", 1, 5 },
+  { "8838", "Sungrass", 1, 15 },
 }
 
 -- { key, count, bound }
@@ -866,6 +879,13 @@ local CHARACTERS = {
   { "Sultan-Faramon", 8200000, 12400000, 0.8, 0 },
   { "Mirelle-Faramon", 3150000, 4580000, 0.35, 2 },
   { "Grokk-Faramon", 702000, 655000, 0.3, 12 },
+}
+
+-- The recipes each character knows, by the items they make: { character, profession, item keys }.
+local RECIPES = {
+  { "Sultan-Faramon", "alchemy", { "13510", "13512", "12360", "13452", "13457", "7078", "13446", "13444", "13454", "12808",
+    "3928", "9206" } },
+  { "Mirelle-Faramon", "tailoring", { "4305", "14048" } },
 }
 
 -- Same numbers every run, so that previews before and after a change compare.
@@ -964,7 +984,20 @@ local function seededDB()
     scans = {},
     settings = {},
     account = { id = "K7Q2M9PX", key = "7KQ2M9PXABCDEFGHJKMN" },
+    merchant = { [8925] = 100 },
+    recipes = {},
   }
+  for _, known in ipairs(RECIPES) do
+    local character, profession, keys = unpack(known)
+    db.recipes[character] = {}
+    for _, key in ipairs(keys) do
+      for _, spell in ipairs(ns.Crafting.SpellsFor(key)) do
+        if ns.CraftData[spell].profession == profession then
+          db.recipes[character][spell] = true
+        end
+      end
+    end
+  end
   for _, item in ipairs(ITEMS) do
     local key, name, quality, vendor, price = unpack(item)
     local itemID = Codec.BaseID(key)
@@ -1172,6 +1205,22 @@ local function captureViews(suffix)
     run(view)
     captureWindow(view .. suffix)
   end
+  run("crafting")
+  -- The theme captured first leaves another recipe picked.
+  local first = GoldbookWindow.rows[1].hit
+  first.scripts.OnClick(first)
+  captureWindow("crafting" .. suffix)
+  local known = GoldbookWindow.filters.controls.known
+  known.scripts.OnClick(known)
+  captureWindow("crafting-known" .. suffix)
+  known.scripts.OnClick(known)
+  -- Icecap was last seen days ago; nothing prices Sungrass.
+  for _, recipe in ipairs({ { "Major Mana Potion", "stale" }, { "Superior Healing Potion", "unpriced" } }) do
+    local row = rowFor(recipe[1])
+    row.scripts.OnClick(row)
+    captureWindow("crafting-" .. recipe[2] .. suffix)
+  end
+  run("accounting")
   local expenses = GoldbookWindow.segments.buttons[3]
   expenses.scripts.OnClick(expenses)
   captureWindow("accounting-expenses" .. suffix)
@@ -1220,6 +1269,11 @@ local function captureViews(suffix)
   hoverPoint(-2)
   captureWindow("item-sparse" .. suffix, GameTooltip)
   GameTooltip:Hide()
+  run("item Flask of the Titans")
+  captureWindow("item-crafted" .. suffix)
+  local crafting = GoldbookWindow.modes.buttons[2]
+  crafting.scripts.OnClick(crafting)
+  captureWindow("item-crafting" .. suffix)
   local toggle = GoldbookWindow.themeToggle
   hover(toggle, true)
   toggle.scripts.OnEnter(toggle)
@@ -1338,6 +1392,16 @@ for _, place in ipairs({ { "tooltip", -260 }, { "tooltip-left", 260 } }) do
   hovered.scripts.OnEnter(hovered)
   captureWindow(place[1], GameTooltip)
 end
+hover(hovered, false)
+GameTooltip:Hide()
+-- What crafting costs and makes, after the prices.
+run("show flask")
+hovered = rowFor("Flask of the Titans")
+hover(hovered, true)
+GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", -260, 0)
+GoldbookWindow.right = (SCREEN_WIDTH + GoldbookWindow.width) / 2 - 260
+hovered.scripts.OnEnter(hovered)
+captureWindow("tooltip-crafting", GameTooltip)
 hover(hovered, false)
 GameTooltip:Hide()
 GoldbookWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
