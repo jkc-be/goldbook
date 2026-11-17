@@ -31,10 +31,14 @@ local function addCraft(tooltip, craft, stack)
   end
 end
 
-local function addPrices(tooltip, link)
+local function addPrices(tooltip, link, itemID)
   -- In restricted content the link can be a secret value that must not be read.
-  if not link or (issecretvalue and issecretvalue(link)) then
+  if not link or (issecretvalue and (issecretvalue(link) or issecretvalue(itemID))) then
     return
+  end
+  -- A recipe's tooltip links the item the recipe makes instead of the recipe.
+  if itemID and tonumber(link:match("item:(%d+)")) ~= itemID then
+    link = "item:" .. itemID
   end
   local realmKey = ns.RealmKey()
   local key = Database.KeyFromLink(ns.db, realmKey, link)
@@ -106,8 +110,8 @@ end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall then
   TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip)
     if TOOLTIPS[tooltip:GetName() or ""] then
-      local _, link = TooltipUtil.GetDisplayedItem(tooltip)
-      addPrices(tooltip, link)
+      local _, link, itemID = TooltipUtil.GetDisplayedItem(tooltip)
+      addPrices(tooltip, link, itemID)
     end
   end)
 else
