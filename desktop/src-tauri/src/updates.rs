@@ -192,7 +192,37 @@ async fn download(client: &reqwest::Client, url: &str, maximum: usize) -> Result
     }
     Ok(bytes)
 }
-async fn update_addon(app: &tauri::AppHandle) -> Result<()> {
+// The beta feed is missing until the first beta is published, so one answering feed is enough.
+fn newer<T, E: std::fmt::Display, K: Ord>(
+    release: Result<T, E>,
+    beta: Result<T, E>,
+    key: impl Fn(&T) -> K,
+) -> Result<T, E> {
+    match (release, beta) {
+        (Ok(release), Ok(beta)) => Ok(if key(&beta) > key(&release) {
+            beta
+        } else {
+            release
+        }),
+        (Ok(release), Err(error)) => {
+            eprintln!("Beta update feed failed: {error:#}");
+            Ok(release)
+        }
+        (Err(error), Ok(beta)) => {
+            eprintln!("Release update feed failed: {error:#}");
+            Ok(beta)
+        }
+        (Err(release), Err(beta)) => {
+            eprintln!("Beta update feed failed: {beta:#}");
+            Err(release)
+        }
+    }
+}
+async fn fetch_addon(http: &reqwest::Client, url: &str) -> Result<(AddonBundle, Vec<u8>)> {
+    let bytes = download(http, url, MAX_ADDON).await?;
+    Ok((signed_addon(&bytes)?, bytes))
+}
+async fn update_addon(app: &tauri::AppHandle, beta: bool) -> Result<()> {
     if !app.state::<crate::AppState>().config.exists() {
         return Ok(());
     }
@@ -206,8 +236,14 @@ async fn update_addon(app: &tauri::AppHandle) -> Result<()> {
     let http = reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
         .build()?;
-    let bytes = download(&http, &format!("{ROOT}/addon.json"), MAX_ADDON).await?;
-    let bundle = signed_addon(&bytes)?;
+    let release = format!("{ROOT}/addon.json");
+    let (bundle, bytes) = if beta {
+        let beta = format!("{ROOT}/beta/addon.json");
+        let (release, beta) = tokio::join!(fetch_addon(&http, &release), fetch_addon(&http, &beta));
+        newer(release, beta, |(bundle, _)| bundle.sequence)?
+    } else {
+        fetch_addon(&http, &release).await?
+    };
     if !newer_than_bundled(&bundle) {
         addon(
             app,
@@ -261,17 +297,30 @@ async fn update_addon(app: &tauri::AppHandle) -> Result<()> {
     drop(settings);
     Ok(())
 }
-async fn update_client(app: &tauri::AppHandle) -> Result<()> {
+async fn update_client(app: &tauri::AppHandle, beta: bool) -> Result<()> {
     if app.state::<Updates>().ready.lock().unwrap().is_some() {
         return Ok(());
     }
     client(app, ClientStatus::Checking);
-    let update = app
+    let release = app
         .updater_builder()
         .timeout(Duration::from_secs(120))
-        .build()?
-        .check()
-        .await?;
+        .build()?;
+    let update = if beta {
+        let beta = app
+            .updater_builder()
+            .endpoints(vec![format!("{ROOT}/beta/latest.json").parse()?])?
+            .timeout(Duration::from_secs(120))
+            .build()?;
+        let (release, beta) = tokio::join!(release.check(), beta.check());
+        newer(release, beta, |update| {
+            update
+                .as_ref()
+                .and_then(|update| semver::Version::parse(&update.version).ok())
+        })?
+    } else {
+        release.check().await?
+    };
     if let Some(update) = update {
         let version = update.version.clone();
         client(
@@ -307,7 +356,9 @@ pub async fn check_updates(app: tauri::AppHandle) {
     let Ok(_operation) = updates.operation.try_lock() else {
         return;
     };
-    let (client_result, addon_result) = tokio::join!(update_client(&app), update_addon(&app));
+    let beta = crate::settings::read(&app.state::<crate::AppState>().config).beta_updates;
+    let (client_result, addon_result) =
+        tokio::join!(update_client(&app, beta), update_addon(&app, beta));
     if let Err(error) = client_result {
         eprintln!("Client update failed: {error:#}");
         client(
@@ -396,5 +447,52 @@ mod tests {
         );
         assert!(verified_addon(&[], b"bad-signature", key).is_err());
         assert!(verified_addon(&vec![0; MAX_ADDON + 1], b"", key).is_err());
+    }
+    #[test]
+    fn beta_clients_take_the_higher_version_and_fall_back_to_the_answering_feed() {
+        let version = |text: &str| Some(semver::Version::parse(text).unwrap());
+        let pick = |release: Result<Option<semver::Version>, &'static str>,
+                    beta: Result<Option<semver::Version>, &'static str>| {
+            newer(release, beta, Clone::clone)
+        };
+        assert_eq!(
+            pick(Ok(version("0.6.0")), Ok(version("0.6.0-beta.2"))),
+            Ok(version("0.6.0"))
+        );
+        assert_eq!(
+            pick(Ok(version("0.5.6")), Ok(version("0.6.0-beta.1"))),
+            Ok(version("0.6.0-beta.1"))
+        );
+        assert_eq!(
+            pick(Ok(None), Ok(version("0.6.0-beta.1"))),
+            Ok(version("0.6.0-beta.1"))
+        );
+        assert_eq!(pick(Ok(None), Err("404")), Ok(None));
+        assert_eq!(
+            pick(Err("offline"), Ok(version("0.6.0-beta.1"))),
+            Ok(version("0.6.0-beta.1"))
+        );
+        assert_eq!(
+            pick(Err("release offline"), Err("beta 404")),
+            Err("release offline")
+        );
+    }
+    #[test]
+    fn beta_addons_take_the_higher_sequence_and_ties_go_to_the_release() {
+        let pick = |release: (u64, &'static str), beta: (u64, &'static str)| {
+            newer::<_, &str, _>(Ok(release), Ok(beta), |(sequence, _)| *sequence)
+        };
+        assert_eq!(
+            pick((1700000200, "release"), (1700000100, "beta")),
+            Ok((1700000200, "release"))
+        );
+        assert_eq!(
+            pick((1700000100, "release"), (1700000200, "beta")),
+            Ok((1700000200, "beta"))
+        );
+        assert_eq!(
+            pick((1700000200, "release"), (1700000200, "beta")),
+            Ok((1700000200, "release"))
+        );
     }
 }
