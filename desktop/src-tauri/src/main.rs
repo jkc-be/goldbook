@@ -425,6 +425,10 @@ async fn save(app: tauri::AppHandle, input: Settings) -> Reply {
         apply_login(&app, settings.open_at_login)?;
         stop_sync(&app);
         settings::write(&state.config, &settings)?;
+        if settings.beta_updates != previous.beta_updates {
+            // Spawned, not awaited: save holds AppState.operation, which update_addon also takes.
+            tauri::async_runtime::spawn(updates::check_updates(app.clone()));
+        }
         let settings = connect(&app, settings).await?;
         let message = format!("Installed the addon in {} game {}. Restart World of Warcraft if this is the first time.", installed.len(), if installed.len() == 1 { "folder" } else { "folders" });
         Ok::<_, anyhow::Error>((settings, message))
