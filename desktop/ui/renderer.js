@@ -207,6 +207,7 @@ async function save(event) {
       openAtLogin: field("login").checked,
       autoSync: field("auto").checked,
       syncMinutes: Number(field("minutes").value),
+      betaUpdates: field("beta").checked,
     });
     notify(result.message);
     if (result.settings?.api) {
@@ -279,6 +280,7 @@ async function fill() {
   field("auto").checked = initial.settings.autoSync;
   field("minutes").value = String(initial.settings.syncMinutes);
   field("minutes").disabled = !initial.settings.autoSync;
+  field("beta").checked = initial.settings.betaUpdates;
   showStatus(initial.status);
   drawSession(initial.settings.battlenetSession);
   defaultApi = initial.defaultApi;
