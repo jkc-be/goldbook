@@ -19,17 +19,21 @@ end
 local REALM, NOW, DAY = "Faramon-Horde", time(), 24 * 3600
 local FLASK, BRONZE, WATER = 17635, 2659, "7080"
 
--- scans = { { at, { [key] = lowest buyout } } }, oldest first; merchant and
--- vendor prices by item id.
+-- prices = { [key] = lowest buyout }.
+local function scan(db, at, prices)
+  local rows = {}
+  for key, min in pairs(prices) do
+    rows[#rows + 1] = { key = key, min = min, mv = 0, qty = 5, n = 1 }
+  end
+  Database.ApplyScan(db, { realm = "Faramon", faction = "Horde", region = "EU", at = at, mode = "browse", by = "Test",
+    build = "1", rows = rows, names = {} })
+end
+
+-- scans = { { at, prices } }, oldest first; merchant and vendor prices by item id.
 local function market(scans, merchant, vendor)
   local db = Database.Init(nil)
-  for _, scan in ipairs(scans) do
-    local rows = {}
-    for key, min in pairs(scan[2]) do
-      rows[#rows + 1] = { key = key, min = min, mv = 0, qty = 5, n = 1 }
-    end
-    Database.ApplyScan(db, { realm = "Faramon", faction = "Horde", region = "EU", at = scan[1], mode = "browse", by = "Test",
-      build = "1", rows = rows, names = {} })
+  for _, prices in ipairs(scans) do
+    scan(db, prices[1], prices[2])
   end
   for itemID, price in pairs(merchant or {}) do
     db.merchant[itemID] = price
@@ -100,6 +104,107 @@ local partly = Crafting.ForItem(market({ { NOW, { ["7076"] = 5000, [WATER] = 900
 eq(partly.spell .. " " .. partly.cost .. " " .. partly.unpriced, "17561 5000 0", "a recipe priced in full beats a cheaper one with a reagent unpriced")
 eq(tostring(Crafting.ForItem(essences, REALM, "2589")) .. " " .. tostring(Crafting.ForItem(essences, REALM, "13510") ~= nil),
   "nil true", "an item no recipe makes has no estimate")
+
+local function plain(text)
+  return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
+-- The text of the row's cells the view uses.
+local function cells(index)
+  local texts = {}
+  for _, cell in ipairs(GoldbookWindow.rows[index].cells) do
+    if cell.shown then
+      texts[#texts + 1] = plain(cell.text)
+    end
+  end
+  return table.concat(texts, " | ")
+end
+
+-- The cards above the list, as "KEY value detail".
+local function cards()
+  local texts = {}
+  for index, card in ipairs(GoldbookWindow.cards.cards) do
+    texts[index] = plain(card.key.text .. " " .. card.value.text .. " " .. card.detail.text)
+  end
+  return table.concat(texts, " / ")
+end
+
+-- The title line: its title, figure, text after them and tags.
+local function head()
+  local window = GoldbookWindow.head
+  local parts = { window.title.text, window.figure.text }
+  for _, tag in ipairs(window.tags) do
+    if tag.shown then
+      parts[#parts + 1] = tag.label.text
+    end
+  end
+  return plain(table.concat(parts, " | "))
+end
+
+-- A segmented control's choices, the picked one in brackets.
+local function choices(control)
+  local texts = {}
+  for _, button in ipairs(control.buttons) do
+    if button.shown and control.shown then
+      texts[#texts + 1] = button.picked.shown and ("[" .. button.label.text .. "]") or button.label.text
+    end
+  end
+  return table.concat(texts, " ")
+end
+
+local function click(widget)
+  widget.scripts.OnClick(widget)
+end
+
+local NAMES = {
+  [13510] = { "Flask of the Titans", 1, 0 }, [8846] = { "Gromsblood", 1, 0 }, [13423] = { "Stonescale Oil", 1, 0 },
+  [13468] = { "Black Lotus", 2, 0 }, [8925] = { "Crystal Vial", 1, 5 }, [2589] = { "Linen Cloth", 1, 13 },
+}
+for itemID, item in pairs(NAMES) do
+  Stub.items[itemID] = { name = item[1], quality = item[2], vendor = item[3], cached = true }
+end
+local priced = {}
+for key, min in pairs(TITANS) do
+  priced[key] = min
+end
+priced["2589"] = 120
+GoldbookDB = market({ { NOW, priced } }, { [8925] = 100 })
+ns.db = GoldbookDB
+
+SlashCmdList.GOLDBOOK("show")
+ns.UI.ShowItem("13510")
+eq(head(), "Flask of the Titans | 108g 41s 30c | Alchemy +43%", "the item page tags a crafted item with its profession and margin")
+eq(choices(GoldbookWindow.modes), "[History] Crafting", "the item page opens on the history, with crafting beside it")
+click(GoldbookWindow.modes.buttons[2])
+eq(choices(GoldbookWindow.modes) .. " / " .. GoldbookWindow.head.back.label.text, "History [Crafting] / Back to Prices",
+  "Crafting shows the recipe and Back still returns to the list")
+eq(cards(), "INPUT COST 58g 63s 99c 4 reagents / SELLS FOR 102g 99s 22c Posts at 108g 41s 29c"
+  .. " / PROFIT +44g 35s 23c After the 5% cut / MARGIN +43% Alchemy 300", "the cards add up one craft")
+eq(GoldbookWindow.headers[1].text .. " " .. GoldbookWindow.headers[5].text, "REAGENT COST ↓", "the reagents come dearest first")
+eq(cells(1) .. " / " .. cells(4), "Black Lotus | 1 | 49g 87s 99c | Auction | 49g 87s 99c / Crystal Vial | 1 | 1s 00c | Merchant | 1s 00c",
+  "each reagent shows its count, price, where to buy it and its cost, named once the client answers")
+eq(plain(GoldbookWindow.status.text), "Reagents cost the cheaper of the auction house and a merchant · Click a reagent to search for it",
+  "the status says how reagents are priced")
+click(GoldbookWindow.head.back)
+eq(GoldbookWindow.headers[1].text .. " " .. tostring(GoldbookWindow.modes.shown), "ITEM ↑ false", "Back leaves the item page for the list")
+
+ns.UI.ShowItem("2589")
+eq(head() .. " / " .. choices(GoldbookWindow.modes), "Linen Cloth | 1s 20c / ", "an item nothing crafts has no crafting mode")
+
+GameTooltip.lines, GameTooltip.itemLink = {}, "|Hitem:13510::::::|h[Flask of the Titans]|h"
+Stub.tooltipCalls[1](GameTooltip)
+eq(plain(table.concat(GameTooltip.lines, " / ")):match("Crafting.*%)"), "Crafting cost = 58g 63s 99c /   Craft profit = +44g 35s 23c (+43%)",
+  "the tooltip adds what crafting costs and makes")
+GoldbookDB.prices["Faramon-Horde"]["13468"] = nil
+GameTooltip.lines = {}
+Stub.tooltipCalls[1](GameTooltip)
+eq(plain(GameTooltip.lines[#GameTooltip.lines - 1]), "  Crafting cost: 1 reagent has no price", "a reagent without a price makes it say so instead")
+scan(GoldbookDB, NOW, { ["2840"] = 150, ["3576"] = 200, ["2841"] = 400 })
+Stub.shift, GameTooltip.owner, GameTooltip.lines, GameTooltip.itemLink = true, { count = 20 }, {}, "|Hitem:2841::::::|h[Bronze Bar]|h"
+Stub.tooltipCalls[1](GameTooltip)
+Stub.shift, GameTooltip.owner = false, nil
+eq(plain(table.concat(GameTooltip.lines, " / ")):match("Crafting.*%)"), "Crafting cost = 35s 00c /   Craft profit = +40s 80c (+54%)",
+  "Shift over 20 bars prices 20 of the two a smelt makes")
 
 io.write(("%d checks, %d failures\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
