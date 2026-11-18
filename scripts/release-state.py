@@ -422,30 +422,34 @@ def wait_for_addon_release(http, commit, interval, timeout, sleep=time.sleep, cl
 
 
 def wait_for_checks(http, revision, interval, timeout, sleep=time.sleep, clock=time.monotonic):
-    """Wait for the Check run that the push of `revision` to main started, and require it to pass."""
+    """Wait for the Check run that the push of `revision` to main or to a
+    release branch started, and require it to pass. make pick-release pushes
+    the commit a picked release builds to release/<version>."""
     deadline = clock() + timeout
     while True:
         listing = get_json(http, f"{API}/repos/{REPOSITORY}/actions/workflows/check.yml/runs"
-                                 f"?head_sha={revision}&event=push&branch=main&per_page=100", authenticated=True)
-        runs = listing["workflow_runs"] if listing else []
+                                 f"?head_sha={revision}&event=push&per_page=100", authenticated=True)
+        runs = [run for run in (listing["workflow_runs"] if listing else [])
+                if run["head_branch"] == "main" or run["head_branch"].startswith("release/")]
         run = max(runs, key=lambda r: r["id"], default=None)
         if run is None:
-            message = f"No Check run on main for {revision} yet"
+            message = f"No Check run of a push to main or a release branch for {revision} yet"
         elif run["status"] != "completed":
             message = f"Check for {revision} is {run['status']}: {run['html_url']}"
         elif run["conclusion"] == "success":
-            message = f"Check passed on main for {revision}: {run['html_url']}"
+            message = f"Check passed on {run['head_branch']} for {revision}: {run['html_url']}"
             print(message, flush=True)
             return message
         else:
-            raise Failure(f"Check ended with {run['conclusion']} on main for {revision}: {run['html_url']}. "
-                          "Re-run it if it was a flake, otherwise fix main and prepare the release again. "
-                          "Then start a new Release build.")
+            raise Failure(f"Check ended with {run['conclusion']} on {run['head_branch']} for {revision}: "
+                          f"{run['html_url']}. Re-run it if it was a flake, otherwise fix the cause and "
+                          "prepare the release again. Then start a new Release build.")
         print(message, flush=True)
         if clock() + interval > deadline:
             if run is None:
-                raise Failure(f"No Check run on main for {revision}. Build a commit that was pushed to main, "
-                              "such as the merge commit of the release PR.")
+                raise Failure(f"No Check run of a push to main or a release branch for {revision}. "
+                              "Build a commit that was pushed to one, such as the merge commit of the "
+                              "release PR or the release commit of make pick-release.")
             raise Failure(f"Check did not finish within {timeout // 60} minutes for {revision}: {run['html_url']}")
         sleep(interval)
 
@@ -585,7 +589,8 @@ def main(argv=None, http=None):
     feed.add_argument("--revision", required=True)
     build_run = commands.add_parser("check-build-run", help="Check that a build run can be promoted")
     build_run.add_argument("--run-id", required=True)
-    checks = commands.add_parser("wait-checks", help="Wait for the Check run of a commit pushed to main")
+    checks = commands.add_parser("wait-checks", help="Wait for the Check run of a commit pushed to main "
+                                                    "or a release branch")
     checks.add_argument("--revision", required=True)
     checks.add_argument("--interval", type=int, default=60)
     checks.add_argument("--timeout", type=int, default=1800)

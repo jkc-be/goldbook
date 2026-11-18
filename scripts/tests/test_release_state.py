@@ -522,13 +522,14 @@ class DownstreamWait(unittest.TestCase):
 
 
 class Checks(unittest.TestCase):
-    URL = f"{SOURCE}/actions/workflows/check.yml/runs?head_sha={R1}&event=push&branch=main&per_page=100"
+    URL = f"{SOURCE}/actions/workflows/check.yml/runs?head_sha={R1}&event=push&per_page=100"
 
     def runs(self, world, *runs):
         world.urls[self.URL] = {"workflow_runs": [
-            {"id": run_id, "status": status, "conclusion": conclusion,
+            {"id": run_id, "status": status, "conclusion": conclusion, "head_branch": branch,
              "html_url": f"https://github.com/jkc-be/goldbook/actions/runs/{run_id}"}
-            for run_id, status, conclusion in runs]}
+            for run_id, status, conclusion, branch in
+            (run if len(run) == 4 else (*run, "main") for run in runs)]}
 
     def wait(self, world, polls):
         clock = [0]
@@ -547,6 +548,19 @@ class Checks(unittest.TestCase):
         self.assertEqual(message, f"Check passed on main for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
         self.assertIn(self.URL, world.authenticated)
 
+    def test_accepts_the_run_of_a_push_to_a_release_branch(self):
+        world = World()
+        self.runs(world, (31, "completed", "success", "release/0.6.0"))
+        self.assertEqual(self.wait(world, []),
+                         f"Check passed on release/0.6.0 for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
+
+    def test_ignores_runs_of_pushes_to_other_branches(self):
+        world = World()
+        self.runs(world, (31, "completed", "success", "feature/release/0.6.0"), (32, "completed", "success", "mainline"))
+        with self.assertRaises(STATE.Failure) as raised:
+            self.wait(world, [])
+        self.assertTrue(str(raised.exception).startswith(f"No Check run of a push to main or a release branch for {R1}."))
+
     def test_the_newest_run_decides(self):
         world = World()
         self.runs(world, (31, "completed", "failure"), (32, "completed", "success"))
@@ -559,15 +573,15 @@ class Checks(unittest.TestCase):
             self.wait(world, [])
         self.assertEqual(str(raised.exception), (
             f"Check ended with failure on main for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31. "
-            "Re-run it if it was a flake, otherwise fix main and prepare the release again. "
+            "Re-run it if it was a flake, otherwise fix the cause and prepare the release again. "
             "Then start a new Release build."))
 
     def test_a_commit_without_a_push_run_is_refused_after_the_timeout(self):
         with self.assertRaises(STATE.Failure) as raised:
             self.wait(World(), [])
         self.assertEqual(str(raised.exception), (
-            f"No Check run on main for {R1}. Build a commit that was pushed to main, "
-            "such as the merge commit of the release PR."))
+            f"No Check run of a push to main or a release branch for {R1}. Build a commit that was pushed "
+            "to one, such as the merge commit of the release PR or the release commit of make pick-release."))
 
     def test_gives_up_on_a_run_that_does_not_finish(self):
         world = World()

@@ -95,6 +95,9 @@ def diff_base():
     if event == 'pull_request':
         return os.environ.get('BASE_SHA', '')
     if event == 'push':
+        # A release builds the commit of a release branch, so its push runs every job.
+        if os.environ.get('GITHUB_REF', '').startswith('refs/heads/release/'):
+            return None
         before = os.environ.get('BEFORE_SHA', '')
         if before and set(before) <= {'0'}:
             return None
