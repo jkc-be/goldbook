@@ -15,7 +15,14 @@ does not count. See changes/README.md for the rules.
 - Release rule: a pull request with the release label is what
   make prepare-release produces. It sets a higher version in every field,
   adds that version's CHANGELOG.md section, deletes every change file, and
-  changes nothing else.
+  changes nothing else. A picked release deletes the change files of the
+  pull requests it picks, and keeps the others.
+- Pick rule: a pull request that merges a picked release into main, as
+  make pick-release opens it, ships only commits of main. Its first parent is
+  the release commit. Every commit between the last release and it is a clean
+  cherry-pick of a commit of main, except the release commit at the end, which
+  only edits CHANGELOG.md and the version fields and deletes change files. A
+  picked beta has no release commit, and merging it changes nothing on main.
 """
 import importlib.util
 import json
@@ -41,6 +48,9 @@ PRODUCT = ("addon/", "desktop/", "web/", "crates/", "server/")
 TAURI = "desktop/src-tauri/tauri.conf.json"
 VERSIONED = sorted({path for path, _ in SET_VERSION.FIELDS})
 RELEASE_FIX = "To prepare a release, run make prepare-release VERSION=x.y.z on a branch from main and add the release label."
+PICK_FIX = "Start the release again with make pick-release."
+# The line git cherry-pick -x adds to the message.
+PICKED = re.compile(r"^\(cherry picked from commit ([0-9a-f]{40})\)$", re.MULTILINE)
 
 
 def git(*args):
@@ -74,6 +84,23 @@ def version(commit):
 
 def numbers(value):
     return tuple(map(int, value.split(".")))
+
+
+def is_ancestor(commit, other):
+    return subprocess.run(["git", "merge-base", "--is-ancestor", commit, other], cwd=ROOT).returncode == 0
+
+
+def parents(commit):
+    return git("rev-list", "--parents", "-n", "1", commit).split()[1:]
+
+
+def change_files(commit):
+    return {path for path in git("ls-tree", "-r", "--name-only", commit, "changes/").splitlines()
+            if is_change_file(path)}
+
+
+def short(commit):
+    return commit[:12]
 
 
 def version_check():
@@ -139,7 +166,138 @@ def ordinary_problems(base, changed):
     return found
 
 
-def release_problems(base, changed):
+class Picked:
+    """A pull request that merges a picked release into main. `release` is its
+    first parent, the commit the release builds; `start` is the last release,
+    where the release branch left main; `commits` lists each commit between
+    them, oldest first, with the commit of main it picks, or None."""
+
+    def __init__(self, release, start, commits):
+        self.release, self.start, self.commits = release, start, commits
+
+    @classmethod
+    def find(cls, base, release_label):
+        """The picked release HEAD merges, or None when HEAD merges none. A merge
+        whose first parent main does not hold counts as one when that side holds
+        cherry-picks, when the pull request has the release label, or when it
+        changes nothing on main. So a release side without picks cannot pass as
+        an ordinary release or as a merge that changes nothing."""
+        heads = parents("HEAD")
+        if len(heads) != 2 or is_ancestor(heads[0], base):
+            return None
+        release = heads[0]
+        start = git("merge-base", release, base).strip()
+        commits = []
+        for commit in git("rev-list", "--reverse", "--topo-order", f"{start}..{release}").split():
+            originals = PICKED.findall(git("log", "-1", "--format=%B", commit))
+            commits.append((commit, originals[-1] if originals else None))
+        if not (any(original for _, original in commits) or release_label
+                or not git("diff", "--name-only", base, "HEAD").strip()):
+            return None
+        return cls(release, start, commits)
+
+    def bookkeeping(self):
+        """The commit the release commits start from: the last pick."""
+        picks = [commit for commit, original in self.commits if original]
+        return picks[-1] if picks else self.start
+
+    def shipped(self):
+        """The change files of the pull requests the release picks."""
+        added = git("log", "--format=", "--name-only", "--diff-filter=A",
+                    f"{self.start}..{self.release}", "--", "changes/")
+        return {path for path in added.split() if is_change_file(path)}
+
+
+def change_of(commit):
+    """What `commit` changes, without context lines, line numbers or blob
+    hashes, so a clean cherry-pick compares equal to the commit it picks."""
+    diff = git("diff", "-U0", "--binary", "--no-renames", "--no-color", "--no-ext-diff", f"{commit}^", commit)
+    return [line for line in diff.splitlines() if not line.startswith(("index ", "@@"))]
+
+
+def pick_problems(picked, base, release):
+    if not any(original for _, original in picked.commits):
+        return [f"Pick rule: this pull request merges {short(picked.release)}, but none of its commits since "
+                "the last release is a cherry-pick of main. A picked release comes from make pick-release. "
+                "A release of all of main is one commit on top of main: rebase it instead of merging main "
+                "into it."]
+    found = []
+    after = None
+    for commit, original in picked.commits:
+        if len(parents(commit)) != 1:
+            found.append(f"Pick rule: {short(commit)} is a merge, but a picked release holds only "
+                         f"cherry-picks and its release commit. {PICK_FIX}")
+        elif original is None:
+            after = after or commit
+        elif after:
+            found.append(f"Pick rule: {short(commit)} picks {short(original)} after {short(after)}, "
+                         f"but the cherry-picks come first and the release commit last. {PICK_FIX}")
+        elif not is_ancestor(original, base):
+            found.append(f"Pick rule: {short(commit)} picks {short(original)}, which is not a commit "
+                         f"of main. {PICK_FIX}")
+        elif is_ancestor(original, picked.start):
+            found.append(f"Pick rule: {short(commit)} picks {short(original)}, which the last release "
+                         f"already holds. {PICK_FIX}")
+        elif change_of(commit) != change_of(original):
+            found.append(f"Pick rule: {short(commit)} does not change exactly what {short(original)} "
+                         f"changes, which it picks. {PICK_FIX}")
+    if not release:
+        if after:
+            found.append(f"Pick rule: a picked beta holds only cherry-picks, but {short(after)} is not one. "
+                         f"{PICK_FIX}")
+        changed = git("diff", "--name-only", base, "HEAD").split()
+        if changed:
+            found.append(f"Pick rule: merging a picked beta changes nothing on main, but this pull request "
+                         f"changes {', '.join(changed)}. {PICK_FIX}")
+    elif after:
+        start = picked.bookkeeping()
+        diff = git("diff", "--name-status", "--no-renames", start, picked.release)
+        edited = [path for status, path in (line.split("\t", 1) for line in diff.splitlines())
+                  if not (path == "CHANGELOG.md" or (status == "D" and is_change_file(path))
+                          or (path in VERSIONED and without_fields(path, show(start, path))
+                              == without_fields(path, show(picked.release, path))))]
+        if edited:
+            found.append(f"Pick rule: the release commit {short(picked.release)} only edits CHANGELOG.md "
+                         f"and the version fields and deletes change files, but it also changes "
+                         f"{', '.join(sorted(edited))}. {PICK_FIX}")
+    elif release:
+        found.append(f"Pick rule: the release label needs a release commit after the cherry-picks, "
+                     f"from make prepare-release. {PICK_FIX}")
+    return found
+
+
+def picked_release_problems(picked, base, current):
+    """The release rule's change files and version, for a picked release."""
+    found = []
+    shipped, at_base, at_head = picked.shipped(), change_files(base), change_files("HEAD")
+    kept = sorted(shipped & at_head)
+    if kept:
+        found.append(f"Release rule: the release picks the pull requests of {', '.join(kept)}, but this "
+                     "pull request keeps those change files. Delete them, as make pick-release does.")
+    foreign = sorted((at_base - at_head) - shipped)
+    if foreign:
+        found.append(f"Release rule: this pull request deletes {', '.join(foreign)}, but the release does "
+                     "not pick their pull requests. Restore them from main.")
+    picked_from = picked.bookkeeping()
+    edited = sorted(path for path in shipped & at_base if show(base, path) != show(picked_from, path))
+    if edited:
+        found.append(f"Release rule: main's {', '.join(edited)} differs from the one the release picks, "
+                     f"because a later pull request edited it. Pick that pull request too. {PICK_FIX}")
+    released = sorted(shipped - at_base)
+    if released:
+        found.append(f"Release rule: the release ships {', '.join(released)}, which main no longer holds "
+                     f"because an earlier release shipped them. {PICK_FIX}")
+    left = sorted(change_files(picked.release))
+    if left:
+        found.append(f"Release rule: the release commit {short(picked.release)} still holds "
+                     f"{', '.join(left)}. A release collects every change file it ships. {PICK_FIX}")
+    if current and version(picked.release) != current:
+        found.append(f"Release rule: the release commit {short(picked.release)} sets "
+                     f"{version(picked.release)}, but this pull request sets {current}. {PICK_FIX}")
+    return found
+
+
+def release_problems(base, changed, picked=None):
     found = []
     extra = [path for status, path in changed
              if not (path == "CHANGELOG.md" or path in VERSIONED or (status == "D" and is_change_file(path)))]
@@ -161,6 +319,8 @@ def release_problems(base, changed):
     if current and not re.search(rf"^## {re.escape(current)} - ", show("HEAD", "CHANGELOG.md"), flags=re.MULTILINE):
         found.append(f"Release rule: CHANGELOG.md has no \"## {current} - \" section. "
                      "Add it above the newest release, as make prepare-release does.")
+    if picked:
+        return found + picked_release_problems(picked, base, current)
     kept = set(git("ls-tree", "-r", "--name-only", "HEAD", "changes/").splitlines())
     left = sorted(path for path in git("ls-tree", "-r", "--name-only", base, "changes/").splitlines()
                   if is_change_file(path) and path in kept)
@@ -175,9 +335,11 @@ def problems(base, labels):
     base = git("merge-base", base, "HEAD").strip()
     diff = git("diff", "--name-status", "--no-renames", base, "HEAD")
     changed = [tuple(line.split("\t", 1)) for line in diff.splitlines()]
+    picked = Picked.find(base, "release" in labels)
+    found = pick_problems(picked, base, "release" in labels) if picked else []
     if "release" in labels:
-        return release_problems(base, changed)
-    found = ordinary_problems(base, changed)
+        return found + release_problems(base, changed, picked)
+    found += ordinary_problems(base, changed)
     if "no-changes" not in labels:
         found += change_file_problems(changed)
     return found
@@ -192,9 +354,15 @@ def main():
         for problem in found:
             print("::error::" + problem if actions else problem, file=sys.stdout if actions else sys.stderr)
         sys.exit(1)
-    if "release" in labels:
+    picked = Picked.find(git("merge-base", os.environ["BASE_SHA"], "HEAD").strip(), "release" in labels)
+    if "release" in labels and picked:
+        print(f"This release pull request sets {version_check()[0]}, adds its changelog section "
+              "and collects the change files of the commits it picks from main.")
+    elif "release" in labels:
         print(f"This release pull request sets {version_check()[0]}, adds its changelog section "
               "and collects every change file.")
+    elif picked:
+        print("This pull request merges a beta picked from the last release and changes nothing on main.")
     elif "no-changes" in labels:
         print("The no-changes label is set, so no change file is needed. "
               "The version and the CHANGELOG.md sections are unchanged.")

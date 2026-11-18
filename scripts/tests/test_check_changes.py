@@ -244,6 +244,197 @@ class CheckChangesTests(unittest.TestCase):
             "Release rule: CHANGELOG.md has no \"## 1.2.10 - \" section. "
             "Add it above the newest release, as make prepare-release does.\n")))
 
+    # Pick rule, and the release rule for a picked release.
+
+    def start_picks(self):
+        """Release 1.2.10 on main, then commit a with an addon change and b with
+        a website change, each with its change file. Leaves release/1.2.11 checked
+        out at the release with a picked."""
+        self.git("checkout", "-q", "main")
+        self.prepare_release("1.2.10")
+        tag = self.commit("release 1.2.10")
+        self.write("addon/Goldbook/Core.lua", "local _, ns = ...\nns.a = 1\n")
+        self.write("changes/addon-a.md", "- Remember a.\n")
+        self.a = self.commit("Add a (#1)")
+        self.write("web/app.js", "app();\n")
+        self.write("changes/website-b.md", "- Draw b.\n")
+        self.b = self.commit("Add b (#2)")
+        self.git("checkout", "-q", "-b", "release/1.2.11", tag)
+        self.git("cherry-pick", "-x", self.a)
+        self.pick = self.git("rev-parse", "HEAD")
+
+    def merge(self, release, beta=False, adjust=None):
+        """Checks out the commit make pick-release opens: main with the release
+        commit applied, or main unchanged for a beta, merging the release."""
+        self.git("checkout", "-q", "--detach", "main")
+        if not beta:
+            self.git("cherry-pick", "-n", release)
+        if adjust:
+            adjust()
+        tree = self.git("write-tree")
+        merged = self.git("commit-tree", tree, "-p", release, "-p", "main", "-m", "Merge")
+        self.git("checkout", "-q", "--detach", merged)
+
+    def run_check(self, labels):
+        result = subprocess.run([sys.executable, self.root / "scripts/check-changes.py"], cwd=self.root,
+                                env=dict(self.env, BASE_SHA=self.git("rev-parse", "main"), LABELS=labels),
+                                capture_output=True, text=True)
+        return result.returncode, result.stdout, result.stderr
+
+    def release_commit(self, *edits):
+        self.prepare_release("1.2.11")
+        for path, text in edits:
+            self.write(path, text)
+        return self.commit("release 1.2.11")
+
+    def test_passes_a_picked_release_that_keeps_what_it_does_not_pick(self):
+        self.start_picks()
+        self.merge(self.release_commit())
+        self.assertEqual(self.run_check('["release"]'), (0, (
+            "This release pull request sets 1.2.11, adds its changelog section "
+            "and collects the change files of the commits it picks from main.\n"), ""))
+        self.assertTrue((self.root / "changes/website-b.md").exists())
+        self.assertFalse((self.root / "changes/addon-a.md").exists())
+
+    def test_refuses_a_picked_release_that_keeps_a_picked_change_file(self):
+        self.start_picks()
+        self.merge(self.release_commit(), adjust=lambda: self.git("checkout", "main", "--", "changes/addon-a.md"))
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            "Release rule: the release picks the pull requests of changes/addon-a.md, but this pull request "
+            "keeps those change files. Delete them, as make pick-release does.\n")))
+
+    def test_refuses_a_picked_release_that_deletes_a_change_file_it_does_not_pick(self):
+        self.start_picks()
+        self.merge(self.release_commit(), adjust=lambda: self.git("rm", "-q", "changes/website-b.md"))
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            "Release rule: this pull request deletes changes/website-b.md, but the release does not pick "
+            "their pull requests. Restore them from main.\n")))
+
+    def test_refuses_a_pick_that_changes_more_than_its_commit_of_main(self):
+        self.start_picks()
+        self.write("addon/Goldbook/Core.lua", "local _, ns = ...\nns.a = 2\n")
+        self.git("commit", "-q", "--amend", "--no-edit", "-a")
+        pick = self.git("rev-parse", "HEAD")
+        self.merge(self.release_commit())
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            f"Pick rule: {pick[:12]} does not change exactly what {self.a[:12]} changes, which it picks. "
+            "Start the release again with make pick-release.\n")))
+
+    def test_refuses_a_release_commit_that_changes_code(self):
+        self.start_picks()
+        release = self.release_commit(("addon/Goldbook/Core.lua", "local _, ns = ...\nns.a = 3\n"))
+        self.merge(release)
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            f"Pick rule: the release commit {release[:12]} only edits CHANGELOG.md and the version fields "
+            "and deletes change files, but it also changes addon/Goldbook/Core.lua. "
+            "Start the release again with make pick-release.\n"
+            "Release rule: a release pull request only edits CHANGELOG.md and the version fields "
+            "and deletes change files, but this one also changes addon/Goldbook/Core.lua. "
+            "Move those changes to their own pull request, and start the release from main "
+            "with make prepare-release VERSION=x.y.z.\n")))
+
+    def test_refuses_a_pick_of_a_commit_that_is_not_on_main(self):
+        self.start_picks()
+        self.git("checkout", "-q", "-b", "elsewhere", self.a)
+        self.write("docs/notes.md", "Other notes.\n")
+        other = self.commit("Not on main")
+        self.git("checkout", "-q", "release/1.2.11")
+        self.git("cherry-pick", "-x", other)
+        pick = self.git("rev-parse", "HEAD")
+        self.merge(self.release_commit())
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            f"Pick rule: {pick[:12]} picks {other[:12]}, which is not a commit of main. "
+            "Start the release again with make pick-release.\n")))
+
+    def test_passes_a_picked_beta(self):
+        self.start_picks()
+        self.merge(self.pick, beta=True)
+        self.assertEqual(self.run_check('["no-changes"]'), (0, (
+            "This pull request merges a beta picked from the last release and changes nothing on main.\n"), ""))
+
+    def test_refuses_a_picked_beta_with_a_commit_that_is_not_a_pick(self):
+        self.start_picks()
+        self.write("docs/notes.md", "Beta notes.\n")
+        extra = self.commit("Edit notes")
+        self.merge(extra, beta=True)
+        self.assertEqual(self.run_check('["no-changes"]'), (1, "", (
+            f"Pick rule: a picked beta holds only cherry-picks, but {extra[:12]} is not one. "
+            "Start the release again with make pick-release.\n")))
+
+    def test_refuses_a_picked_beta_merge_that_changes_main(self):
+        self.start_picks()
+        self.merge(self.pick, beta=True, adjust=lambda: (self.write("docs/notes.md", "Merged notes.\n"),
+                                                          self.git("add", "docs/notes.md")))
+        self.assertEqual(self.run_check('["no-changes"]'), (1, "", (
+            "Pick rule: merging a picked beta changes nothing on main, but this pull request changes "
+            "docs/notes.md. Start the release again with make pick-release.\n")))
+
+    def test_refuses_a_pick_that_puts_other_bytes_in_a_binary_file(self):
+        self.start_picks()
+        self.git("checkout", "-q", "main")
+        (self.root / "desktop/icon.png").write_bytes(b"\x89PNG\x00one")
+        self.write("changes/app-icon.md", "- Draw the icon.\n")
+        icon = self.commit("Add the icon (#4)")
+        self.git("checkout", "-q", "release/1.2.11")
+        self.git("cherry-pick", "-x", icon)
+        (self.root / "desktop/icon.png").write_bytes(b"\x89PNG\x00two")
+        self.git("commit", "-q", "--amend", "--no-edit", "-a")
+        pick = self.git("rev-parse", "HEAD")
+        self.merge(self.release_commit())
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            f"Pick rule: {pick[:12]} does not change exactly what {icon[:12]} changes, which it picks. "
+            "Start the release again with make pick-release.\n")))
+
+    def test_refuses_a_release_label_merge_whose_release_side_picks_nothing(self):
+        self.start_picks()
+        self.git("reset", "-q", "--hard", "HEAD^")
+        self.write("addon/Goldbook/Core.lua", "local _, ns = ...\nns.hidden = true\n")
+        self.write("changes/addon-hidden.md", "- Hide.\n")
+        self.commit("Not on main")
+        release = self.release_commit()
+        self.merge(release, adjust=lambda: self.git("rm", "-q", "--cached", "--ignore-unmatch",
+                                                    "changes/addon-hidden.md"))
+        code, stdout, stderr = self.run_check('["release"]')
+        self.assertEqual((code, stdout), (1, ""))
+        self.assertTrue(stderr.startswith(
+            f"Pick rule: this pull request merges {release[:12]}, but none of its commits since the last "
+            "release is a cherry-pick of main."), stderr)
+
+    def test_refuses_a_merge_that_changes_nothing_and_picks_nothing(self):
+        self.start_picks()
+        self.git("reset", "-q", "--hard", "HEAD^")
+        self.write("addon/Goldbook/Core.lua", "local _, ns = ...\nns.hidden = true\n")
+        hidden = self.commit("Not on main")
+        self.merge(hidden, beta=True)
+        self.assertEqual(self.run_check('["no-changes"]')[0], 1)
+
+    def test_refuses_a_picked_release_whose_change_file_main_edited_later(self):
+        self.start_picks()
+        self.git("checkout", "-q", "main")
+        self.write("changes/addon-a.md", "- Remember a.\n- And remember it twice.\n")
+        self.commit("Remember a twice (#4)")
+        self.git("checkout", "-q", "release/1.2.11")
+        release = self.release_commit()
+        self.git("checkout", "-q", "--detach", "main")
+        subprocess.run(["git", "cherry-pick", "-n", release], cwd=self.root, env=self.env, capture_output=True)
+        self.git("rm", "-q", "-f", "changes/addon-a.md")
+        merged = self.git("commit-tree", self.git("write-tree"), "-p", release, "-p", "main", "-m", "Merge")
+        self.git("checkout", "-q", "--detach", merged)
+        self.assertEqual(self.run_check('["release"]'), (1, "", (
+            "Release rule: main's changes/addon-a.md differs from the one the release picks, because a later "
+            "pull request edited it. Pick that pull request too. Start the release again with "
+            "make pick-release.\n")))
+
+    def test_a_feature_branch_that_merged_main_is_not_a_picked_release(self):
+        self.write("docs/notes.md", "Feature notes.\n")
+        self.commit("Feature")
+        self.git("checkout", "-q", "main")
+        self.write("docs/other.md", "Main notes.\n")
+        self.commit("Main")
+        self.git("checkout", "-q", "feature")
+        self.git("merge", "-q", "--no-edit", "main")
+        self.assertEqual(self.run_check("[]"), (0, PASSED, ""))
+
 
 if __name__ == "__main__":
     unittest.main()

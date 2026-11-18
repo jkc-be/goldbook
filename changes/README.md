@@ -33,7 +33,7 @@ CI, gets the `no-changes` label instead of a file.
 
 ## The changes check
 
-The `changes` check on each pull request enforces four rules. Each failure
+The `changes` check on each pull request enforces five rules. Each failure
 names its rule and how to fix it.
 
 - **Change file rule.** A pull request that touches `addon/`, `desktop/`,
@@ -52,6 +52,16 @@ names its rule and how to fix it.
   holds one version, higher than `main`'s; `CHANGELOG.md` has a
   `## <version> - ` section; every change file is deleted; and nothing else
   changes, apart from the prose of the new section. It needs no change file.
+  A picked release deletes the change files of the pull requests it picks and
+  keeps the others.
+- **Pick rule.** A pull request that merges a picked release into `main`
+  ships only commits of `main`. Its first parent is the commit the release
+  builds. Every commit between the last release and that commit is a clean
+  cherry-pick of a commit of `main`, except the release commit at the end,
+  which only edits `CHANGELOG.md` and the version fields and deletes change
+  files. A picked beta has no release commit, and merging it changes nothing
+  on `main`. A merge with the `release` label, or one that changes nothing on
+  `main`, must hold such cherry-picks.
 
 To prepare a release, branch from `main`, run
 `make prepare-release VERSION=x.y.z`, edit the new section's prose, and open
