@@ -3,7 +3,10 @@ name: Check
 on:
   pull_request:
   push:
-    branches: [main]
+    # Release build requires the Check run of the push of the commit it builds:
+    # a commit of main, or the release commit make pick-release pushes to
+    # release/<version>.
+    branches: [main, 'release/**']
   workflow_dispatch:
 
 permissions:

@@ -125,11 +125,12 @@ the server image, tagged `server:<revision>` and labelled
 URLs and `addon.json` name it. `Goldbook-server-image` records it in
 `image.json`.
 
-The checks are not run again. Every push to `main` starts **Check** for
-exactly that commit, and the `check` job waits up to 30 minutes for that run
-and requires it to pass. So the revision must be a commit that was pushed to
-`main`, such as the release PR's merge commit, not a commit in the middle of a
-merged branch. `check.yml` takes no ref input, so its jobs never run code
+The checks are not run again. Every push to `main` or to a `release/` branch
+starts **Check** for exactly that commit, and the `check` job waits up to 30
+minutes for that run and requires it to pass. So the revision must be a
+commit that was pushed to `main`, such as the release PR's merge commit, or to
+a release branch, not a commit in the middle of a merged branch. A push to a
+release branch runs every **Check** job, whatever the push changed. `check.yml` takes no ref input, so its jobs never run code
 checked out from an input while holding `main`'s caches. The build jobs do
 check out the input revision, but only after `guard` has confirmed it is in
 `main`'s history, so they run nothing that was not already merged.
@@ -154,7 +155,7 @@ The `guard` job refuses to build when:
 
 A build run proves:
 
-- the **Check** run of the revision's push to `main` passed
+- the **Check** run of the revision's push to `main` or a release branch passed
 - the installers build and are signed
 - the addon update is signed
 - the feed has the layout the OVH helper accepts

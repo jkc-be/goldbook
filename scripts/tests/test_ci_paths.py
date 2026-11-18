@@ -65,8 +65,9 @@ class CiPathsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CI['paths_from_status'](b'R100\0only-the-old\0')
 
-    def test_hand_started_and_new_branch_runs_write_every_job(self):
-        for event, extra in (('workflow_dispatch', {}), ('push', {'BEFORE_SHA': '0' * 40})):
+    def test_hand_started_new_branch_and_release_branch_runs_write_every_job(self):
+        for event, extra in (('workflow_dispatch', {}), ('push', {'BEFORE_SHA': '0' * 40}),
+                             ('push', {'BEFORE_SHA': '1' * 40, 'GITHUB_REF': 'refs/heads/release/0.6.0'})):
             with self.subTest(event=event):
                 self.write_and_assert(event, extra, 'desktop=true\nstack=true\ntest=true\n')
 
