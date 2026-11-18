@@ -16,19 +16,19 @@
         <mxCell id="n4" value="&lt;b&gt;Agent PR&lt;/b&gt;: a feature&lt;br&gt;+ changes/addon-&amp;lt;slug&amp;gt;.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="40" y="145" width="260" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="n5" value="&lt;b&gt;Agent PR&lt;/b&gt;: unfinished work&lt;br&gt;unwired or behind a flag that is off&lt;br&gt;label &lt;i&gt;no-changes&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+        <mxCell id="n5" value="&lt;b&gt;Agent PR&lt;/b&gt;: unfinished work&lt;br&gt;merged before it is finished&lt;br&gt;Depends on #N for what it needs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="40" y="215" width="260" height="60" as="geometry" />
         </mxCell>
         <mxCell id="n6" value="&lt;b&gt;Agent PR&lt;/b&gt;: a server change&lt;br&gt;+ changes/server-&amp;lt;slug&amp;gt;.md&lt;br&gt;compatible with fixtures/clients/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="40" y="295" width="260" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="n7" value="Every PR is safe to release on its own.&lt;br&gt;Required checks: test, desktop-tests,&lt;br&gt;local-stack, secrets, changes.&lt;br&gt;You review and merge." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+        <mxCell id="n7" value="A release ships what you pick: all of main,&lt;br&gt;or chosen PRs on top of the last release.&lt;br&gt;Required checks: test, desktop-tests,&lt;br&gt;local-stack, secrets, changes. You merge." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
           <mxGeometry x="40" y="375" width="260" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="n8" value="&lt;b&gt;Release PR&lt;/b&gt; (an agent may prepare it)&lt;br&gt;make prepare-release VERSION=x.y.z&lt;br&gt;changes/* &amp;#8594; CHANGELOG.md&lt;br&gt;bumps every version field&lt;br&gt;label &lt;i&gt;release&lt;/i&gt;; nothing else allowed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+        <mxCell id="n8" value="&lt;b&gt;Release PR&lt;/b&gt; (an agent may prepare it)&lt;br&gt;all of main: make prepare-release&lt;br&gt;or picked: make pick-release, then&lt;br&gt;make pick-release-pr (merge commit)&lt;br&gt;changes/* &#8594; CHANGELOG.md, label &lt;i&gt;release&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
           <mxGeometry x="40" y="480" width="260" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="n9" value="&lt;b&gt;main&lt;/b&gt;&lt;br&gt;always releasable" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+        <mxCell id="n9" value="&lt;b&gt;main&lt;/b&gt;&lt;br&gt;holds every PR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="350" y="300" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="n4" target="n9">
@@ -49,7 +49,7 @@
         <mxCell id="n15" value="&lt;b&gt;guard&lt;/b&gt;&lt;br&gt;builds the revision you choose (default: main HEAD),&lt;br&gt;first attempt only, versions agree, changelog has x.y.z,&lt;br&gt;changes/ empty at that revision, nothing of x.y.z released" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="530" y="130" width="360" height="75" as="geometry" />
         </mxCell>
-        <mxCell id="n16" value="&lt;b&gt;check&lt;/b&gt;&lt;br&gt;Check passed&lt;br&gt;on main for&lt;br&gt;this commit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+        <mxCell id="n16" value="&lt;b&gt;check&lt;/b&gt;&lt;br&gt;Check passed&lt;br&gt;on main or&lt;br&gt;release/x.y.z" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="530" y="230" width="80" height="66" as="geometry" />
         </mxCell>
         <mxCell id="n17" value="&lt;b&gt;installers&lt;/b&gt;&lt;br&gt;macOS, Windows,&lt;br&gt;Linux, signed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
@@ -127,7 +127,7 @@
         <mxCell id="n37" value="&lt;b&gt;guard&lt;/b&gt;&lt;br&gt;build run is a green first attempt;&lt;br&gt;every output absent or matches this build;&lt;br&gt;records its attempt for the jobs below" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="970" y="130" width="340" height="65" as="geometry" />
         </mxCell>
-        <mxCell id="n38" value="&lt;b&gt;server&lt;/b&gt;&lt;br&gt;check-publish, then deploy the build's&lt;br&gt;image digest (backup first); skipped when&lt;br&gt;the server already runs it or newer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+        <mxCell id="n38" value="&lt;b&gt;server&lt;/b&gt;&lt;br&gt;check-publish, then deploy the build&#x27;s&lt;br&gt;image digest (backup first); skipped for a&lt;br&gt;beta or when the server runs it or newer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="970" y="212" width="240" height="70" as="geometry" />
         </mxCell>
         <mxCell id="n39" value="&lt;b&gt;publish&lt;/b&gt;&lt;br&gt;installers, then latest.json, then addon.json;&lt;br&gt;helper refuses an older feed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
@@ -218,19 +218,8 @@
         <mxCell id="e64" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="n42" target="n59">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n65" value="&lt;b&gt;Deploy to OVH&lt;/b&gt; (server-only hotfix)&lt;br&gt;runs check.yml, then builds and deploys that image's digest.&lt;br&gt;Shares the lock &lt;i&gt;goldbook-production&lt;/i&gt; with promote,&lt;br&gt;so the two never interleave." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" vertex="1" parent="1">
+        <mxCell id="n65" value="Only promote deploys the server, and never for a beta,&lt;br&gt;so the server runs releases only. The next release,&lt;br&gt;picked from the last tag or built from main,&lt;br&gt;descends from it, and the OVH helper accepts it." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
           <mxGeometry x="950" y="690" width="380" height="70" as="geometry" />
-        </mxCell>
-        <mxCell id="e66" value="server-only fix" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;dashed=1;" edge="1" parent="1" source="n9" target="n65">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e67" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="n65" target="n55">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="1665" y="725" />
-              <mxPoint x="1665" y="245" />
-            </Array>
-          </mxGeometry>
         </mxCell>
         <mxCell id="n68" value="Legend" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
           <mxGeometry x="20" y="690" width="190" height="236" as="geometry" />
@@ -510,95 +499,92 @@
         <mxCell id="n1" value="Example: hotfixes" style="text;html=1;align=left;verticalAlign=top;fontSize=20;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="20" y="10" width="1200" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="n2" value="A. Server-only bug" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
-          <mxGeometry x="20" y="60" width="1640" height="200" as="geometry" />
+        <mxCell id="n2" value="A. A bug while main holds other unreleased work" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="20" y="60" width="1640" height="220" as="geometry" />
         </mxCell>
-        <mxCell id="n3" value="&lt;b&gt;Fix PR&lt;/b&gt;&lt;br&gt;+ changes/server-&amp;lt;slug&amp;gt;.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
-          <mxGeometry x="40" y="110" width="220" height="55" as="geometry" />
+        <mxCell id="n3" value="&lt;b&gt;Fix PR #140&lt;/b&gt;&lt;br&gt;+ changes/addon-&amp;lt;slug&amp;gt;.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="105" width="190" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="n4" value="&lt;b&gt;main&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="310" y="115" width="100" height="45" as="geometry" />
+        <mxCell id="n4" value="&lt;b&gt;main&lt;/b&gt;&lt;br&gt;also holds #125 and #126,&lt;br&gt;not ready to ship" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="270" y="105" width="190" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="n5" value="&lt;b&gt;Deploy to OVH&lt;/b&gt;&lt;br&gt;check.yml for this SHA, then build,&lt;br&gt;record the digest and deploy it" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="460" y="105" width="300" height="65" as="geometry" />
+        <mxCell id="n5" value="&lt;b&gt;make pick-release&lt;/b&gt;&lt;br&gt;VERSION=0.2.6 PRS=&quot;140&quot;&lt;br&gt;release/0.2.6 = v0.2.5 + #140" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="500" y="105" width="190" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="n6" value="production" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;size=10;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
-          <mxGeometry x="670" y="99" width="100" height="22" as="geometry" />
+        <mxCell id="n6" value="&lt;b&gt;make pick-release-pr&lt;/b&gt;&lt;br&gt;release commit pushed;&lt;br&gt;PR from release-pr/0.2.6" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="730" y="105" width="190" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="n7" value="Server fixed. Clients unchanged." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="900" y="115" width="240" height="45" as="geometry" />
+        <mxCell id="n7" value="&lt;b&gt;Merge the PR&lt;/b&gt;&lt;br&gt;with Create a merge commit:&lt;br&gt;main gets the changelog" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="960" y="105" width="190" height="70" as="geometry" />
         </mxCell>
-        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n3" target="n4">
+        <mxCell id="n8" value="&lt;b&gt;make release&lt;/b&gt;&lt;br&gt;REVISION=&amp;lt;release commit&amp;gt;&lt;br&gt;Release build" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="105" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n9" value="&lt;b&gt;Release promote&lt;/b&gt;&lt;br&gt;after you confirm" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="105" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n10" value="0.2.6 shipped: the fix only.&lt;br&gt;#125 and #126 stay on main." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1420" y="205" width="190" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n3" target="n4">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e9" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n4" target="n5">
+        <mxCell id="e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n4" target="n5">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n5" target="n7">
+        <mxCell id="e13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n5" target="n6">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n11" value="If a promotion is running, Deploy to OVH waits for it (shared lock).&lt;br&gt;A promotion resumed later skips its server step: the server already&lt;br&gt;runs a newer commit, so the hotfix stays.&lt;br&gt;The change file ships in the next release's changelog." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="460" y="185" width="440" height="70" as="geometry" />
-        </mxCell>
-        <mxCell id="n12" value="B. Addon or app bug, main is releasable" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
-          <mxGeometry x="20" y="280" width="1640" height="160" as="geometry" />
-        </mxCell>
-        <mxCell id="n13" value="&lt;b&gt;Fix PR&lt;/b&gt;&lt;br&gt;+ changes/addon-&amp;lt;slug&amp;gt;.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
-          <mxGeometry x="40" y="330" width="210" height="55" as="geometry" />
-        </mxCell>
-        <mxCell id="n14" value="&lt;b&gt;Release PR&lt;/b&gt;&lt;br&gt;prepare-release 0.2.6, label release" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
-          <mxGeometry x="300" y="330" width="210" height="55" as="geometry" />
-        </mxCell>
-        <mxCell id="e15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n13" target="n14">
+        <mxCell id="e14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n6" target="n7">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n16" value="&lt;b&gt;make release&lt;/b&gt;&lt;br&gt;Release build" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="560" y="330" width="210" height="55" as="geometry" />
-        </mxCell>
-        <mxCell id="e17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n14" target="n16">
+        <mxCell id="e15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n7" target="n8">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n18" value="&lt;b&gt;Release promote&lt;/b&gt;&lt;br&gt;after you confirm" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="820" y="330" width="210" height="55" as="geometry" />
-        </mxCell>
-        <mxCell id="e19" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n16" target="n18">
+        <mxCell id="e16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n8" target="n9">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n20" value="0.2.6 shipped" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="1080" y="330" width="210" height="55" as="geometry" />
-        </mxCell>
-        <mxCell id="e21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n18" target="n20">
+        <mxCell id="e17" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n9" target="n10">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="n22" value="A patch bump: fixes only. New features bump the minor number." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="40" y="395" width="420" height="30" as="geometry" />
+        <mxCell id="n18" value="A server-only fix ships the same way: only promote deploys the server.&lt;br&gt;A promotion of an older build, resumed later, skips its server step,&lt;br&gt;because the server already runs a newer release." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="470" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="n23" value="C. Bug while main holds visible unfinished work" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
-          <mxGeometry x="20" y="460" width="1640" height="220" as="geometry" />
+        <mxCell id="n19" value="When the fix needs an unreleased PR, make pick-release refuses:&lt;br&gt;its pick conflicts, or the fix says Depends on #N. Pick that PR too." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="540" y="200" width="420" height="45" as="geometry" />
         </mxCell>
-        <mxCell id="n24" value="main has a half-done feature&lt;br&gt;that players would see" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
-          <mxGeometry x="40" y="525" width="220" height="55" as="geometry" />
+        <mxCell id="n20" value="B. A bug while main holds nothing else" style="swimlane;horizontal=1;startSize=28;html=1;rounded=1;arcSize=4;fillColor=none;strokeColor=#999999;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="20" y="300" width="1640" height="160" as="geometry" />
         </mxCell>
-        <mxCell id="n25" value="&lt;b&gt;Switch its flag off&lt;/b&gt;&lt;br&gt;or revert it (PR)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
-          <mxGeometry x="320" y="505" width="220" height="55" as="geometry" />
+        <mxCell id="n21" value="&lt;b&gt;Fix PR&lt;/b&gt;&lt;br&gt;+ changes/addon-&amp;lt;slug&amp;gt;.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="350" width="210" height="55" as="geometry" />
         </mxCell>
-        <mxCell id="n26" value="then as in B" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
-          <mxGeometry x="600" y="505" width="160" height="55" as="geometry" />
+        <mxCell id="n22" value="&lt;b&gt;Release PR&lt;/b&gt;&lt;br&gt;prepare-release 0.2.6, label release" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="300" y="350" width="210" height="55" as="geometry" />
         </mxCell>
-        <mxCell id="n27" value="&lt;b&gt;Release branch&lt;/b&gt; release/0.2&lt;br&gt;from the last tag + cherry-pick" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;dashed=1;" vertex="1" parent="1">
-          <mxGeometry x="320" y="600" width="260" height="55" as="geometry" />
+        <mxCell id="n23" value="&lt;b&gt;make release&lt;/b&gt;&lt;br&gt;Release build" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="560" y="350" width="210" height="55" as="geometry" />
         </mxCell>
-        <mxCell id="n28" value="Not set up yet. Needs branch policies, job conditions and&lt;br&gt;the helper's head_branch check to allow release/*. Add it the first time it is needed." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="620" y="605" width="450" height="45" as="geometry" />
+        <mxCell id="n24" value="&lt;b&gt;Release promote&lt;/b&gt;&lt;br&gt;after you confirm" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="820" y="350" width="210" height="55" as="geometry" />
         </mxCell>
-        <mxCell id="e29" value="usual" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="n24" target="n25">
+        <mxCell id="n25" value="0.2.6 shipped" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="350" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n21" target="n22">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e30" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n25" target="n26">
+        <mxCell id="e27" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n22" target="n23">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e31" value="rare" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" parent="1" source="n24" target="n27">
+        <mxCell id="e28" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n23" target="n24">
           <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e29" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="n24" target="n25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n30" value="A patch bump: fixes only. New features bump the minor number." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#ffffff;strokeColor=#999999;align=left;spacingLeft=6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="415" width="420" height="30" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version prepare-release release hooks clean reset-local
+.PHONY: help build install-addon rpm install-rpm app run test sandbox dev dev-down dev-logs dev-check check deploy version prepare-release pick-release pick-release-pr release hooks clean reset-local
 
 OVH_HOST ?= fedora_ovh
 
@@ -188,6 +188,38 @@ prepare-release: ## Turn changes/ into a CHANGELOG.md section and set VERSION
 	@test -n "$(VERSION)" || { echo "VERSION is required. See make help prepare-release (example: make prepare-release VERSION=1.2.3)."; exit 1; }
 	python3 scripts/prepare-release.py $(VERSION)
 
+# Lists the pull requests main merged since the last release tag, or picks some
+# onto release/<version> from that tag, such as
+# make pick-release VERSION=0.6.0 PRS="123 125". See docs/releasing.md.
+#| Usage: make pick-release [VERSION=<x.y.z|x.y.z-beta.n> PRS="<numbers>"]
+#| Without VERSION, lists the pull requests main merged since the last release
+#| tag that no release picked, with their change files and dependencies.
+#| With VERSION and PRS, creates release/<version> from the last release tag in
+#| the worktree .release/<version>, and cherry-picks those pull requests in the
+#| order main merged them. A release then gets its CHANGELOG.md section from
+#| their change files: edit its prose and run make pick-release-pr. A beta
+#| opens its pull request at once. Ships nothing.
+#| Needs Python 3, Git and gh signed in, with network access.
+#| Example: make pick-release VERSION=0.6.0 PRS="123 125"
+#| Beta example: make pick-release VERSION=0.6.0-beta.1 PRS="123"
+#| Next: make help pick-release-pr
+#| Details: docs/releasing.md
+pick-release: ## List unreleased pull requests, or pick some onto a release
+	python3 scripts/pick-release.py $(if $(VERSION),start "$(VERSION)" $(foreach n,$(PRS),"$(n)"),list)
+
+#| Usage: make pick-release-pr VERSION=<x.y.z>
+#| Commits the release in .release/<version> and pushes it to release/<version>,
+#| which starts its Check run. Then opens, or updates, the pull request that
+#| merges it into main from release-pr/<version>. Run it again after editing
+#| the prose. Merge that pull request with a merge commit, then run the
+#| make release command it prints. Ships nothing.
+#| Needs Python 3, Git and gh signed in, with network access.
+#| Example: make pick-release-pr VERSION=0.6.0
+#| Details: docs/releasing.md
+pick-release-pr: ## Push a picked release and open its pull request
+	@test -n "$(VERSION)" || { echo "VERSION is required. See make help pick-release-pr (example: make pick-release-pr VERSION=0.6.0)."; exit 1; }
+	python3 scripts/pick-release.py finish "$(VERSION)"
+
 # Runs Release build on GitHub as you, through gh, for the current main or for
 # a commit of main, such as make release REVISION=1a2b3c4. Then asks whether to
 # run Release promote for that build. BETA builds a beta instead, such as
@@ -195,6 +227,7 @@ prepare-release: ## Turn changes/ into a CHANGELOG.md section and set VERSION
 #| Usage: make release [REVISION=<commit-sha>] [BETA=<x.y.z-beta.n>]
 #| REVISION is a full or abbreviated commit SHA on main. Without it, uses current main.
 #| Use the merged release PR's commit so later change files do not block the build.
+#| For a picked release or beta, use the release commit make pick-release-pr printed.
 #| BETA builds and promotes a beta, such as 0.6.0-beta.1, above the committed
 #| version. A beta needs no release PR. Its app and addon reach only players
 #| who turned on betas. It does not deploy the server or website. The script

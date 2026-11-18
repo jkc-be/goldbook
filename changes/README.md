@@ -3,7 +3,9 @@
 Each pull request that a player or user would notice adds one file here. The
 release pull request runs `make prepare-release VERSION=x.y.z`, which turns
 these files into a section of [CHANGELOG.md](../CHANGELOG.md), sets the
-version and deletes them. Pull requests never edit `CHANGELOG.md` themselves.
+version and deletes them. A picked release, from `make pick-release`, does
+the same with the files of the pull requests it picks, and the others stay
+here for a later release. Pull requests never edit `CHANGELOG.md` themselves.
 
 Name the file `<section>-<slug>.md`, such as `addon-mail-collect.md`. The
 slug is lowercase letters, digits and hyphens. The section is one of these,
