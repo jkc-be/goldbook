@@ -25,7 +25,7 @@
 - Server changes stay compatible with every client and addon version at or
   above the support floor, the oldest version under `fixtures/clients/`. The
   server deploys before clients update, and users can skip releases.
-- Never run **Release build**, **Release promote** or **Deploy to OVH** or any
-  other release workflow, never approve an environment deployment, and never
+- Never run **Release build**, **Release promote** or any other release
+  workflow, never approve an environment deployment, and never
   create `v*` tags. Preparing a release pull request ships nothing; the
   maintainer merges it and runs the release.

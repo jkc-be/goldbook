@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 ROOT = Path("/opt/goldbook")
 REPOSITORY = "ghcr.io/jkc-be/goldbook-server"
 GITHUB_REPOSITORY = "jkc-be/goldbook"
-DEPLOY_WORKFLOWS = (".github/workflows/deploy.yml", ".github/workflows/release-build.yml")
+DEPLOY_WORKFLOWS = (".github/workflows/release-build.yml",)
 # The manifests each feed workflow must publish, in publication order.
 FEED_MANIFESTS = {
     ".github/workflows/release-build.yml": ("latest.json", "addon.json"),

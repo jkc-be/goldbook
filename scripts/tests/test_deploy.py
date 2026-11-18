@@ -323,18 +323,17 @@ class DeploymentTest(unittest.TestCase):
                 deployment.main()
             deploy.assert_not_called()
 
-    def test_deploy_and_release_build_runs_can_deploy_and_verify(self):
+    def test_release_build_runs_can_deploy_and_verify(self):
         for command, workflow in [("deploy", ".github/workflows/release-build.yml"),
-                                  ("verify", ".github/workflows/release-build.yml"),
-                                  ("deploy", ".github/workflows/deploy.yml")]:
+                                  ("verify", ".github/workflows/release-build.yml")]:
             with self.subTest(command=command, workflow=workflow):
                 self.run_main(command, workflow)
                 self.assertEqual(self.deploy_calls,
                                  [mock.call("123", REVISION, "test-token", verify_only=command == "verify")])
 
     def test_other_workflows_cannot_deploy(self):
-        for workflow in (".github/workflows/release-desktop.yml", ".github/workflows/update-addon.yml",
-                         ".github/workflows/other.yml"):
+        for workflow in (".github/workflows/deploy.yml", ".github/workflows/release-desktop.yml",
+                         ".github/workflows/update-addon.yml", ".github/workflows/other.yml"):
             with self.subTest(workflow=workflow):
                 with self.assertRaisesRegex(RuntimeError, "Only a maintainer Goldbook workflow on main"):
                     self.run_main("deploy", workflow)

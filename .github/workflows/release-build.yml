@@ -309,7 +309,10 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github/actions
+      # A beta never deploys the server, so only a release checks that the
+      # helper would deploy this revision over the running one.
       - name: Verify the image and the running service
+        if: inputs.beta == ''
         uses: ./.github/actions/ovh
         with:
           operation: verify
@@ -344,7 +347,7 @@ jobs:
           {
             printf '## Goldbook %s\n\n' "$VERSION"
             if [ -n "$BETA" ]; then
-              printf 'This is a beta build. Promoting it publishes the beta update feed and a beta of the addon, not a release. It also deploys the server and website of this revision for every player.\n\n'
+              printf 'This is a beta build. Promoting it publishes the beta update feed and a beta of the addon, not a release. It does not deploy the server or the website.\n\n'
             fi
             printf 'Build run %s of revision `%s`.\n\n' "$RUN_ID" "$REVISION"
             printf 'To promote it, answer `y` when `make release` asks, or run:\n\n'
