@@ -158,8 +158,8 @@ A build run proves:
 - the installers build and are signed
 - the addon update is signed
 - the feed has the layout the OVH helper accepts
-- the helper accepts this build run (`verify`), and its feed passes the
-  helper's validation (`check-publish`)
+- the helper accepts this build run (`verify`, skipped for a beta), and its
+  feed passes the helper's validation (`check-publish`)
 - the image is pushed, its digest is recorded in `Goldbook-server-image`, and
   OVH can pull it
 - the deployment is authorized
@@ -189,7 +189,8 @@ days.
    workflow** on `main` and enter the build run ID.
 2. Approve `production` for `server`. Its result line names the database
    backup, or says the deploy was skipped because the server already runs the
-   revision or a later commit. Check `https://app.jkc-be.com/goldbook`.
+   revision or a later commit. Check `https://app.jkc-be.com/goldbook`. A beta
+   validates its feed in this job and does not deploy the server.
 3. Approve `production` for `publish`.
 4. Approve `addon-mirror` for the mirror.
 5. Approve `curseforge`, and `wago` once Wago uploads are on, in the
@@ -207,16 +208,19 @@ The jobs, in order:
 | Job | Does |
 | --- | --- |
 | `guard` | Requires a successful first attempt of `release-build.yml` on `main` by `jkc-be` with its feed, addon feed, three updater artifacts and server image artifact unexpired. Takes the revision from `image.json` and requires the build's `addon.json` to name it and the commit the build run started on to contain it. Checks out the revision and downloads its `Goldbook-update-feed`. Takes the version from the feed's `latest.json` and requires it to be the revision's version or a beta above it. Requires every output to be `absent` or `matches`. |
-| `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The helper compares the revision with the one the server runs. It skips the deploy when the server already runs that commit or a later one, and refuses one whose history diverged. |
+| `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The helper compares the revision with the one the server runs. It skips the deploy when the server already runs that commit or a later one, and refuses one whose history diverged. A beta skips `deploy`. |
 | `publish` | Runs the helper's `publish` for the build run. |
 | `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. For a beta, it first stamps the beta version into `Goldbook.toc`. |
 | `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge and Wago jobs. It polls every 3 minutes for at most 120 minutes. |
 | `tag` | Creates `v<version>` at the revision. A tag already on that commit passes. |
 
-Promote and **Deploy to OVH** share the concurrency group
-`goldbook-production`, so they never run at the same time. GitHub keeps one
-running and one pending run per group, and a newer pending run cancels the
-older pending one.
+Promote runs share the concurrency group `goldbook-production`, so two
+promotions never run at the same time. GitHub keeps one running and one
+pending run per group, and a newer pending run cancels the older pending one.
+
+**Release promote** is the only workflow that deploys the server, so the
+server runs only releases. The next release descends from the last one, so
+the helper's history check accepts it.
 
 Promote builds and uploads nothing. Running it again for a finished release
 passes every job and changes nothing.
@@ -238,7 +242,7 @@ stopped promote run and choose **Re-run all jobs**. Both are safe:
 
 | Stopped after | A second promotion |
 | --- | --- |
-| Server deployed | Skips the deploy, because the server runs the revision, or a later commit when a **Deploy to OVH** went out in between. Then publishes the feed. |
+| Server deployed | Skips the deploy, because the server runs the revision, or a later release that was promoted in between. Then publishes the feed. |
 | `latest.json` published | Skips the deploy and publishes the same feed again. |
 | Both manifests published | Skips the deploy, publishes again and mirrors. |
 | Mirror pushed | Finds HEAD already holding the revision and waits for its run. |
@@ -248,8 +252,7 @@ stopped promote run and choose **Re-run all jobs**. Both are safe:
 
 Do not use **Re-run failed jobs** on a promote run. It reuses the outputs of
 the jobs that passed in the earlier attempt, so `guard` would not read the
-release outputs again, while another promotion or **Deploy to OVH** may have
-run in between. `server`, `publish`, the mirror job and `tag` each compare the
+release outputs again, while another promotion may have run in between. `server`, `publish`, the mirror job and `tag` each compare the
 attempt in which `guard` passed with their own and fail with "Re-run all jobs
 or start a new Release promote run; re-running only failed jobs would skip
 guard". **Re-run all jobs** runs `guard` again in the new attempt, so it
@@ -390,12 +393,11 @@ release needs a new version.
 When `main` is releasable, a hotfix is a fix PR with a change file, a release
 PR with a patch bump, a build and a promotion.
 
-A fix that touches only the server can go out through **Deploy to OVH**. It
-runs the full checks for its commit first and shares the promotion lock.
-A promotion of an earlier build, started or resumed after the hotfix, leaves
-the fix in place: the helper skips its deploy because the server already runs
-a later commit of `main`, and the promotion goes on with the feed, the mirror
-and the tag.
+A fix that touches only the server ships the same way, because only
+**Release promote** deploys the server. A promotion of an earlier build,
+started or resumed after the hotfix, leaves the fix in place: the helper skips
+its deploy because the server already runs a later release, and the promotion
+goes on with the feed, the mirror and the tag.
 
 When `main` is not releasable, either switch off or revert the unfinished work
 and release as above, or add release branches. A release branch is
@@ -472,7 +474,7 @@ pending.
 | CurseForge | A release file | A beta file |
 | Wago | A stable version | A beta version, when the workflow's own Wago uploads are on |
 | WoWInterface | Uploaded | Skipped |
-| Server and website | Deployed | Deployed, for every player |
+| Server and website | Deployed | Not deployed |
 | Source tag | `v<version>` | `v<version>` |
 
 Players receive betas in the desktop app after they turn on beta updates in
@@ -486,9 +488,10 @@ check on Wago that the first beta arrived as a beta. **Publish to
 WoWInterface** skips a beta with a notice in its run, because WoWInterface has
 no beta stream, and it asks for no `wowinterface` approval.
 
-A beta promotion deploys the revision's server like a release does.
-`AGENTS.md` requires every commit of `main` to be safe to release, which
-covers this deploy.
+A beta promotion does not deploy the server. The server runs only releases,
+so the next release descends from what it runs. A beta's app and addon talk to
+the server of the last release, so a beta feature that needs a server change
+works only once a release ships that change.
 
 ### Before the first beta
 

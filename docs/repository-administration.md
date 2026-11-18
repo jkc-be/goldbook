@@ -46,8 +46,8 @@ needs one new push, such as a rebase or an empty commit, before it can merge.
 | `addon-mirror` | `ADDON_MIRROR_SSH_KEY` | `jkc-be` | `main` |
 
 `release-signing` signs the installers and the addon update in **Release
-build**. `production` approves **Deploy to OVH**, the `verify` job of
-**Release build**, and the `server` and `publish` jobs of **Release promote**.
+build**. `production` approves the `verify` job of **Release build**, and the
+`server` and `publish` jobs of **Release promote**.
 `addon-mirror` approves the mirror push in **Release promote**.
 
 Administrator bypass is disabled for all three environments. Self-review is allowed
@@ -99,8 +99,8 @@ one `main` pointed at when the run started.
 
 | Command | Accepted workflows | Effect |
 | --- | --- | --- |
-| `verify` | `deploy.yml`, `release-build.yml` | Pulls and checks the run's image and the running service, and reports whether `deploy` would replace it. Changes nothing. |
-| `deploy` | `deploy.yml`, `release-build.yml` | When the commit is newer than the running one, backs up the database, then replaces the running image with the run's image. |
+| `verify` | `release-build.yml` | Pulls and checks the run's image and the running service, and reports whether `deploy` would replace it. Changes nothing. |
+| `deploy` | `release-build.yml` | When the commit is newer than the running one, backs up the database, then replaces the running image with the run's image. |
 | `check-publish` | `release-build.yml` | Downloads and validates the run's update feed. Changes nothing. |
 | `publish` | `release-build.yml` | Validates and publishes the run's update feed. |
 
@@ -111,15 +111,14 @@ must have exactly one unexpired `Goldbook-server-image` artifact holding only
 The helper refuses the run when the revision differs from the command's or the
 digest is malformed. It pulls `ghcr.io/jkc-be/goldbook-server@<digest>`, checks
 that its `org.opencontainers.image.revision` label is the commit, and pins that
-digest in `GOLDBOOK_IMAGE`. A **Deploy to OVH** run from before this artifact
-existed cannot deploy; start a new run.
+digest in `GOLDBOOK_IMAGE`.
 
 A deploy never moves the server back to an older commit. After the checks
 above, the helper reads the `org.opencontainers.image.revision` label of the
 running container and asks GitHub how the requested commit relates to it:
 
 - The running commit is the requested one, or is newer and contains it, for
-  example after a **Deploy to OVH** hotfix. `deploy` changes nothing and takes
+  example after a later release was promoted. `deploy` changes nothing and takes
   no backup. It fails when the running server is not healthy, and otherwise
   prints `{"skipped": true, "revision": ..., "active_revision": ...,
   "active_image": ..., "health": "healthy"}`. `verify` prints
@@ -159,27 +158,22 @@ run again after an interruption finishes the publication with the same files.
 `scripts/setup-deploy.sh` before the first beta publish. An older helper
 refuses a beta feed before it changes anything.
 
-Use **Actions > Deploy to OVH > Run workflow** on `main`. The default
-`verify_only` option builds and pushes `ghcr.io/jkc-be/goldbook-server`, records
-the pushed digest as the run's `Goldbook-server-image` artifact, checks the
-restricted SSH connection, pulls and validates that image, and checks the
-running service without replacing it. Approve the `production` job after
-reviewing the run. Uncheck `verify_only` for a deployment. That copies the
-database through SQLite's backup API to
-`/opt/goldbook/backups/goldbook-<stamp>-<revision>.sqlite`, stops before changing
-the configuration or the service when the copy fails `PRAGMA integrity_check`, pins the image digest,
-waits for health, and restores the previous image and configuration on startup
-failure. The result line names the copy as `database_backup`. The helper does
-not roll back database migrations. To restore the database, stop the service,
-delete any `goldbook.sqlite-wal` and `goldbook.sqlite-shm` files beside the
-database, copy the backup over `/opt/goldbook/data/goldbook.sqlite`, set `GOLDBOOK_IMAGE`
-back from the `.env.before-<stamp>-*` file with the same stamp, and start the
-service. The helper does not delete old backups.
+Only the `server` job of **Release promote** deploys, after **Release build**
+ran `verify` for the same run. A deploy copies the database through SQLite's
+backup API to `/opt/goldbook/backups/goldbook-<stamp>-<revision>.sqlite`,
+stops before changing the configuration or the service when the copy fails
+`PRAGMA integrity_check`, pins the image digest, waits for health, and
+restores the previous image and configuration on startup failure. The result
+line names the copy as `database_backup`. The helper does not roll back
+database migrations. To restore the database, stop the service, delete any
+`goldbook.sqlite-wal` and `goldbook.sqlite-shm` files beside the database,
+copy the backup over `/opt/goldbook/data/goldbook.sqlite`, set
+`GOLDBOOK_IMAGE` back from the `.env.before-<stamp>-*` file with the same
+stamp, and start the service. The helper does not delete old backups.
 
-**Deploy to OVH** first runs every check in `check.yml` for the same commit and
-builds the image only when they pass. It shares the concurrency group
-`goldbook-production` with **Release promote**, so a server-only deploy and a
-promotion never interleave.
+A beta promotion skips `deploy`, so the server runs only releases. The helper
+refuses a revision that diverged from the one the server runs, and the next
+release always descends from the last one.
 
 `scripts/setup-backups.sh` installs the hourly, encrypted database backup to OVH
 Object Storage. [Releasing](releasing.md#hourly-backups-in-ovh-object-storage)
@@ -189,7 +183,7 @@ The server retains its Compose files. Review and copy Compose changes separately
 before deploying an image that depends on them. On OVH, deployment and update
 publication use separate locks. Releases go through **Release build** and
 **Release promote**, described in [releasing](releasing.md). The SSH handling
-for all three workflows lives in the composite action `.github/actions/ovh`.
+for both workflows lives in the composite action `.github/actions/ovh`.
 Build artifacts are kept for 30 days, which is how long a build run can be
 promoted. The public source import does not itself require publishing a new
 release.

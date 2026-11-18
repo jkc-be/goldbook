@@ -781,17 +781,22 @@ API and the web UI.
 Run the same command again after pulling changes. The database and the token
 stay as they are.
 
-To deploy to the OVH server from a clean `main` that matches `origin/main`:
+To deploy a release to the OVH server by hand, check out its tag and run:
 
 ```sh
+git checkout v<version>
 make deploy
 ```
 
 It first copies the database to `/opt/goldbook/backups`, because migrations
 are not rolled back, then runs the deploy above for `fedora_ovh`. Set
-`OVH_HOST=<ssh-host>` for another server. It refuses another branch, local
-changes, or a `main` that differs from `origin/main`, because the deploy ships
-the files as they are in your checkout; `FORCE=1` skips that check.
+`OVH_HOST=<ssh-host>` for another server. It refuses a checkout that is not a
+release tag, or that has local changes, because the server runs only releases
+and the deploy ships the files as they are in your checkout; `FORCE=1` skips
+that check. Releases normally reach OVH through **Release promote**, as
+[releasing](docs/releasing.md) describes. The helper that **Release promote**
+uses refuses to replace a server built this way until you reconcile it, as
+[repository administration](docs/repository-administration.md) describes.
 
 The first deploy writes `/opt/goldbook/.env` with the address and the data
 folder. To read it:
@@ -818,18 +823,18 @@ shows in game. The server stores only a hash of the key. A login lasts 30 days.
 Five wrong tries for one ID from one address lock that ID for that address for
 15 minutes. Linking another computer's ID counts the same tries.
 
-### Deploy manually from GitHub Actions
+### Deploy from GitHub Actions
 
 Only @jkc-be can start production operations, from `main`, and approve access
-to deployment secrets. Open **Actions > Deploy to OVH > Run workflow**. Leave
-`verify_only` selected to validate the image and OVH access without replacing
-the running service. Uncheck it to deploy, then approve the `production` job.
-Pushes and pull requests do not deploy the server automatically.
+to deployment secrets. The server is deployed by **Release promote**, as part
+of a release, after **Release build** checked the image and OVH access without
+replacing the running service. Pushes, pull requests and betas do not deploy
+the server.
 
-The workflow builds `ghcr.io/jkc-be/goldbook-server` and calls a restricted SSH
-helper on OVH. It validates the GitHub run and image revision, pins the image
-digest, and waits for health. A startup failure restores the previous image and
-configuration. Database migrations are not rolled back.
+The release calls a restricted SSH helper on OVH. It validates the GitHub run
+and image revision, pins the image digest, and waits for health. A startup
+failure restores the previous image and configuration. Database migrations
+are not rolled back.
 
 For initial setup and the exact permissions, secrets, and approval controls,
 see [repository administration](docs/repository-administration.md). Runtime
