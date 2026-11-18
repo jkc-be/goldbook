@@ -7,6 +7,8 @@ __pycache__/
 /data/
 desktop/dist/
 /target
+# Release branches make pick-release checks out.
+/.release/
 /desktop/src-tauri/target
 /desktop/src-tauri/gen/
 

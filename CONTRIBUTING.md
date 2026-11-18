@@ -14,9 +14,11 @@ External contributors' workflow runs require maintainer approval.
 Each pull request describes a change that players or users would notice in a
 file under `changes/`, as [changes/README.md](changes/README.md) describes,
 and leaves `CHANGELOG.md` and the version fields alone. Only the release
-pull request writes those: it comes from `make prepare-release VERSION=x.y.z`
-and carries the `release` label, and the `changes` check refuses any other
-pull request that edits them. [AGENTS.md](AGENTS.md) lists the rules every
+pull request writes those: it comes from `make prepare-release VERSION=x.y.z`,
+which releases all of `main`, or from `make pick-release-pr VERSION=x.y.z`,
+which releases the pull requests the maintainer picks. It carries the
+`release` label, and the `changes` check refuses any other pull request that
+edits them. [AGENTS.md](AGENTS.md) lists the rules every
 pull request follows, whether a person or a coding agent wrote it.
 
 Never include real SavedVariables files, database copies, credentials, or

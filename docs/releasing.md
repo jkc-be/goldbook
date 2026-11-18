@@ -9,6 +9,11 @@ then waits for goldbook-addon's own release and tags the commit.
 Only `jkc-be` starts these workflows and approves their environments. The
 normal way to start them is `make release`, described below.
 
+A release ships either all of `main`, prepared by a release PR from
+`make prepare-release`, or only the pull requests you pick, prepared by
+`make pick-release` as [Pick what a release ships](#pick-what-a-release-ships)
+describes. Both end in the same two runs.
+
 ![How a Goldbook release works](release-flow/overview.png)
 
 The examples use illustrative PR and run numbers.
@@ -65,7 +70,9 @@ workflow, or `make help prepare-release` for the preparation step.
    ```
 
    Without `REVISION`, the build takes the current `main`, which refuses to
-   build once another PR has added a change file after the release PR.
+   build once another PR has added a change file after the release PR. For a
+   picked release, `REVISION` is the release commit that
+   `make pick-release-pr` printed, not the merge commit.
 3. The script dispatches **Release build** through `gh` as you, prints the run
    link and follows the run. Approve `release-signing`, then `production`, in
    the browser.
@@ -97,6 +104,101 @@ yours.
 Before it asks to promote, the script checks that the build built the commit
 you asked for: the full SHA of `REVISION`, or without `REVISION` the commit the
 build run started on. A build of any other commit stops the script.
+
+## Pick what a release ships
+
+A release PR from `make prepare-release` ships all of `main`. A picked release
+ships only the pull requests you name, on top of the last release, and leaves
+the rest of `main` for a later release. Run `make help pick-release` and
+`make help pick-release-pr` for the arguments.
+
+1. List what `main` gained since the last release:
+
+   ```sh
+   make pick-release
+   ```
+
+   It lists each pull request that no release holds yet, oldest first, with
+   its change files and the pull requests its description names with
+   `Depends on #N`.
+2. Pick the pull requests and the version:
+
+   ```sh
+   make pick-release VERSION=0.6.0 PRS="125 126 132"
+   ```
+
+   The script creates the branch `release/0.6.0` from the last release tag, in
+   the worktree `.release/0.6.0`. It cherry-picks the merge commit of each
+   pull request in the order `main` merged them. Then it runs that branch's
+   `prepare-release.py`, which writes the `0.6.0` section of `CHANGELOG.md`
+   from the picked change files and sets the version.
+3. Edit the prose of the new section in `.release/0.6.0/CHANGELOG.md`.
+4. Push the release and open its pull request:
+
+   ```sh
+   make pick-release-pr VERSION=0.6.0
+   ```
+
+   The script commits the release and pushes it to `release/0.6.0`, which
+   starts its **Check** run. Then it opens the pull request that merges the
+   release into `main` from `release-pr/0.6.0`, with the `release` label. Run
+   it again after another prose edit. It amends the release commit, and
+   updates both branches and the pull request. It replaces a branch only
+   while it holds what this clone pushed there last. It refuses to commit
+   uncommitted changes beyond `CHANGELOG.md`, the version fields and the
+   deleted change files.
+5. Merge the pull request with **Create a merge commit**. A squash or rebase
+   merge leaves the release commit out of `main`'s history, and **Release
+   build** refuses a revision outside it.
+6. Release the release commit, with the command the pull request and the
+   script print:
+
+   ```sh
+   make release REVISION=<release commit>
+   ```
+
+The release commit holds the last release, the cherry-picks and the
+changelog section and version. **Release build** builds exactly that commit.
+Its `guard` job finds the commit in `main`'s history through the merge, and
+its `check` job waits for the **Check** run of its push to `release/0.6.0`.
+**Release promote** deploys, publishes and tags it like any release. The next
+release, picked or not, descends from it, so the OVH helper accepts it.
+
+The merge commit of the pull request holds `main`'s files with the new
+changelog section and version, and without the picked change files. The
+change files of the pull requests the release did not pick stay in
+`changes/`, and the next `make pick-release` lists those pull requests again.
+The `changes` check enforces this shape, as
+[changes/README.md](../changes/README.md) describes. Every commit on the
+release side must be a clean cherry-pick of a commit of `main`, followed only
+by the release commit, so a picked release ships only code that `main` holds.
+
+`make pick-release` refuses, and leaves no branch or worktree behind, when:
+
+- a number is not a pull request merged into `main` since the last release,
+  or a release already holds it
+- a picked pull request depends on an unreleased one that you did not pick
+- a later pull request that you did not pick edits the change file of one
+  you pick. The release would delete that edit from `main`.
+- the version is not above the newest release or beta tag
+- a pick does not apply on top of the last release. The message names the
+  unreleased pull requests that changed the same files first, which the pick
+  probably needs.
+- `main` holds a version that has no tag yet. Release that version first.
+- the release could not be built, because its `check.yml` predates **Check**
+  on release branches, or, for a beta, its `set-version.py` cannot stamp a
+  beta. The message names the pull request to pick too.
+
+The server applies migrations by name, in the order releases ship them. A
+picked migration can therefore run on production before an older one that
+no release picked yet, while the tests run them in file order. Pick a pull
+request together with the pull requests whose migrations it builds on.
+
+Remove the worktree after the release is tagged:
+
+```sh
+git worktree remove .release/0.6.0
+```
 
 ## Build
 
@@ -391,28 +493,23 @@ release needs a new version.
 
 ## Hotfixes
 
-When `main` is releasable, a hotfix is a fix PR with a change file, a release
-PR with a patch bump, a build and a promotion.
+A hotfix is a fix PR with a change file, then a picked release of only that
+fix with a patch bump, a build and a promotion:
+
+```sh
+make pick-release VERSION=0.6.1 PRS="<fix PR>"
+```
+
+The rest of `main` stays unreleased. When `main` holds nothing else, a release
+PR from `make prepare-release` does the same. After a beta `x.y.z-beta.n`, the
+hotfix is at least `x.y.z`, because goldbook-addon already holds the beta's
+version.
 
 A fix that touches only the server ships the same way, because only
 **Release promote** deploys the server. A promotion of an earlier build,
 started or resumed after the hotfix, leaves the fix in place: the helper skips
 its deploy because the server already runs a later release, and the promotion
 goes on with the feed, the mirror and the tag.
-
-When `main` is not releasable, either switch off or revert the unfinished work
-and release as above, or add release branches. A release branch is
-`release/x.y`, created from the last tag, with the fix cherry-picked onto it,
-built and promoted from that branch. Release branches require changes to:
-
-- the environment branch policies in `scripts/configure-github.py`
-- the job conditions in every workflow
-- the `head_branch` check in `scripts/deploy-ovh.py`, and its history check,
-  which refuses a revision that diverged from the one the server runs
-- `docs/repository-administration.md`
-
-Add them the first time you need one. After a branch release, the next release
-from `main` bumps at least the minor number.
 
 ## Beta releases
 
@@ -446,6 +543,28 @@ The `guard` job skips the release PR check for a beta. A beta has no
 `CHANGELOG.md` section, and it leaves the files in `changes/` for the next
 release PR. So a beta can build any commit of `main`, even with change files
 pending.
+
+### Pick a beta
+
+A beta of a commit of `main` holds all of `main` up to it. To test only some
+pull requests, pick them as for a release:
+
+```sh
+make pick-release VERSION=0.6.0-beta.1 PRS="125 126"
+```
+
+The script cherry-picks them onto `release/0.6.0-beta.1` from the last release
+tag, pushes it, and opens a pull request from `release-pr/0.6.0-beta.1` with
+the `no-changes` label. When pushing or opening the pull request fails, the
+picks stay in `.release/0.6.0-beta.1`; run
+`make pick-release-pr VERSION=0.6.0-beta.1` to try again. Its merge commit holds `main`'s files unchanged. It
+only puts the beta's commit in `main`'s history, which **Release build**
+requires. Merge it with **Create a merge commit**, then run the command it
+prints:
+
+```sh
+make release REVISION=<beta commit> BETA=0.6.0-beta.1
+```
 
 ### Beta version rules
 

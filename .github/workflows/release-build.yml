@@ -74,7 +74,7 @@ jobs:
             exit 1
           fi
           if ! git merge-base --is-ancestor "$revision" "$GITHUB_SHA"; then
-            echo "::error::$revision is not in the history of main at $GITHUB_SHA"
+            echo "::error::$revision is not in the history of main at $GITHUB_SHA. Merge the pull request of a picked release with a merge commit, not squash or rebase, before you build it."
             exit 1
           fi
           git worktree add --quiet --detach source "$revision"
