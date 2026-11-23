@@ -540,6 +540,25 @@ local function autoScan()
   end)
 end
 
+-- A client that names no realm files under the one Database.RecordedRealm
+-- finds for the character, and what it filed under none moves there.
+local function resolveRealm()
+  Scanner.recordedRealm = nil
+  if Scanner.Realm() == "" then
+    local name = UnitName("player")
+    Scanner.recordedRealm = Database.RecordedRealm(ns.db, name, Scanner.House())
+    if Scanner.recordedRealm ~= "" then
+      local faction = Scanner.Identity().faction
+      Database.MoveBlankRealm(ns.db, name, faction, Scanner.recordedRealm, time())
+      -- The app fetches server prices for the keys of `prices` as they are,
+      -- but strips the spaces from a character's realm, which breaks a house
+      -- name such as "EU PvE".
+      local key = Database.RealmKey(Scanner.recordedRealm, faction)
+      ns.db.prices[key] = ns.db.prices[key] or {}
+    end
+  end
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
@@ -557,6 +576,7 @@ frame:SetScript("OnEvent", function(_, event, first, second)
       ns.Print("Took " .. plural(taken, "newer price") .. " from the Goldbook server.")
     end
   elseif event == "PLAYER_LOGIN" then
+    resolveRealm()
     -- Before login the normalized realm name may be unknown, and gold booked
     -- under the display name would count the character twice.
     loginIdentity = Scanner.Identity()
@@ -574,6 +594,9 @@ frame:SetScript("OnEvent", function(_, event, first, second)
     end
     inBatches(stored, refreshVendorPrice, ns.UI.RefreshSoon)
     ns.Print(ns.VERSION .. " loaded. Type /gb for commands.")
+    if loginIdentity.realm == "" then
+      ns.Print("The game gives no realm name, so Goldbook cannot tell which auction house this is and shows no prices.")
+    end
   elseif event == "PLAYER_MONEY" then
     recordGold()
     ns.UI.RefreshSoon()

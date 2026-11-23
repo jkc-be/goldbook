@@ -15,6 +15,7 @@ local HOUR = 3600
 local DAY = 24 * HOUR
 local ID_LENGTH, KEY_LENGTH = 8, 20
 local PARK_MILLER = 2147483647
+local REALM_TABLES = { "prices", "history", "hours", "scanned", "fromServer", "serverMerged" }
 
 -- GoldbookDB:
 --   prices[realmKey][itemKey]  = price record, see Codec.EncodePrice
@@ -343,10 +344,10 @@ local function forget(histories, first)
 end
 
 -- A history with the entries of `server` it lacks, oldest first, the local
--- entry kept where both have one, and only the `kept` numbers up to the
--- newest of either. Both are "number:min:qty:mv,..." strings, see
--- Codec.HistoryDay.
-local function filled(packed, server, kept)
+-- entry kept where both have one unless `both` folds the two, and only the
+-- `kept` numbers up to the newest of either. Both are "number:min:qty:mv,..."
+-- strings, see Codec.HistoryDay.
+local function filled(packed, server, kept, both)
   if packed == server or not server then
     return packed
   end
@@ -357,6 +358,8 @@ local function filled(packed, server, kept)
       if not entries[number] then
         entries[number] = number .. rest
         merged[#merged + 1] = number
+      elseif both then
+        entries[number] = both(entries[number], number .. rest)
       end
     end
   end
@@ -435,6 +438,199 @@ function Database.MergeServer(db, data)
     end
   end
   return taken
+end
+
+-- The realm to file the character named `name` under on a client that gives
+-- none: WoW Forever answers "" for both realm names since its update of
+-- 2026-11-20. The newest realm recorded for the character itself, whatever
+-- `house` says, because a character never changes ruleset. Else, with `house`
+-- the auction house the game's rules name, see Scanner.House: the newest realm
+-- recorded on that house, or the house's own name, which the server files
+-- scans under as well. Else, with the rules unreadable and `house` nil: the
+-- newest realm of any character. "" when `house` is false or nothing is
+-- recorded.
+function Database.RecordedRealm(db, name, house)
+  local own, any
+  for _, character in pairs(db.characters) do
+    if type(character.realm) == "string" and character.realm ~= "" then
+      if character.name == name and (not own or (character.at or 0) > (own.at or 0)) then
+        own = character
+      end
+      if (not house or Database.House(character.realm) == house) and (not any or (character.at or 0) > (any.at or 0)) then
+        any = character
+      end
+    end
+  end
+  if own then
+    return own.realm
+  elseif house == false then
+    return ""
+  end
+  return any and any.realm or house or ""
+end
+
+-- One day or hour scanned under both keys, as logEntry folds a later scan
+-- into an earlier one.
+local function folded(earlier, later)
+  local old, new = Codec.DecodeHistory(earlier)[1], Codec.DecodeHistory(later)[1]
+  local low = new.min < old.min and new or old
+  return Codec.HistoryDay(old.day, low.min, low.qty, new.mv > 0 and new.mv or old.mv)
+end
+
+-- Merges what was scanned under the realm key `from` into `to`, as a scan
+-- here would have: the price seen later stays with the market value measured
+-- last, and each history keeps the entries of both.
+local function moveMarket(db, from, to)
+  for name, kept in pairs({ history = KEPT_DAYS + 1, hours = KEPT_HOURS }) do
+    local histories = db[name][to] or {}
+    for key, packed in pairs(db[name][from] or {}) do
+      histories[key] = filled(histories[key], packed, kept, folded)
+    end
+    db[name][to] = histories
+  end
+  local prices, fromServer, blankFromServer = db.prices[to] or {}, db.fromServer[to] or {}, db.fromServer[from] or {}
+  db.prices[to], db.fromServer[to] = prices, fromServer
+  for key, packed in pairs(db.prices[from] or {}) do
+    local new, old = Codec.DecodePrice(packed), prices[key] and Codec.DecodePrice(prices[key])
+    if not old or old.seen < new.seen then
+      if old then
+        if old.mvAt > new.mvAt then
+          new.mv, new.mvAt = old.mv, old.mvAt
+        end
+        new.days = recentDays(db.history[to][key])
+      end
+      prices[key], fromServer[key] = Codec.EncodePrice(new), blankFromServer[key]
+    elseif new.mvAt > old.mvAt then
+      old.mv, old.mvAt = new.mv, new.mvAt
+      prices[key] = Codec.EncodePrice(old)
+    end
+  end
+  if db.scanned[from] then
+    db.scanned[to] = math.max(db.scanned[to] or 0, db.scanned[from])
+  end
+  db.serverMerged[to] = db.serverMerged[to] or db.serverMerged[from]
+  for _, name in ipairs(REALM_TABLES) do
+    db[name][from] = nil
+  end
+end
+
+-- How each table filed per character merges what was filed under the blank
+-- realm, `blank`, into the character's own entry, `kept`: as recording it
+-- there would have. What was filed under the blank realm is the later.
+local CHARACTER_TABLES = {
+  { "characters", function(blank, kept)
+    return blank.at >= kept.at and blank or kept
+  end },
+  { "bags", function(blank)
+    return blank
+  end },
+  { "bank", function(blank, kept)
+    return blank.at >= kept.at and blank or kept
+  end },
+  { "gold", function(blank, kept)
+    for hour, copper in pairs(blank) do
+      kept[hour] = copper
+    end
+    return kept
+  end },
+  { "recipes", function(blank, kept)
+    for spell in pairs(blank) do
+      kept[spell] = true
+    end
+    return kept
+  end },
+  { "accruing", function(blank, kept, db, character, now)
+    for side, entry in pairs(blank) do
+      local open = kept[side]
+      if not open then
+        kept[side] = entry
+      elseif open.at == entry.at then
+        open.count, open.price = open.count + entry.count, open.price + entry.price
+      else
+        ns.Trades.Add(db, character, { entry }, now)
+      end
+    end
+    return kept
+  end },
+  -- The mailbox shows a trade booked under the realm again, so an auction
+  -- trade is booked as Trades.Book books an invoice: once.
+  { "trades", function(blank, kept, db, character, now)
+    local invoices, others = {}, {}
+    for _, entry in ipairs(blank) do
+      local list = (entry.side == "sell" or entry.side == "buy") and invoices or others
+      list[#list + 1] = entry
+    end
+    ns.Trades.Book(db, character, invoices, now)
+    ns.Trades.Add(db, character, others, now)
+    return kept
+  end },
+}
+
+-- Moves what a client without a realm name filed under the blank realm to
+-- `realm`, the one recorded for the character `name` of `faction`: the
+-- character's own entries, the seller snapshots and queued scans that are its
+-- own, and its name as an owner. With every character recorded on `realm`,
+-- the rest filed under the blank realm is that realm's too and moves with
+-- it; with characters on several realms it stays. Moving again changes
+-- nothing.
+function Database.MoveBlankRealm(db, name, faction, realm, now)
+  local from, to, sole = name .. "-", name .. "-" .. realm, true
+  for _, character in pairs(db.characters) do
+    sole = sole and (character.realm == "" or character.realm == realm)
+  end
+  for _, entry in ipairs(CHARACTER_TABLES) do
+    local filed, merge = db[entry[1]], entry[2]
+    local blank = filed[from]
+    if blank then
+      filed[from] = nil
+      filed[to] = filed[to] and merge(blank, filed[to], db, to, now) or blank
+    end
+  end
+  if db.characters[to] then
+    db.characters[to].realm = realm
+  end
+  local moved = {}
+  for id, snapshot in pairs(db.sellerScans) do
+    if snapshot.realm == "" and (sole or snapshot.faction == faction) then
+      moved[#moved + 1] = id
+    end
+    for _, offer in ipairs(snapshot.offers) do
+      for index, owner in ipairs(offer.owners) do
+        if owner == from then
+          offer.owners[index] = to
+        end
+      end
+      table.sort(offer.owners)
+    end
+  end
+  table.sort(moved)
+  for _, id in ipairs(moved) do
+    local snapshot, target, suffix = db.sellerScans[id], realm .. id, 0
+    while db.sellerScans[target] do
+      suffix = suffix + 1
+      target = realm .. id .. "|" .. string.format("%06d", suffix)
+    end
+    snapshot.realm = realm
+    db.sellerScans[id], db.sellerScans[target] = nil, snapshot
+  end
+  for _, scan in ipairs(db.scans) do
+    if scan.realm == "" and (sole or scan.by == name) then
+      scan.realm = realm
+    end
+  end
+  if sole then
+    local markets = {}
+    for _, filed in ipairs(REALM_TABLES) do
+      for realmKey in pairs(db[filed]) do
+        if realmKey:sub(1, 1) == "-" then
+          markets[realmKey] = true
+        end
+      end
+    end
+    for realmKey in pairs(markets) do
+      moveMarket(db, realmKey, realm .. realmKey)
+    end
+  end
 end
 
 -- The time of the newest scan the realm's prices are current to, and whether
