@@ -8,6 +8,63 @@ Changes not yet released live as files in [changes/](changes/README.md). The
 release pull request runs `make prepare-release VERSION=x.y.z`, which adds
 them here as a new version and sets that version everywhere.
 
+## 0.6.0 - 2026-11-23
+
+### Addon
+
+- Prices are back on WoW Forever. Since the game update of 20 November the
+  game no longer tells addons the realm name, so tooltips and the window
+  showed no prices and the Goldbook app reported skipped data. Goldbook now
+  uses the realm it recorded for your character before the update, and at
+  login moves what it filed without a realm since then, such as gold, bags,
+  trades and scans, back under that realm.
+- A character Goldbook has not seen before is placed by the game's rules: on
+  a PvP, RP or PvE realm it gets that auction house of your region, such as
+  `EU PvE`, so a new PvE character does not show the prices of your PvP
+  characters.
+- Where the game gives neither a realm name nor rules Goldbook knows an
+  auction house for, as on a hardcore realm, a chat line at login says that
+  Goldbook cannot tell which auction house this is and shows no prices.
+- The item page, opened with Alt+click, has a **Crafting** mode beside
+  **History** for anything a profession makes. It shows what one craft's
+  reagents cost, each at the cheaper of its lowest buyout and a merchant's
+  price, what the items made sell for, and the profit and margin. The page's
+  title shows the profession and the margin in both modes.
+- Item tooltips add the crafting cost and profit after Goldbook's prices, or
+  say how many reagents have no price yet.
+- Add a **Crafting** tab under Market that lists recipes by the profit one
+  craft makes, with its margin, most profit first. Clicking a recipe breaks
+  it down beside the list: what each reagent costs, marked when a merchant
+  sells it or its price is from an older scan, then the input cost, what the
+  items sell for, the profit and the margin. Alt+click opens the recipe on
+  the item page. `/gb crafting` opens the tab.
+- The tab starts on the recipes your character knows. Goldbook records them
+  when you open a profession window, and on login where the game reports
+  them. A menu switches to every recipe, to those any of your characters
+  knows, or to another character's; another menu picks the profession.
+- Recipe tooltips show the recipe's own prices. On WoW Forever they showed
+  the auction prices of the item the recipe teaches you to make, so a
+  recipe that binds when picked up looked like it sold for that much.
+
+### Desktop app
+
+- Settings has a **Beta updates** tick that gets test versions of the app and
+  the addon before everyone else. Turning it off keeps the version you have
+  until a regular release passes it.
+- The app no longer repeats "Goldbook skipped data it could not read" on every
+  sync. It reports a scan or seller snapshot it cannot read once, then leaves
+  it alone. A corrected copy from the addon still uploads.
+- One character the server would refuse, such as one saved without a realm,
+  no longer stops the account upload. Your other characters, gold and trades
+  upload, and the status line says how many characters were left out.
+
+### Build
+
+- `make release BETA=0.6.0-beta.1` builds and promotes a beta through
+  **Release build** and **Release promote**, without a release PR. The beta
+  goes to the beta update feed, to CurseForge and Wago as a beta, and to
+  goldbook-addon as a prerelease; WoWInterface skips it.
+
 ## 0.5.5 - 2026-11-13
 
 ### Addon
