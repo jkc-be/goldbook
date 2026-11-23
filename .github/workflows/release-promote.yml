@@ -78,6 +78,7 @@ jobs:
           fi
       - name: Compare every release output with the build run
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
           REVISION: ${{ steps.run.outputs.revision }}
         run: |
@@ -200,6 +201,7 @@ jobs:
           python-version: '3.13'
       - name: Wait for Package addon release in goldbook-addon
         env:
+          GH_TOKEN: ${{ github.token }}
           COMMIT: ${{ needs.mirror.outputs.commit }}
         run: python3 scripts/release-state.py wait-addon-release --commit "$COMMIT" --interval 180 --timeout 7200
 

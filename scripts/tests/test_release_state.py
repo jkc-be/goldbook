@@ -675,5 +675,38 @@ class Version(unittest.TestCase):
                     "such as 0.2.6-beta.1 or 0.3.0-beta.1.\n"), ""))
 
 
+class HttpToken(unittest.TestCase):
+    """Which requests carry GH_TOKEN."""
+
+    def authorization(self, token, url, authenticated=False):
+        http = STATE.Http(token)
+        sent = []
+
+        def open_(request, timeout):
+            sent.append(request.get_header("Authorization"))
+            return io.BytesIO(b"{}")
+
+        with mock.patch.object(http.opener, "open", open_):
+            http.get(url, authenticated=authenticated)
+        return sent
+
+    def test_sends_the_token_to_every_github_api_read(self):
+        self.assertEqual(self.authorization("t", f"{ADDON}/commits/main"), ["Bearer t"])
+        self.assertEqual(self.authorization("t", f"{ADDON}/actions/workflows/release.yml/runs?head_sha={MIRROR_R1}"),
+                         ["Bearer t"])
+        self.assertEqual(self.authorization("t", f"{SOURCE}/actions/runs/1", authenticated=True), ["Bearer t"])
+
+    def test_never_sends_the_token_to_the_feed_or_a_lookalike_host(self):
+        self.assertEqual(self.authorization("t", f"{FEED}/latest.json"), [None])
+        self.assertEqual(self.authorization("t", "https://api.github.com.example/repos/x"), [None])
+
+    def test_reads_public_repositories_without_a_token(self):
+        self.assertEqual(self.authorization(None, f"{ADDON}/commits/main"), [None])
+
+    def test_requires_a_token_for_this_repositorys_actions_reads(self):
+        with self.assertRaisesRegex(STATE.Failure, "^GH_TOKEN is required to read "):
+            STATE.Http(None).get(f"{SOURCE}/actions/runs/1", authenticated=True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,9 +17,11 @@ one, so nothing reads it (docs/releasing.md).
 A build run builds the revision its `Goldbook-server-image` records, which
 may be older than the commit the run started on.
 
-goldbook-addon and the public feed are read without credentials, because the
-workflow token only reaches its own repository. GH_TOKEN, when set, is used
-only for this repository's Actions runs and artifacts.
+GH_TOKEN, when set, authenticates every GitHub API request, including reads
+of the public goldbook-addon repository. Without it those reads share
+GitHub's limit of 60 anonymous requests an hour per address, which other
+jobs on a GitHub-hosted runner's address can use up. This repository's
+Actions runs and artifacts require it. The feed is read without credentials.
 """
 import argparse
 import base64
@@ -78,9 +80,9 @@ class Http:
         headers = {"Accept": "application/vnd.github.raw" if raw else "application/vnd.github+json",
                    "X-GitHub-Api-Version": "2022-11-28", "Cache-Control": "no-cache",
                    "User-Agent": "goldbook-release-state"}
-        if authenticated:
-            if not self.token:
-                raise Failure(f"GH_TOKEN is required to read {url}")
+        if authenticated and not self.token:
+            raise Failure(f"GH_TOKEN is required to read {url}")
+        if self.token and url.startswith(API + "/"):
             headers["Authorization"] = "Bearer " + self.token
         try:
             with self.opener.open(urllib.request.Request(url, headers=headers), timeout=120) as response:
