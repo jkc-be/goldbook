@@ -548,7 +548,13 @@ local function resolveRealm()
     local name = UnitName("player")
     Scanner.recordedRealm = Database.RecordedRealm(ns.db, name, Scanner.House())
     if Scanner.recordedRealm ~= "" then
-      Database.MoveBlankRealm(ns.db, name, Scanner.Identity().faction, Scanner.recordedRealm, time())
+      local faction = Scanner.Identity().faction
+      Database.MoveBlankRealm(ns.db, name, faction, Scanner.recordedRealm, time())
+      -- The app fetches server prices for the keys of `prices` as they are,
+      -- but strips the spaces from a character's realm, which breaks a house
+      -- name such as "EU PvE".
+      local key = Database.RealmKey(Scanner.recordedRealm, faction)
+      ns.db.prices[key] = ns.db.prices[key] or {}
     end
   end
 end

@@ -285,7 +285,8 @@ login(account())
 eq(ns.Scanner.Realm(), "EU PvE", "a new character under no rule is on the PvE house, not the account's PvP realm")
 eq(ns.RealmKey() .. " / " .. ns.MarketName() .. " / " .. ns.CharacterKey(), "EU PvE-Horde / EU PvE-Horde / Nova-EU PvE", "and files under the house's name")
 eq(keys(GoldbookDB.gold) .. " " .. serialize(GoldbookDB.gold["Nova-EU PvE"]), "Nova-EU PvE {488887=900,488888=1000}", "its blank entries move there")
-eq(keys(GoldbookDB.prices), "-Horde", "the account's blank market, which may be the PvP realm's, stays")
+eq(type(GoldbookDB.prices["EU PvE-Horde"]), "table", "its market is a key of prices, so the app fetches the house's server prices")
+eq(keys(GoldbookDB.prices), "-Horde EU PvE-Horde", "the account's blank market, which may be the PvP realm's, stays")
 
 Stub.name = "Sultan"
 login(saved())
