@@ -557,6 +557,16 @@ frame:SetScript("OnEvent", function(_, event, first, second)
       ns.Print("Took " .. plural(taken, "newer price") .. " from the Goldbook server.")
     end
   elseif event == "PLAYER_LOGIN" then
+    -- A client that names no realm files under the one recorded for the
+    -- character, see Scanner.Realm.
+    Scanner.recordedRealm = nil
+    if Scanner.Realm() == "" then
+      local name = UnitName("player")
+      Scanner.recordedRealm = Database.RecordedRealm(ns.db, name)
+      if Scanner.recordedRealm ~= "" then
+        Database.MoveBlankRealm(ns.db, name, Scanner.Identity().faction, Scanner.recordedRealm, time())
+      end
+    end
     -- Before login the normalized realm name may be unknown, and gold booked
     -- under the display name would count the character twice.
     loginIdentity = Scanner.Identity()
@@ -574,6 +584,9 @@ frame:SetScript("OnEvent", function(_, event, first, second)
     end
     inBatches(stored, refreshVendorPrice, ns.UI.RefreshSoon)
     ns.Print(ns.VERSION .. " loaded. Type /gb for commands.")
+    if loginIdentity.realm == "" then
+      ns.Print("The game gives no realm name, so Goldbook cannot tell which auction house this is and shows no prices.")
+    end
   elseif event == "PLAYER_MONEY" then
     recordGold()
     ns.UI.RefreshSoon()

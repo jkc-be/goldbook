@@ -47,10 +47,23 @@ local function notify(kind, payload)
   end
 end
 
+-- The realm every part of the addon files under. WoW Forever answers "" for
+-- both names since its update of 2026-11-20; Scanner.recordedRealm, which
+-- Core reads from GoldbookDB at login, then stands in. "" when unknown.
+function Scanner.Realm()
+  local normalized, shown = GetNormalizedRealmName(), GetRealmName()
+  if normalized and normalized ~= "" then
+    return normalized
+  elseif shown and shown ~= "" then
+    return shown
+  end
+  return Scanner.recordedRealm or ""
+end
+
 function Scanner.Identity()
   local version, build = GetBuildInfo()
   return {
-    realm = GetNormalizedRealmName() or GetRealmName(),
+    realm = Scanner.Realm(),
     faction = UnitFactionGroup("player") or "Neutral",
     region = GetCurrentRegionName and GetCurrentRegionName() or "",
     by = UnitName("player"),

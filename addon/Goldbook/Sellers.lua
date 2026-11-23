@@ -17,7 +17,7 @@ local function offer(result, commodity)
   local owners, seen = {}, {}
   for _, name in ipairs(result.owners or {}) do
     if name == "player" then
-      name = UnitName("player") .. "-" .. (GetNormalizedRealmName() or GetRealmName())
+      name = UnitName("player") .. "-" .. ns.Scanner.Realm()
     end
     if name ~= "" and not seen[name] then
       owners[#owners + 1], seen[name] = name, true
