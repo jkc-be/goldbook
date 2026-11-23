@@ -440,23 +440,33 @@ function Database.MergeServer(db, data)
   return taken
 end
 
--- The realm GoldbookDB recorded for the character named `name`, for a client
--- that gives none: WoW Forever answers "" for both realm names since its
--- update of 2026-11-20. The newest of the character's own entries, else of
--- any character's, else "".
-function Database.RecordedRealm(db, name)
+-- The realm to file the character named `name` under on a client that gives
+-- none: WoW Forever answers "" for both realm names since its update of
+-- 2026-11-20. The newest realm recorded for the character itself, whatever
+-- `house` says, because a character never changes ruleset. Else, with `house`
+-- the auction house the game's rules name, see Scanner.House: the newest realm
+-- recorded on that house, or the house's own name, which the server files
+-- scans under as well. Else, with the rules unreadable and `house` nil: the
+-- newest realm of any character. "" when `house` is false or nothing is
+-- recorded.
+function Database.RecordedRealm(db, name, house)
   local own, any
   for _, character in pairs(db.characters) do
     if type(character.realm) == "string" and character.realm ~= "" then
-      if not any or (character.at or 0) > (any.at or 0) then
-        any = character
-      end
       if character.name == name and (not own or (character.at or 0) > (own.at or 0)) then
         own = character
       end
+      if (not house or Database.House(character.realm) == house) and (not any or (character.at or 0) > (any.at or 0)) then
+        any = character
+      end
     end
   end
-  return (own or any or { realm = "" }).realm
+  if own then
+    return own.realm
+  elseif house == false then
+    return ""
+  end
+  return any and any.realm or house or ""
 end
 
 -- One day or hour scanned under both keys, as logEntry folds a later scan

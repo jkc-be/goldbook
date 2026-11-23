@@ -540,6 +540,19 @@ local function autoScan()
   end)
 end
 
+-- A client that names no realm files under the one Database.RecordedRealm
+-- finds for the character, and what it filed under none moves there.
+local function resolveRealm()
+  Scanner.recordedRealm = nil
+  if Scanner.Realm() == "" then
+    local name = UnitName("player")
+    Scanner.recordedRealm = Database.RecordedRealm(ns.db, name, Scanner.House())
+    if Scanner.recordedRealm ~= "" then
+      Database.MoveBlankRealm(ns.db, name, Scanner.Identity().faction, Scanner.recordedRealm, time())
+    end
+  end
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
@@ -557,16 +570,7 @@ frame:SetScript("OnEvent", function(_, event, first, second)
       ns.Print("Took " .. plural(taken, "newer price") .. " from the Goldbook server.")
     end
   elseif event == "PLAYER_LOGIN" then
-    -- A client that names no realm files under the one recorded for the
-    -- character, see Scanner.Realm.
-    Scanner.recordedRealm = nil
-    if Scanner.Realm() == "" then
-      local name = UnitName("player")
-      Scanner.recordedRealm = Database.RecordedRealm(ns.db, name)
-      if Scanner.recordedRealm ~= "" then
-        Database.MoveBlankRealm(ns.db, name, Scanner.Identity().faction, Scanner.recordedRealm, time())
-      end
-    end
+    resolveRealm()
     -- Before login the normalized realm name may be unknown, and gold booked
     -- under the display name would count the character twice.
     loginIdentity = Scanner.Identity()

@@ -4,5 +4,10 @@
   uses the realm it recorded for your character before the update, and at
   login moves what it filed without a realm since then, such as gold, bags,
   trades and scans, back under that realm.
-- On a character Goldbook has no realm on record for, a chat line at login
-  says that the game gives no realm name and that Goldbook shows no prices.
+- A character Goldbook has not seen before is placed by the game's rules: on
+  a PvP, RP or PvE realm it gets that auction house of your region, such as
+  `EU PvE`, so a new PvE character does not show the prices of your PvP
+  characters.
+- Where the game gives neither a realm name nor rules Goldbook knows an
+  auction house for, as on a hardcore realm, a chat line at login says that
+  Goldbook cannot tell which auction house this is and shows no prices.

@@ -250,5 +250,77 @@ eq(ns.Scanner.Realm(), "Fara'mon", "a blank normalized name falls back to the di
 GetNormalizedRealmName = normalized
 eq(warnings(), 1, "no warning when the game names the realm")
 
+-- A character Goldbook has no realm for is placed by the game's rules.
+function GetNormalizedRealmName()
+  return ""
+end
+function GetRealmName()
+  return ""
+end
+local active = {}
+Enum.GameRule = { PvPRuleset = 213, RPRuleset = 214, HardcoreRuleset = 10 }
+C_GameRules = { IsGameRuleActive = function(rule)
+  return active[rule] == true
+end }
+local function account()
+  return {
+    characters = { ["Mirelle-" .. REALM] = { name = "Mirelle", realm = REALM, faction = "Horde", class = "MAGE", level = 20, at = NOW - 3600 } },
+    gold = { ["Nova-"] = { [HOUR - 1] = 900 } },
+    prices = { ["-Horde"] = { ["2589"] = "100,50,2," .. NOW - 500 .. ",0,0;100;" } },
+  }
+end
+Stub.name = "Nova"
+
+active = { [213] = true }
+eq(tostring(ns.Scanner.House()), "EU PvP", "the PvP rule names the PvP house")
+login(account())
+eq(ns.RealmKey() .. " " .. ns.CharacterKey(), REALM .. "-Horde Nova-" .. REALM, "a new character under the PvP rule takes the account's PvP realm")
+
+active = { [214] = true }
+eq(tostring(ns.Scanner.House()), "EU RP", "the RP rule names the RP house")
+
+active = {}
+eq(tostring(ns.Scanner.House()), "EU PvE", "no rule names the PvE house")
+login(account())
+eq(ns.Scanner.Realm(), "EU PvE", "a new character under no rule is on the PvE house, not the account's PvP realm")
+eq(ns.RealmKey() .. " / " .. ns.MarketName() .. " / " .. ns.CharacterKey(), "EU PvE-Horde / EU PvE-Horde / Nova-EU PvE", "and files under the house's name")
+eq(keys(GoldbookDB.gold) .. " " .. serialize(GoldbookDB.gold["Nova-EU PvE"]), "Nova-EU PvE {488887=900,488888=1000}", "its blank entries move there")
+eq(keys(GoldbookDB.prices), "-Horde", "the account's blank market, which may be the PvP realm's, stays")
+
+Stub.name = "Sultan"
+login(saved())
+eq(ns.RealmKey(), REALM .. "-Horde", "the character's own recorded realm wins over rules that read PvE")
+
+Stub.name = "Nova"
+local rules = C_GameRules
+C_GameRules = nil
+eq(tostring(ns.Scanner.House()), "nil", "a client without game rules names no house")
+login(account())
+eq(ns.RealmKey(), REALM .. "-Horde", "and the account's newest realm stands in")
+C_GameRules, Enum.GameRule.RPRuleset = rules, nil
+eq(tostring(ns.Scanner.House()), "nil", "a client lacking one of the rules names no house")
+login(account())
+eq(ns.RealmKey(), REALM .. "-Horde", "and the account's newest realm stands in again")
+Enum.GameRule.RPRuleset = 214
+
+active = { [10] = true, [213] = true }
+eq(tostring(ns.Scanner.House()), "false", "a hardcore realm has no house")
+login(account())
+eq(ns.RealmKey() .. " " .. warnings(), "-Horde 2", "so a new character there has no realm, and is told so")
+Stub.name = "Sultan"
+login(saved())
+eq(ns.RealmKey(), REALM .. "-Horde", "a character recorded before keeps its realm there")
+
+active = {}
+local horde = UnitFactionGroup
+function UnitFactionGroup(unit)
+  return unit == "player" and "Alliance" or horde(unit)
+end
+Stub.name = "Nova"
+login(nil)
+eq(ns.RealmKey() .. " " .. ns.CharacterKey() .. " " .. warnings(), "EU PvE-Alliance Nova-EU PvE 2", "an Alliance character on a new account files under its faction, without a warning")
+login({ prices = { ["-Alliance"] = { ["2589"] = "100,50,2," .. NOW - 500 .. ",0,0;100;" } } })
+eq(keys(GoldbookDB.prices), "EU PvE-Alliance", "with no other realm recorded, the blank market is this house's")
+
 io.write(("%d checks, %d failures\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)

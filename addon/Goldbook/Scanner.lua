@@ -47,9 +47,23 @@ local function notify(kind, payload)
   end
 end
 
+-- The auction house the game's rules place the character on, as
+-- Database.House names it: "EU PvP", "EU RP" or "EU PvE". Nil when the client
+-- does not say, false on a hardcore realm, which has no house Goldbook knows.
+function Scanner.House()
+  local region = GetCurrentRegionName and GetCurrentRegionName() or ""
+  local rules, active = Enum.GameRule, C_GameRules and C_GameRules.IsGameRuleActive
+  if region == "" or not active or not (rules and rules.PvPRuleset and rules.RPRuleset and rules.HardcoreRuleset) then
+    return nil
+  elseif active(rules.HardcoreRuleset) then
+    return false
+  end
+  return region .. " " .. (active(rules.PvPRuleset) and "PvP" or active(rules.RPRuleset) and "RP" or "PvE")
+end
+
 -- The realm every part of the addon files under. WoW Forever answers "" for
 -- both names since its update of 2026-11-20; Scanner.recordedRealm, which
--- Core reads from GoldbookDB at login, then stands in. "" when unknown.
+-- Core resolves at login, then stands in. "" when unknown.
 function Scanner.Realm()
   local normalized, shown = GetNormalizedRealmName(), GetRealmName()
   if normalized and normalized ~= "" then
