@@ -301,7 +301,7 @@ fn container(v: Option<&Value>, at: &str) -> Result<Option<Container>, String> {
         .collect::<Result<_, _>>()?;
     Ok(Some(Container { at: time, rows }))
 }
-fn character(v: &Value, at: &str) -> Result<Character, String> {
+pub fn parse_character(v: &Value, at: &str) -> Result<Character, String> {
     let c = object(v, at)?;
     let name = text(field(c, "name"), &format!("{at}.name"), 1, 64)?;
     let realm = text(field(c, "realm"), &format!("{at}.realm"), 1, 64)?;
@@ -376,7 +376,7 @@ pub fn parse_account_upload(v: &Value) -> Result<AccountUpload, String> {
     let characters = list(field(a, "characters"), "characters", MAX_CHARACTERS)?
         .iter()
         .enumerate()
-        .map(|(i, v)| character(v, &format!("characters[{i}]")))
+        .map(|(i, v)| parse_character(v, &format!("characters[{i}]")))
         .collect::<Result<_, _>>()?;
     let trades = match a.get("trades") {
         None => Vec::new(),

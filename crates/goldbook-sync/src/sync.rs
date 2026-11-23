@@ -1,11 +1,14 @@
-use crate::{extract_account, extract_scans, extract_seller_snapshots, read_saved_variables};
+use crate::{
+    extract_scans, extract_seller_snapshots, read_saved_variables,
+    savedvars::extract_account_and_refusals,
+};
 use anyhow::{Result, anyhow, bail};
 use fs2::FileExt;
 use goldbook_core::sha256;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -114,6 +117,16 @@ fn state_change<T>(path: &Path, update: impl FnOnce(&mut State, bool) -> Result<
     temp.as_file().sync_all()?;
     temp.persist(path).map_err(|e| e.error)?;
     Ok(output)
+}
+/// Records entries that need no later pass: uploaded, or impossible to decode.
+fn mark_handled(path: &Path, ids: &[String]) -> Result<()> {
+    state_change(path, |state, _| {
+        let known = state.uploaded.iter().cloned().collect::<HashSet<_>>();
+        state
+            .uploaded
+            .extend(ids.iter().filter(|id| !known.contains(*id)).cloned());
+        Ok(())
+    })
 }
 fn is_loopback(url: &reqwest::Url) -> bool {
     match url.host() {
@@ -226,6 +239,8 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
             Ok(scan) => scan,
             Err(e) => {
                 (options.log)(&format!("skipped {}: {e}", queued.label));
+                mark_handled(&options.state_path, std::slice::from_ref(&queued.id))?;
+                sent.insert(queued.id);
                 result.invalid += 1;
                 continue;
             }
@@ -235,12 +250,7 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
             result.failed += 1;
             return Ok(result);
         }
-        state_change(&options.state_path, |state, _| {
-            if !state.uploaded.contains(&queued.id) {
-                state.uploaded.push(queued.id.clone())
-            }
-            Ok(())
-        })?;
+        mark_handled(&options.state_path, std::slice::from_ref(&queued.id))?;
         sent.insert(queued.id);
         result.sent += 1;
         (options.log)(&format!(
@@ -251,21 +261,24 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
         ));
     }
     let mut pending = Vec::new();
+    let mut undecodable = Vec::new();
     for queued in extract_seller_snapshots(&saved)? {
         if sent.contains(&queued.id) {
             result.already_sent += 1;
             continue;
         }
+        sent.insert(queued.id.clone());
         match queued.decode() {
-            Ok(snapshot) => {
-                sent.insert(queued.id.clone());
-                pending.push((queued.id, serde_json::to_string(&snapshot)?));
-            }
+            Ok(snapshot) => pending.push((queued.id, serde_json::to_string(&snapshot)?)),
             Err(e) => {
                 (options.log)(&format!("skipped seller snapshot: {e}"));
+                undecodable.push(queued.id);
                 result.invalid += 1;
             }
         }
+    }
+    if !undecodable.is_empty() {
+        mark_handled(&options.state_path, &undecodable)?;
     }
     let mut pending = pending.into_iter().peekable();
     while pending.peek().is_some() {
@@ -296,20 +309,14 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
             result.failed += ids.len() as u64;
             return Ok(result);
         }
-        state_change(&options.state_path, |state, _| {
-            let known = state.uploaded.iter().cloned().collect::<HashSet<_>>();
-            state
-                .uploaded
-                .extend(ids.iter().filter(|id| !known.contains(*id)).cloned());
-            Ok(())
-        })?;
+        mark_handled(&options.state_path, &ids)?;
         result.sent += ids.len() as u64;
         (options.log)(&format!(
             "uploaded {} seller snapshots in one batch",
             ids.len()
         ));
     }
-    let mut account = match extract_account(&saved) {
+    let (mut account, refusals) = match extract_account_and_refusals(&saved) {
         Ok(Some(a)) => a,
         Ok(None) => return Ok(result),
         Err(e) => {
@@ -365,6 +372,18 @@ pub async fn sync_file(options: &SyncOptions) -> Result<SyncResult> {
                 "uploaded account {shown}: {} characters",
                 account.characters.len()
             ));
+            if !refusals.is_empty() {
+                (options.log)(&format!(
+                    "left out {} characters the server would refuse: {}",
+                    refusals.len(),
+                    refusals
+                        .into_iter()
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ));
+            }
             result.sent += 1
         }
     }

@@ -2,7 +2,7 @@ use crate::luatable::{SavedVariables, js_value};
 use anyhow::{Result, anyhow, bail};
 use goldbook_core::{
     AccountUpload, MAX_CHARACTERS, MAX_GOLD_POINTS, MAX_TRADES, ScanUpload, Trade, key_hash,
-    normalize_code, parse_account_upload, parse_scan_upload, parse_trade, sha256,
+    normalize_code, parse_account_upload, parse_character, parse_scan_upload, parse_trade, sha256,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -310,6 +310,14 @@ fn extract_trades(db: &Map<String, Value>) -> Vec<Trade> {
 }
 
 pub fn extract_account(saved: &SavedVariables) -> Result<Option<AccountUpload>> {
+    Ok(extract_account_and_refusals(saved)?.map(|(account, _)| account))
+}
+
+/// The account, and why each character left out of it would be refused by
+/// the server. Like a trade, such a character does not hold up the rest.
+pub(crate) fn extract_account_and_refusals(
+    saved: &SavedVariables,
+) -> Result<Option<(AccountUpload, Vec<String>)>> {
     let Some(login) = extract_login(saved)? else {
         return Ok(None);
     };
@@ -358,8 +366,14 @@ pub fn extract_account(saved: &SavedVariables) -> Result<Option<AccountUpload>> 
         characters.push((name.clone(), latest, character));
     }
     let mut characters = merge_characters(characters);
+    let mut refusals = Vec::new();
+    characters.retain(|c| {
+        parse_character(&c.2, "character")
+            .map_err(|e| refusals.push(e))
+            .is_ok()
+    });
     characters.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     characters.truncate(MAX_CHARACTERS);
     characters.sort_by(|a, b| a.0.cmp(&b.0));
-    parse_account_upload(&json!({"id":login.id,"keyHash":key_hash(&login.key),"characters":characters.into_iter().map(|c|c.2).collect::<Vec<_>>(),"trades":extract_trades(db)})).map(Some).map_err(anyhow::Error::msg)
+    parse_account_upload(&json!({"id":login.id,"keyHash":key_hash(&login.key),"characters":characters.into_iter().map(|c|c.2).collect::<Vec<_>>(),"trades":extract_trades(db)})).map(|account| Some((account, refusals))).map_err(anyhow::Error::msg)
 }
