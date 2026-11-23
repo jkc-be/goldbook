@@ -1220,3 +1220,137 @@ async fn watcher_downloads_server_data_at_most_every_15_minutes_unless_asked() {
     handle.close();
     task.abort();
 }
+
+async fn upload_server() -> (String, Arc<Mutex<Vec<Value>>>, tokio::task::JoinHandle<()>) {
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let record = |State(rows): State<Arc<Mutex<Vec<Value>>>>, Json(body): Json<Value>| async move {
+        rows.lock().unwrap().push(body);
+        "ok"
+    };
+    let app = Router::new()
+        .route("/goldbook/api/scans", post(record))
+        .route("/goldbook/api/sellers/batch", post(record))
+        .route("/goldbook/api/account", post(record))
+        .with_state(received.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{address}/goldbook"), received, task)
+}
+
+#[tokio::test]
+async fn an_unreadable_scan_or_seller_snapshot_is_reported_once_and_its_correction_uploads() {
+    let (api, received, task) = upload_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("Goldbook.lua");
+    let saved = |realm: &str| {
+        format!(
+            r#"GoldbookDB={{["items"]={{}},["scans"]={{{{["realm"]="{realm}",["faction"]="Horde",["region"]="EU",["at"]=1760000000,["mode"]="browse",["by"]="Sultan",["build"]="1.15.8",["count"]=1,["data"]="2589,100,100,20,1"}}}},["sellerScans"]={{["{realm}|Horde|2589|1760000000"]={{["realm"]="{realm}",["faction"]="Horde",["itemKey"]="2589",["scannedAt"]=1760000000,["offers"]={{}}}},["Faramon|Horde|2592|1760000000"]={{["realm"]="Faramon",["faction"]="Horde",["itemKey"]="2592",["scannedAt"]=1760000000,["offers"]={{}}}}}}}}"#
+        )
+    };
+    std::fs::write(&file, saved("")).unwrap();
+    let (log, lines) = recording_logger();
+    let mut options = options(&file, &dir.path().join("state.json"), &api);
+    options.log = log;
+
+    let first = sync_file(&options).await.unwrap();
+    assert_eq!(
+        (first.sent, first.already_sent, first.invalid, first.failed),
+        (1, 0, 2, 0)
+    );
+    assert_eq!(
+        *lines.lock().unwrap(),
+        [
+            "skipped |Horde|1760000000: realm must be a string of 1 to 64 characters",
+            "skipped seller snapshot: realm must be a string of 1 to 64 characters",
+            "uploaded 1 seller snapshots in one batch",
+        ]
+    );
+
+    let second = sync_file(&options).await.unwrap();
+    assert_eq!(
+        (
+            second.sent,
+            second.already_sent,
+            second.invalid,
+            second.failed
+        ),
+        (0, 3, 0, 0)
+    );
+    assert_eq!(lines.lock().unwrap().len(), 3, "nothing is reported twice");
+
+    std::fs::write(&file, saved("Faramon")).unwrap();
+    let corrected = sync_file(&options).await.unwrap();
+    assert_eq!(
+        (
+            corrected.sent,
+            corrected.already_sent,
+            corrected.invalid,
+            corrected.failed
+        ),
+        (2, 1, 0, 0)
+    );
+    let received = received.lock().unwrap();
+    assert_eq!(received.len(), 3);
+    assert_eq!(received[0][0]["itemKey"], "2592");
+    assert_eq!(received[1]["realm"], "Faramon");
+    assert_eq!(received[1]["rows"], json!([["2589", 100, 100, 20, 1]]));
+    assert_eq!(
+        received[2],
+        json!([{"realm":"Faramon","faction":"Horde","itemKey":"2589","scannedAt":1760000000,"offers":[]}])
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn an_account_uploads_without_a_character_the_server_would_refuse() {
+    let (api, received, task) = upload_server().await;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("Goldbook.lua");
+    let sale = r#"{["at"]=1760000100,["side"]="sell",["item"]="Linen Cloth",["key"]="2589",["count"]=20,["price"]=2000,["fee"]=100}"#;
+    std::fs::write(
+        &file,
+        format!(
+            r#"GoldbookDB={{["account"]={{["id"]="K7Q2M9PX",["key"]="7KQ2M9PXABCDEFGHJKMN"}},["items"]={{}},["scans"]={{}},["gold"]={{["Sultan-Faramon"]={{[497759]=5000}},["Sultan-"]={{[497760]=6000}}}},["characters"]={{["Mirelle-"]={{["name"]="Mirelle",["realm"]="",["faction"]="Horde",["class"]="MAGE",["level"]=12,["at"]=1791936000}}}},["trades"]={{["Sultan-Faramon"]={{{sale}}}}}}}"#
+        ),
+    )
+    .unwrap();
+    let (log, lines) = recording_logger();
+    let mut options = options(&file, &dir.path().join("state.json"), &api);
+    options.log = log;
+
+    let first = sync_file(&options).await.unwrap();
+    assert_eq!(
+        (first.sent, first.already_sent, first.invalid, first.failed),
+        (1, 0, 0, 0)
+    );
+    assert_eq!(
+        *lines.lock().unwrap(),
+        [
+            "uploaded account K7Q2-M9PX: 1 characters",
+            "left out 2 characters the server would refuse: character.realm must be a string of 1 to 64 characters",
+        ]
+    );
+    let second = sync_file(&options).await.unwrap();
+    assert_eq!(
+        (
+            second.sent,
+            second.already_sent,
+            second.invalid,
+            second.failed
+        ),
+        (0, 1, 0, 0)
+    );
+    assert_eq!(lines.lock().unwrap().len(), 2, "nothing is reported twice");
+    let received = received.lock().unwrap();
+    assert_eq!(received.len(), 1);
+    assert_eq!(
+        received[0]["characters"],
+        json!([{"name":"Sultan","realm":"Faramon","faction":null,"class":null,"level":null,"updatedAt":null,"gold":[[1791932400u64,5000]],"bags":null,"bank":null}])
+    );
+    assert_eq!(
+        received[0]["trades"],
+        json!([{"name":"Sultan","realm":"Faramon","at":1760000100,"side":"sell","item":"Linen Cloth","itemKey":"2589","count":20,"price":2000,"fee":100}])
+    );
+    task.abort();
+}

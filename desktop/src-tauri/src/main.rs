@@ -187,10 +187,22 @@ fn describe_log(line: &str) -> Option<String> {
     if line.contains("another key") {
         return Some("This account belongs to another key on the server.".into());
     }
+    if line.starts_with("skipped account: ") {
+        return Some("Goldbook could not read this account's data. It will try again.".into());
+    }
     if line.starts_with("skipped ") {
-        return Some(
-            "Goldbook skipped data it could not read. It will send the next update.".into(),
-        );
+        return Some("Goldbook skipped data it could not read. It will not send that data.".into());
+    }
+    if let Some(rest) = line.strip_prefix("left out ") {
+        let count = rest.split(' ').next()?;
+        return Some(format!(
+            "Goldbook left out {count} {} the server would not accept.",
+            if count == "1" {
+                "character"
+            } else {
+                "characters"
+            }
+        ));
     }
     if line.starts_with("upload of ") {
         return Some(
@@ -1055,6 +1067,34 @@ mod tests {
         assert_eq!(
             describe_log("uploaded account K7Q2-M9PX: 3 characters"),
             Some("Uploaded 3 characters.".into())
+        );
+    }
+
+    #[test]
+    fn skipped_and_left_out_lines_say_whether_goldbook_will_try_again() {
+        assert_eq!(
+            describe_log("skipped seller snapshot: realm must be a string of 1 to 64 characters"),
+            Some("Goldbook skipped data it could not read. It will not send that data.".into())
+        );
+        assert_eq!(
+            describe_log("skipped |Horde|1760000000: realm must be a string of 1 to 64 characters"),
+            Some("Goldbook skipped data it could not read. It will not send that data.".into())
+        );
+        assert_eq!(
+            describe_log("skipped account: GoldbookDB.gold is not a table"),
+            Some("Goldbook could not read this account's data. It will try again.".into())
+        );
+        assert_eq!(
+            describe_log(
+                "left out 1 characters the server would refuse: character.realm must be a string of 1 to 64 characters"
+            ),
+            Some("Goldbook left out 1 character the server would not accept.".into())
+        );
+        assert_eq!(
+            describe_log(
+                "left out 2 characters the server would refuse: character.realm must be a string of 1 to 64 characters"
+            ),
+            Some("Goldbook left out 2 characters the server would not accept.".into())
         );
     }
 
