@@ -45,10 +45,10 @@ Each output is reported as one of three states:
 - `conflict`: the output holds this version from another build, or a newer
   version. A conflict stops the run and needs a decision from you.
 
-goldbook-addon is read through GitHub's public API without credentials,
-because the workflow token reaches only its own repository. Unauthenticated
-requests share a limit of 60 per hour per runner address. If a busy runner
-address hits it, the job fails without changing anything and can be rerun.
+The workflows read goldbook-addon through GitHub's API with their own token,
+which allows thousands of requests an hour. Anonymous requests would share a
+limit of 60 an hour per runner address, which other jobs on a busy
+GitHub-hosted runner address can use up.
 
 ## Release with make release
 
