@@ -1,79 +1,133 @@
 use crate::house::House;
 use goldbook_core::ScanUpload;
 use rusqlite::{
-    Connection, OptionalExtension, TransactionBehavior, functions::FunctionFlags, params,
+    Connection, OptionalExtension, Transaction, TransactionBehavior, functions::FunctionFlags,
+    params,
 };
 use serde_json::Value;
 use std::{path::Path, time::Duration};
 
-const MIGRATIONS: [(&str, &str); 17] = [
+/// One migration: a file under server/migrations, or a change to the data
+/// that SQL alone cannot express. Each runs once, in its own transaction.
+enum Step {
+    Sql(&'static str),
+    Code(fn(&Transaction) -> rusqlite::Result<()>),
+}
+impl Step {
+    fn apply(&self, tx: &Transaction) -> rusqlite::Result<()> {
+        match self {
+            Step::Sql(sql) => tx.execute_batch(sql),
+            Step::Code(run) => run(tx),
+        }
+    }
+}
+
+const MIGRATIONS: [(&str, Step); 19] = [
     (
         "0001_init.sql",
-        include_str!("../../../server/migrations/0001_init.sql"),
+        Step::Sql(include_str!("../../../server/migrations/0001_init.sql")),
     ),
     (
         "0002_drop_prices_by_item.sql",
-        include_str!("../../../server/migrations/0002_drop_prices_by_item.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0002_drop_prices_by_item.sql"
+        )),
     ),
     (
         "0003_accounts.sql",
-        include_str!("../../../server/migrations/0003_accounts.sql"),
+        Step::Sql(include_str!("../../../server/migrations/0003_accounts.sql")),
     ),
     (
         "0004_gold_hours.sql",
-        include_str!("../../../server/migrations/0004_gold_hours.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0004_gold_hours.sql"
+        )),
     ),
     (
         "0005_scan_fingerprints.sql",
-        include_str!("../../../server/migrations/0005_scan_fingerprints.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0005_scan_fingerprints.sql"
+        )),
     ),
     (
         "0006_seller_snapshots.sql",
-        include_str!("../../../server/migrations/0006_seller_snapshots.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0006_seller_snapshots.sql"
+        )),
     ),
     (
         "0007_trades.sql",
-        include_str!("../../../server/migrations/0007_trades.sql"),
+        Step::Sql(include_str!("../../../server/migrations/0007_trades.sql")),
     ),
     (
         "0008_vendor_trades.sql",
-        include_str!("../../../server/migrations/0008_vendor_trades.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0008_vendor_trades.sql"
+        )),
     ),
     (
         "0009_linked_accounts.sql",
-        include_str!("../../../server/migrations/0009_linked_accounts.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0009_linked_accounts.sql"
+        )),
     ),
     (
         "0010_upload_tokens.sql",
-        include_str!("../../../server/migrations/0010_upload_tokens.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0010_upload_tokens.sql"
+        )),
     ),
     (
         "0011_battlenet_oauth.sql",
-        include_str!("../../../server/migrations/0011_battlenet_oauth.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0011_battlenet_oauth.sql"
+        )),
     ),
     (
         "0012_accounting.sql",
-        include_str!("../../../server/migrations/0012_accounting.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0012_accounting.sql"
+        )),
     ),
     (
         "0013_account_identities.sql",
-        include_str!("../../../server/migrations/0013_account_identities.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0013_account_identities.sql"
+        )),
     ),
     (
         "0014_battlenet_web.sql",
-        include_str!("../../../server/migrations/0014_battlenet_web.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0014_battlenet_web.sql"
+        )),
     ),
     (
         "0015_latest_prices.sql",
-        include_str!("../../../server/migrations/0015_latest_prices.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0015_latest_prices.sql"
+        )),
     ),
     (
         "0016_auction_houses.sql",
-        include_str!("../../../server/migrations/0016_auction_houses.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0016_auction_houses.sql"
+        )),
     ),
     (
         "0017_item_sources.sql",
-        include_str!("../../../server/migrations/0017_item_sources.sql"),
+        Step::Sql(include_str!(
+            "../../../server/migrations/0017_item_sources.sql"
+        )),
+    ),
+    (
+        "0018_hidden_trades.sql",
+        Step::Sql(include_str!(
+            "../../../server/migrations/0018_hidden_trades.sql"
+        )),
+    ),
+    (
+        "0019_balance_correction",
+        Step::Code(crate::balance::correct),
     ),
 ];
 
@@ -98,7 +152,7 @@ pub fn connect(path: &Path) -> anyhow::Result<Connection> {
 
 pub fn migrate(db: &mut Connection) -> anyhow::Result<()> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)")?;
-    for (name, sql) in MIGRATIONS {
+    for (name, step) in MIGRATIONS {
         let applied: Option<String> = db
             .query_row("SELECT name FROM migrations WHERE name=?1", [name], |r| {
                 r.get(0)
@@ -108,7 +162,7 @@ pub fn migrate(db: &mut Connection) -> anyhow::Result<()> {
             continue;
         }
         let tx = db.transaction()?;
-        tx.execute_batch(sql)?;
+        step.apply(&tx)?;
         tx.execute("INSERT INTO migrations VALUES (?1, unixepoch())", [name])?;
         tx.commit()?;
     }
@@ -199,11 +253,13 @@ mod tests {
             "CREATE TABLE migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)",
         )
         .unwrap();
-        for (name, sql) in &MIGRATIONS[..16] {
-            db.execute_batch(sql).unwrap();
-            db.execute("INSERT INTO migrations VALUES (?1, 0)", [name])
+        let tx = db.transaction().unwrap();
+        for (name, step) in &MIGRATIONS[..16] {
+            step.apply(&tx).unwrap();
+            tx.execute("INSERT INTO migrations VALUES (?1, 0)", [name])
                 .unwrap();
         }
+        tx.commit().unwrap();
         db.execute(
             "INSERT INTO items (item_key,name,quality) VALUES (?1,?2,?3)",
             params!["2589", "Linen Cloth", 1],
