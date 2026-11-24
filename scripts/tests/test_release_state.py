@@ -1,6 +1,7 @@
 """Release outputs through every stage of a promotion, read from a simulated GitHub and feed."""
 import base64
 import contextlib
+from http.client import RemoteDisconnected
 import importlib.util
 import io
 import json
@@ -62,6 +63,8 @@ class World:
         if authenticated:
             self.authenticated.append(url)
         value = self.urls.get(url)
+        if isinstance(value, Exception):
+            raise value
         if value is None or isinstance(value, bytes):
             return value
         return json.dumps(value).encode()
@@ -475,6 +478,8 @@ class CommandLine(unittest.TestCase):
 
 
 class DownstreamWait(unittest.TestCase):
+    URL = f"{ADDON}/actions/workflows/release.yml/runs?head_sha={MIRROR_R1}&per_page=100"
+
     def wait(self, world, polls):
         """Runs the wait loop, letting goldbook-addon move on at each sleep."""
         clock = [0]
@@ -519,6 +524,18 @@ class DownstreamWait(unittest.TestCase):
             self.wait(world, [])
         self.assertEqual(str(raised.exception),
                          f"Package addon release did not finish within 120 minutes for {MIRROR_R1}")
+
+    def test_a_github_server_error_is_asked_again_at_the_next_poll(self):
+        world = World()
+        world.urls[self.URL] = STATE.Unavailable(f"GET {self.URL} failed with HTTP 504")
+        message = self.wait(world, [lambda w: w.downstream(MIRROR_R1, "completed", "success", "success")])
+        self.assertEqual(message, "Package addon release succeeded: https://github.com/jkc-be/goldbook-addon/actions/runs/7")
+
+    def test_a_refused_request_stops_the_wait(self):
+        world = World()
+        world.urls[self.URL] = STATE.Failure(f"GET {self.URL} failed with HTTP 403")
+        with self.assertRaisesRegex(STATE.Failure, "^GET .* failed with HTTP 403$"):
+            self.wait(world, [lambda w: w.downstream(MIRROR_R1, "completed", "success", "success")])
 
 
 class Checks(unittest.TestCase):
@@ -576,6 +593,54 @@ class Checks(unittest.TestCase):
             self.wait(world, [])
         self.assertEqual(str(raised.exception),
                          f"Check did not finish within 30 minutes for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
+
+    def test_a_github_server_error_is_asked_again_at_the_next_poll(self):
+        world = World()
+        world.urls[self.URL] = STATE.Unavailable(f"GET {self.URL} failed with HTTP 502")
+        message = self.wait(world, [lambda w: self.runs(w, (31, "completed", "success"))])
+        self.assertEqual(message, f"Check passed on main for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
+
+    def test_a_github_outage_after_the_run_appeared_still_names_the_run_at_the_timeout(self):
+        world = World()
+        self.runs(world, (31, "in_progress", None))
+        outage = STATE.Unavailable(f"GET {self.URL} failed: timed out")
+        with self.assertRaises(STATE.Failure) as raised:
+            self.wait(world, [lambda w: w.urls.__setitem__(self.URL, outage)])
+        self.assertEqual(str(raised.exception),
+                         f"Check did not finish within 30 minutes for {R1}: https://github.com/jkc-be/goldbook/actions/runs/31")
+
+
+class HttpErrors(unittest.TestCase):
+    URL = "https://api.github.com/repos/jkc-be/goldbook-addon/commits/main"
+
+    def get(self, error):
+        http = STATE.Http()
+        http.opener = mock.Mock(open=mock.Mock(side_effect=error))
+        return http.get(self.URL)
+
+    def http_error(self, code, headers=None):
+        return STATE.urllib.error.HTTPError(self.URL, code, "error", headers or {}, None)
+
+    def test_a_missing_resource_reads_as_none(self):
+        self.assertIsNone(self.get(self.http_error(404)))
+
+    def test_server_errors_and_network_failures_may_pass(self):
+        for error, message in ((self.http_error(500), "failed with HTTP 500"),
+                               (self.http_error(504), "failed with HTTP 504"),
+                               (STATE.urllib.error.URLError("connection reset"), "failed: connection reset"),
+                               (TimeoutError("The read operation timed out"), "failed: The read operation timed out"),
+                               (RemoteDisconnected("Remote end closed connection without response"),
+                                "failed: Remote end closed connection without response")):
+            with self.subTest(message=message), self.assertRaises(STATE.Unavailable) as raised:
+                self.get(error)
+            self.assertEqual(str(raised.exception), f"GET {self.URL} {message}")
+
+    def test_a_refusal_does_not_pass_by_asking_again(self):
+        with self.assertRaises(STATE.Failure) as raised:
+            self.get(self.http_error(403, {"X-RateLimit-Remaining": "0"}))
+        self.assertNotIsInstance(raised.exception, STATE.Unavailable)
+        self.assertEqual(str(raised.exception),
+                         f"GET {self.URL} failed with HTTP 403 (GitHub rate limit reached; rerun later)")
 
 
 class Feed(unittest.TestCase):

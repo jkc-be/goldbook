@@ -129,10 +129,12 @@ The checks are not run again. Every push to `main` starts **Check** for
 exactly that commit, and the `check` job waits up to 30 minutes for that run
 and requires it to pass. So the revision must be a commit that was pushed to
 `main`, such as the release PR's merge commit, not a commit in the middle of a
-merged branch. `check.yml` takes no ref input, so its jobs never run code
-checked out from an input while holding `main`'s caches. The build jobs do
-check out the input revision, but only after `guard` has confirmed it is in
-`main`'s history, so they run nothing that was not already merged.
+merged branch. A GitHub server error or network failure during the wait only
+fails one poll; the next poll asks again. `check.yml` takes no ref input, so
+its jobs never run code checked out from an input while holding `main`'s
+caches. The build jobs do check out the input revision, but only after
+`guard` has confirmed it is in `main`'s history, so they run nothing that was
+not already merged.
 
 Promote reads the revision from `image.json`, not from the commit the build
 run started on. It requires the build's `addon.json` to name the same
@@ -210,7 +212,7 @@ The jobs, in order:
 | `server` | Runs the helper's `check-publish`, then `deploy` of the image digest in `Goldbook-server-image`, for the build run and its revision. The helper compares the revision with the one the server runs. It skips the deploy when the server already runs that commit or a later one, and refuses one whose history diverged. |
 | `publish` | Runs the helper's `publish` for the build run. |
 | `mirror` | Pushes the revision's `addon/` to goldbook-addon, or confirms that HEAD already holds it. For a beta, it first stamps the beta version into `Goldbook.toc`. |
-| `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge and Wago jobs. It polls every 3 minutes for at most 120 minutes. |
+| `addon-release` | Waits for goldbook-addon's **Package addon release** run for the mirror commit, including its CurseForge and Wago jobs. It polls every 3 minutes for at most 120 minutes. A GitHub server error or network failure only fails that poll; the next poll asks again. |
 | `tag` | Creates `v<version>` at the revision. A tag already on that commit passes. |
 
 Promote and **Deploy to OVH** share the concurrency group
