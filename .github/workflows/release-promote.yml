@@ -21,7 +21,7 @@ on:
 permissions:
   contents: read
 
-# Shared with Deploy to OVH. No called workflow uses this group, because a
+# One promotion at a time. No called workflow uses this group, because a
 # called workflow would wait for its own caller. The group is held only while
 # a run attempt is in progress, so every job that changes something refuses an
 # attempt whose guard passed in an earlier one ("Re-run failed jobs").
@@ -123,7 +123,10 @@ jobs:
           user: ${{ secrets.DEPLOY_USER }}
       # The helper skips the deploy when the server already runs this revision
       # or a later commit, so a rerun never replaces a later server deploy.
+      # A beta leaves the server alone: the server runs only releases, so the
+      # next release, which may be picked from the last one, descends from it.
       - name: Deploy the server
+        if: ${{ !contains(needs.guard.outputs.version, '-beta.') }}
         uses: ./.github/actions/ovh
         with:
           operation: deploy

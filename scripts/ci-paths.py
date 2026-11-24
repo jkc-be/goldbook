@@ -4,8 +4,7 @@
 `desktop` runs `cargo test -p goldbook-desktop`, `stack` builds the local
 Compose server, and `test` runs `make check`. Documentation runs none of
 them. An unrecognized path runs all of them, and so does a workflow started
-by hand: Deploy to OVH calls Check that way, and a called workflow reports
-its caller's event.
+by hand.
 """
 import os
 from pathlib import Path

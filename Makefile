@@ -141,22 +141,23 @@ check: ## Run tests, Rust formatting checks, and clippy
 	python3 scripts/test.py --check
 
 # Deploys this checkout to OVH: backs up the database, since migrations are not
-# rolled back, then builds and starts the server there. Only from a clean main
-# that matches origin/main, because the deploy ships the files as they are
-# here; FORCE=1 skips that check. Another host: make deploy OVH_HOST=me@host.
+# rolled back, then builds and starts the server there. Only from a clean
+# checkout of a release tag, because the server runs only releases: the next
+# release, picked from the last one, must descend from what the server runs.
+# FORCE=1 skips that check. Another host: make deploy OVH_HOST=me@host.
 #| Usage: make deploy [OVH_HOST=<ssh-host>] [FORCE=1]
 #| Backs up the database, then builds and starts this checkout's server on OVH.
 #| OVH_HOST defaults to fedora_ovh. Needs Git, SSH access and server prerequisites.
-#| Requires clean main matching origin/main. FORCE=1 skips those checkout checks.
+#| Requires a clean checkout of a release tag, such as git checkout v0.5.5.
+#| FORCE=1 skips those checkout checks.
 #| This changes the live server. For the unified release flow, use make release.
 #| Example: make deploy OVH_HOST=fedora_ovh
 #| Details: docs/releasing.md
-deploy: ## Back up the database and deploy to OVH
+deploy: ## Back up the database and deploy a release tag to OVH
 ifneq ($(FORCE),1)
-	@git fetch -q origin main
-	@test "$$(git rev-parse --abbrev-ref HEAD)" = main || { echo "Check out main first, or deploy anyway with FORCE=1."; exit 1; }
+	@git fetch -q --tags origin
+	@test -n "$$(git tag --points-at HEAD --list 'v[0-9]*' | grep -v -e -beta)" || { echo "Check out a release tag first, such as git checkout v0.5.5, or deploy anyway with FORCE=1."; exit 1; }
 	@test -z "$$(git status --porcelain --untracked-files=no)" || { echo "Commit or stash your changes first, or deploy anyway with FORCE=1."; exit 1; }
-	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "main is not origin/main. Pull or push first, or deploy anyway with FORCE=1."; exit 1; }
 endif
 	bash server/backup.sh $(OVH_HOST)
 	bash server/deploy.sh $(OVH_HOST)
@@ -196,7 +197,7 @@ prepare-release: ## Turn changes/ into a CHANGELOG.md section and set VERSION
 #| Use the merged release PR's commit so later change files do not block the build.
 #| BETA builds and promotes a beta, such as 0.6.0-beta.1, above the committed
 #| version. A beta needs no release PR. Its app and addon reach only players
-#| who turned on betas; its server and website reach everyone. The script
+#| who turned on betas. It does not deploy the server or website. The script
 #| checks that the build built that beta before it offers promotion.
 #| Needs Python 3 and gh signed in as jkc-be, with network access.
 #| Starts and follows Release build on GitHub. Environment approvals are required.
