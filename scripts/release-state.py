@@ -59,6 +59,11 @@ class Failure(Exception):
     """A refusal with a message for the operator."""
 
 
+class Unavailable(Failure):
+    """A server error or network failure that may pass. The wait commands ask
+    again at their next poll; every other command stops, as for any Failure."""
+
+
 # Network. Kept thin so tests replace it with a dictionary of URLs.
 
 class _DropAuthorizationOnRedirect(urllib.request.HTTPRedirectHandler):
@@ -92,9 +97,14 @@ class Http:
                 return None
             limit = error.headers.get("X-RateLimit-Remaining")
             hint = " (GitHub rate limit reached; rerun later)" if limit == "0" else ""
-            raise Failure(f"GET {url} failed with HTTP {error.code}{hint}") from None
+            refusal = Unavailable if error.code >= 500 else Failure
+            raise refusal(f"GET {url} failed with HTTP {error.code}{hint}") from None
         except urllib.error.URLError as error:
-            raise Failure(f"GET {url} failed: {error.reason}") from None
+            raise Unavailable(f"GET {url} failed: {error.reason}") from None
+        except (TimeoutError, ConnectionError) as error:
+            # urllib wraps failures while sending the request in URLError, but
+            # not a dropped connection or timeout while reading the response.
+            raise Unavailable(f"GET {url} failed: {error}") from None
 
 
 def get_json(http, url, authenticated=False):
@@ -408,11 +418,14 @@ def downstream_verdict(runs, read_jobs):
 def wait_for_addon_release(http, commit, interval, timeout, sleep=time.sleep, clock=time.monotonic):
     deadline = clock() + timeout
     while True:
-        listing = get_json(http, f"{API}/repos/{ADDON_REPOSITORY}/actions/workflows/{ADDON_WORKFLOW}/runs"
-                                 f"?head_sha={commit}&per_page=100")
-        runs = listing["workflow_runs"] if listing else []
-        state, message = downstream_verdict(
-            runs, lambda run_id: get_json(http, f"{API}/repos/{ADDON_REPOSITORY}/actions/runs/{run_id}/jobs?filter=all")["jobs"])
+        try:
+            listing = get_json(http, f"{API}/repos/{ADDON_REPOSITORY}/actions/workflows/{ADDON_WORKFLOW}/runs"
+                                     f"?head_sha={commit}&per_page=100")
+            runs = listing["workflow_runs"] if listing else []
+            state, message = downstream_verdict(
+                runs, lambda run_id: get_json(http, f"{API}/repos/{ADDON_REPOSITORY}/actions/runs/{run_id}/jobs?filter=all")["jobs"])
+        except Unavailable as error:
+            state, message = "pending", f"{error}; asking again in {interval} seconds"
         print(message, flush=True)
         if state == "success":
             return message
@@ -426,23 +439,29 @@ def wait_for_addon_release(http, commit, interval, timeout, sleep=time.sleep, cl
 def wait_for_checks(http, revision, interval, timeout, sleep=time.sleep, clock=time.monotonic):
     """Wait for the Check run that the push of `revision` to main started, and require it to pass."""
     deadline = clock() + timeout
+    # The newest run seen so far, kept through a poll GitHub fails to answer.
+    run = None
     while True:
-        listing = get_json(http, f"{API}/repos/{REPOSITORY}/actions/workflows/check.yml/runs"
-                                 f"?head_sha={revision}&event=push&branch=main&per_page=100", authenticated=True)
-        runs = listing["workflow_runs"] if listing else []
-        run = max(runs, key=lambda r: r["id"], default=None)
-        if run is None:
-            message = f"No Check run on main for {revision} yet"
-        elif run["status"] != "completed":
-            message = f"Check for {revision} is {run['status']}: {run['html_url']}"
-        elif run["conclusion"] == "success":
-            message = f"Check passed on main for {revision}: {run['html_url']}"
-            print(message, flush=True)
-            return message
+        try:
+            listing = get_json(http, f"{API}/repos/{REPOSITORY}/actions/workflows/check.yml/runs"
+                                     f"?head_sha={revision}&event=push&branch=main&per_page=100", authenticated=True)
+        except Unavailable as error:
+            message = f"{error}; asking again in {interval} seconds"
         else:
-            raise Failure(f"Check ended with {run['conclusion']} on main for {revision}: {run['html_url']}. "
-                          "Re-run it if it was a flake, otherwise fix main and prepare the release again. "
-                          "Then start a new Release build.")
+            runs = listing["workflow_runs"] if listing else []
+            run = max(runs, key=lambda r: r["id"], default=None)
+            if run is None:
+                message = f"No Check run on main for {revision} yet"
+            elif run["status"] != "completed":
+                message = f"Check for {revision} is {run['status']}: {run['html_url']}"
+            elif run["conclusion"] == "success":
+                message = f"Check passed on main for {revision}: {run['html_url']}"
+                print(message, flush=True)
+                return message
+            else:
+                raise Failure(f"Check ended with {run['conclusion']} on main for {revision}: {run['html_url']}. "
+                              "Re-run it if it was a flake, otherwise fix main and prepare the release again. "
+                              "Then start a new Release build.")
         print(message, flush=True)
         if clock() + interval > deadline:
             if run is None:
